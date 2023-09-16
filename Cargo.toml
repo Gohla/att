@@ -1,0 +1,14 @@
+cargo-features = ["named-profiles", "profile-overrides"]
+
+[workspace]
+members = [
+  "att"
+]
+default-members = [
+  "att"
+]
+resolver = "2"
+
+
+# Patches
+[patch.crates-io]
