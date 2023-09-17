@@ -23,11 +23,11 @@ impl<A, M> Update<A, M> {
     }
   }
   pub fn into_action(self) -> Option<A> { self.action }
-  pub fn take_action<AA>(self) -> (Option<A>, Update<AA, M>) {
+  pub fn take_action(self) -> (Option<A>, Update<(), M>) {
     (self.action, Update::from_command(self.command))
   }
-  pub fn discard_action<AA>(self) -> Update<AA, M> {
-    Update::new(None, self.command)
+  pub fn discard_action(self) -> Update<(), M> {
+    Update::from_command(self.command)
   }
   pub fn map_action<AA>(self, f: impl Fn(A) -> AA) -> Update<AA, M> {
     Update::new(self.action.map(f), self.command)
@@ -35,6 +35,12 @@ impl<A, M> Update<A, M> {
 
   pub fn command(&self) -> &Command<M> { &self.command }
   pub fn into_command(self) -> Command<M> { self.command }
+  pub fn take_command(self) -> (Command<M>, Update<A, ()>) {
+    (self.command, Update::new(self.action, Command::none()))
+  }
+  pub fn discard_command(self) -> Update<A, ()> {
+    Update::new(self.action, Command::none())
+  }
   pub fn map_command<MM>(self, f: impl Fn(M) -> MM + 'static + MaybeSend + Sync + Clone) -> Update<A, MM> where
     M: 'static,
     MM: 'static
