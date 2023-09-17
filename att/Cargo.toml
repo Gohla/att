@@ -5,11 +5,9 @@ edition = "2021"
 publish = false
 
 [dependencies]
-iced = { version = "0.10", features = ["lazy", "tokio"] }
-iced_core = "0.10"
-iced_futures = "0.7"
+iced = { features = ["lazy", "tokio"], git = "https://github.com/iced-rs/iced.git", rev = "4613eb2" }
+iced_core = { git = "https://github.com/iced-rs/iced.git", rev = "4613eb2" }
+iced_futures = { git = "https://github.com/iced-rs/iced.git", rev = "4613eb2" }
 tokio = { version = "1", features = ["time"] }
 crates_io_api = "0.8"
 chrono = "0.4"
-
-[dev-dependencies]
