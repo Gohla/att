@@ -1,6 +1,7 @@
+use std::rc::Rc;
 use std::sync::Arc;
 
-use iced::{Color, Element, Event, Length, Point, Rectangle, Size};
+use iced::{Background, Color, Element, Event, Length, Point, Rectangle, Size, Theme};
 use iced::advanced::{self, Clipboard, Shell};
 use iced::advanced::layout::{self, Layout, Node};
 use iced::advanced::overlay;
@@ -11,13 +12,16 @@ use iced::event;
 use iced::mouse::{self, Cursor};
 
 /// A widget that centers a modal element over a parent element.
-pub struct Modal<'a, M, R> {
+pub struct Modal<'a, M, R, S> {
   parent: Element<'a, M, R>,
   modal: Element<'a, M, R>,
   on_press_parent_area: Option<Arc<dyn Fn() -> M>>,
+  style: S,
 }
-
-impl<'a, M, R> Modal<'a, M, R> {
+impl<'a, M, R> Modal<'a, M, R, <R::Theme as StyleSheet>::Style> where
+  R: advanced::Renderer,
+  R::Theme: StyleSheet,
+{
   /// Creates a new [`Modal`] that centers the `modal` element over the `parent` element.
   pub fn new(
     parent: impl Into<Element<'a, M, R>>,
@@ -27,6 +31,7 @@ impl<'a, M, R> Modal<'a, M, R> {
       parent: parent.into(),
       modal: modal.into(),
       on_press_parent_area: None,
+      style: <R::Theme as StyleSheet>::Style::default(),
     }
   }
 
@@ -35,9 +40,78 @@ impl<'a, M, R> Modal<'a, M, R> {
     self.on_press_parent_area = Some(Arc::new(message_producer));
     self
   }
+  /// Sets the `style` of this modal.
+  pub fn style(mut self, style: <R::Theme as StyleSheet>::Style) -> Self {
+    self.style = style;
+    self
+  }
 }
 
-impl<'a, M, R: advanced::Renderer> Widget<M, R> for Modal<'a, M, R> {
+/// Conversion into [`Element`].
+impl<'a, M, R> From<Modal<'a, M, R, <R::Theme as StyleSheet>::Style>> for Element<'a, M, R> where
+  M: 'a,
+  R: advanced::Renderer + 'a,
+  R::Theme: StyleSheet,
+{
+  fn from(modal: Modal<'a, M, R, <R::Theme as StyleSheet>::Style>) -> Self {
+    Self::new(modal)
+  }
+}
+
+/// The appearance of a [`Modal`].
+#[derive(Clone, Copy, Debug)]
+pub struct Appearance {
+  /// The background of the [`Modal`], used to color the backdrop of the modal.
+  pub background: Background,
+}
+
+pub trait StyleSheet {
+  ///Style for the trait to use.
+  type Style: Default + Clone;
+  /// The normal appearance of a [`Modal`](crate::native::Modal).
+  fn active(&self, style: &Self::Style) -> Appearance;
+}
+
+#[derive(Clone, Default)]
+pub enum ModalStyle {
+  #[default]
+  Default,
+  Custom(Rc<dyn StyleSheet<Style=Theme>>),
+}
+impl ModalStyle {
+  /// Creates a custom [`ModalStyle`] style variant.
+  pub fn custom(style_sheet: impl StyleSheet<Style=Theme> + 'static) -> Self {
+    Self::Custom(Rc::new(style_sheet))
+  }
+}
+
+impl StyleSheet for Theme {
+  type Style = ModalStyle;
+
+  fn active(&self, style: &Self::Style) -> Appearance {
+    if let ModalStyle::Custom(custom) = style {
+      return custom.active(self);
+    }
+
+    let palette = self.extended_palette();
+
+    Appearance {
+      background: Color {
+        a: palette.background.base.color.a * 0.75,
+        ..palette.background.base.color.inverse()
+      }
+        .into(),
+    }
+  }
+}
+
+
+/// Widget implementation
+impl<'a, M, R> Widget<M, R> for Modal<'a, M, R, <R::Theme as StyleSheet>::Style> where
+  R: advanced::Renderer,
+  R::Theme: StyleSheet,
+  <R::Theme as StyleSheet>::Style: Clone,
+{
   fn children(&self) -> Vec<Tree> {
     vec![
       Tree::new(&self.parent),
@@ -70,7 +144,7 @@ impl<'a, M, R: advanced::Renderer> Widget<M, R> for Modal<'a, M, R> {
     &self,
     tree: &Tree,
     renderer: &mut R,
-    theme: &<R as advanced::Renderer>::Theme,
+    theme: &R::Theme,
     style: &renderer::Style,
     layout: Layout<'_>,
     cursor: Cursor,
@@ -157,19 +231,24 @@ impl<'a, M, R: advanced::Renderer> Widget<M, R> for Modal<'a, M, R> {
       tree: &mut state.children[1],
       size: layout.bounds().size(),
       on_press_parent_area: self.on_press_parent_area.clone(),
+      style: self.style.clone(),
     };
     Some(overlay::Element::new(layout.position(), Box::new(modal_overlay)))
   }
 }
 
-struct ModalOverlay<'a, 'b, M, R> {
-  content: &'b mut Element<'a, M, R>,
+/// Modal overlay implementation
+struct ModalOverlay<'a, 'b, M, R, S> {
   tree: &'b mut Tree,
+  content: &'b mut Element<'a, M, R>,
   size: Size,
   on_press_parent_area: Option<Arc<dyn Fn() -> M>>,
+  style: S,
 }
-
-impl<'a, 'b, M, R: advanced::Renderer> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R> {
+impl<'a, 'b, M, R> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R, <R::Theme as StyleSheet>::Style> where
+  R: advanced::Renderer,
+  R::Theme: StyleSheet,
+{
   fn layout(
     &mut self,
     renderer: &R,
@@ -201,17 +280,17 @@ impl<'a, 'b, M, R: advanced::Renderer> overlay::Overlay<M, R> for ModalOverlay<'
     layout: Layout<'_>,
     cursor: Cursor,
   ) {
+    let bounds = layout.bounds();
+    let style_sheet = theme.active(&self.style);
+
     renderer.fill_quad(
       renderer::Quad {
-        bounds: layout.bounds(),
-        border_radius: Default::default(),
+        bounds,
+        border_radius: 0.0f32.into(),
         border_width: 0.0,
         border_color: Color::TRANSPARENT,
       },
-      Color {
-        a: 0.80,
-        ..Color::BLACK
-      },
+      style_sheet.background,
     );
 
     self.content.as_widget().draw(
@@ -221,7 +300,7 @@ impl<'a, 'b, M, R: advanced::Renderer> overlay::Overlay<M, R> for ModalOverlay<'
       style,
       layout.children().next().unwrap(),
       cursor,
-      &layout.bounds(),
+      &bounds,
     );
   }
 
@@ -297,11 +376,5 @@ impl<'a, 'b, M, R: advanced::Renderer> overlay::Overlay<M, R> for ModalOverlay<'
       layout.children().next().unwrap(),
       renderer,
     )
-  }
-}
-
-impl<'a, M: 'a, R: advanced::Renderer + 'a> From<Modal<'a, M, R>> for Element<'a, M, R> {
-  fn from(modal: Modal<'a, M, R>) -> Self {
-    Self::new(modal)
   }
 }
