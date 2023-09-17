@@ -1,13 +1,10 @@
 use crates_io_api::AsyncClient;
-use iced::{Alignment, Application, Command, Element, executor, Length, Subscription};
+use iced::{Alignment, Application, Command, Element, executor, Length, Renderer, Subscription, Theme};
 use iced::widget::{Container, row, Space, Text};
 
 use crate::component::add_crate::{self, AddCrate};
 use crate::widget::col;
 use crate::widget::modal::Modal;
-
-pub type AppTheme = iced::Theme;
-pub type AppRenderer = iced::Renderer<AppTheme>;
 
 pub struct App {
   crates_io_api: AsyncClient,
@@ -32,7 +29,7 @@ pub enum Message {
 impl Application for App {
   type Executor = executor::Default;
   type Message = Message;
-  type Theme = AppTheme;
+  type Theme = Theme;
   type Flags = App;
 
   fn new(flags: Self) -> (Self, Command<Message>) { (flags, Command::none()) }
@@ -50,7 +47,7 @@ impl Application for App {
     Command::none()
   }
 
-  fn view(&self) -> Element<'_, Message, AppRenderer> {
+  fn view(&self) -> Element<'_, Message, Renderer<Theme>> {
     let overlay = self.add_crate
       .view()
       .map(Message::ToAddCrate);
@@ -71,6 +68,8 @@ impl Application for App {
       .on_press_underlay_area(|| Message::CloseModal);
     modal.into()
   }
+
+  fn theme(&self) -> Theme { Theme::Light }
 
   fn subscription(&self) -> Subscription<Message> {
     self.add_crate.subscription(&self.crates_io_api).map(Message::ToAddCrate)
