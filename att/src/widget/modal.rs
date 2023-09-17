@@ -12,15 +12,14 @@ use iced::event;
 use iced::mouse::{self, Cursor};
 
 /// A widget that centers a modal element over a parent element.
-pub struct Modal<'a, M, R, S> {
+pub struct Modal<'a, M, R> {
   parent: Element<'a, M, R>,
   modal: Element<'a, M, R>,
   on_press_parent_area: Option<Arc<dyn Fn() -> M>>,
-  style: S,
+  background: ModalBackground,
 }
-impl<'a, M, R> Modal<'a, M, R, <R::Theme as StyleSheet>::Style> where
-  R: advanced::Renderer,
-  R::Theme: StyleSheet,
+impl<'a, M, R> Modal<'a, M, R> where
+  R: advanced::Renderer<Theme=Theme>,
 {
   /// Creates a new [`Modal`] that centers the `modal` element over the `parent` element.
   pub fn new(
@@ -31,7 +30,7 @@ impl<'a, M, R> Modal<'a, M, R, <R::Theme as StyleSheet>::Style> where
       parent: parent.into(),
       modal: modal.into(),
       on_press_parent_area: None,
-      style: <R::Theme as StyleSheet>::Style::default(),
+      background: ModalBackground::default(),
     }
   }
 
@@ -40,77 +39,46 @@ impl<'a, M, R> Modal<'a, M, R, <R::Theme as StyleSheet>::Style> where
     self.on_press_parent_area = Some(Arc::new(message_producer));
     self
   }
-  /// Sets the `style` of this modal.
-  pub fn style(mut self, style: <R::Theme as StyleSheet>::Style) -> Self {
-    self.style = style;
+  /// Sets the `background` of this modal.
+  pub fn background(mut self, background: ModalBackground) -> Self {
+    self.background = background;
     self
   }
 }
 
+/// Background for a [`Modal`].
+#[derive(Clone, Default)]
+pub enum ModalBackground {
+  #[default]
+  Default,
+  Custom(Background),
+  CustomThemed(Rc<dyn Fn(&Theme) -> Background>),
+}
+impl ModalBackground {
+  /// Custom `background` color.
+  pub fn custom(background: Background) -> Self {
+    Self::Custom(background)
+  }
+  /// Custom background color based on `background_fn` which has access to [`Theme`].
+  pub fn custom_themed(background_fn: impl Fn(&Theme) -> Background + 'static) -> Self {
+    Self::CustomThemed(Rc::new(background_fn))
+  }
+}
+
 /// Conversion into [`Element`].
-impl<'a, M, R> From<Modal<'a, M, R, <R::Theme as StyleSheet>::Style>> for Element<'a, M, R> where
+impl<'a, M, R> From<Modal<'a, M, R>> for Element<'a, M, R> where
   M: 'a,
-  R: advanced::Renderer + 'a,
-  R::Theme: StyleSheet,
+  R: advanced::Renderer<Theme=Theme> + 'a,
 {
-  fn from(modal: Modal<'a, M, R, <R::Theme as StyleSheet>::Style>) -> Self {
+  fn from(modal: Modal<'a, M, R>) -> Self {
     Self::new(modal)
   }
 }
 
-/// The appearance of a [`Modal`].
-#[derive(Clone, Copy, Debug)]
-pub struct Appearance {
-  /// The background of the [`Modal`], used to color the backdrop of the modal.
-  pub background: Background,
-}
 
-pub trait StyleSheet {
-  ///Style for the trait to use.
-  type Style: Default + Clone;
-  /// The normal appearance of a [`Modal`](crate::native::Modal).
-  fn active(&self, style: &Self::Style) -> Appearance;
-}
-
-#[derive(Clone, Default)]
-pub enum ModalStyle {
-  #[default]
-  Default,
-  Custom(Rc<dyn StyleSheet<Style=Theme>>),
-}
-impl ModalStyle {
-  /// Creates a custom [`ModalStyle`] style variant.
-  pub fn custom(style_sheet: impl StyleSheet<Style=Theme> + 'static) -> Self {
-    Self::Custom(Rc::new(style_sheet))
-  }
-}
-
-impl StyleSheet for Theme {
-  type Style = ModalStyle;
-
-  fn active(&self, style: &Self::Style) -> Appearance {
-    if let ModalStyle::Custom(custom) = style {
-      return custom.active(self);
-    }
-
-    let palette = self.extended_palette();
-
-    Appearance {
-      background: Color {
-        a: palette.background.base.color.a * 0.75,
-        ..palette.background.base.color.inverse()
-      }
-        .into(),
-    }
-  }
-}
-
-
-/// Widget implementation
-impl<'a, M, R> Widget<M, R> for Modal<'a, M, R, <R::Theme as StyleSheet>::Style> where
-  R: advanced::Renderer,
-  R::Theme: StyleSheet,
-  <R::Theme as StyleSheet>::Style: Clone,
+// Widget implementation
+impl<'a, M, R> Widget<M, R> for Modal<'a, M, R> where
+  R: advanced::Renderer<Theme=Theme>,
 {
   fn children(&self) -> Vec<Tree> {
     vec![
@@ -231,23 +199,22 @@ impl<'a, M, R> Widget<M, R> for Modal<'a, M, R, <R::Theme as StyleSheet>::Style>
       tree: &mut state.children[1],
       size: layout.bounds().size(),
       on_press_parent_area: self.on_press_parent_area.clone(),
-      style: self.style.clone(),
+      background: self.background.clone(),
     };
     Some(overlay::Element::new(layout.position(), Box::new(modal_overlay)))
   }
 }
 
-/// Modal overlay implementation
-struct ModalOverlay<'a, 'b, M, R, S> {
+// Modal overlay implementation
+struct ModalOverlay<'a, 'b, M, R> {
   tree: &'b mut Tree,
   content: &'b mut Element<'a, M, R>,
   size: Size,
   on_press_parent_area: Option<Arc<dyn Fn() -> M>>,
-  style: S,
+  background: ModalBackground,
 }
-impl<'a, 'b, M, R> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R, <R::Theme as StyleSheet>::Style> where
-  R: advanced::Renderer,
-  R::Theme: StyleSheet,
+impl<'a, 'b, M, R> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R> where
+  R: advanced::Renderer<Theme=Theme>,
 {
   fn layout(
     &mut self,
@@ -281,7 +248,6 @@ impl<'a, 'b, M, R> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R, <R::The
     cursor: Cursor,
   ) {
     let bounds = layout.bounds();
-    let style_sheet = theme.active(&self.style);
 
     renderer.fill_quad(
       renderer::Quad {
@@ -290,7 +256,7 @@ impl<'a, 'b, M, R> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R, <R::The
         border_width: 0.0,
         border_color: Color::TRANSPARENT,
       },
-      style_sheet.background,
+      self.background.get_background_color(theme),
     );
 
     self.content.as_widget().draw(
@@ -376,5 +342,20 @@ impl<'a, 'b, M, R> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R, <R::The
       layout.children().next().unwrap(),
       renderer,
     )
+  }
+}
+impl ModalBackground {
+  fn get_background_color(&self, theme: &Theme) -> Background {
+    match self {
+      ModalBackground::Default => {
+        let background_base_color = theme.extended_palette().background.base.color;
+        Background::Color(Color {
+          a: background_base_color.a * 0.75,
+          ..background_base_color.inverse()
+        })
+      },
+      ModalBackground::Custom(background) => *background,
+      ModalBackground::CustomThemed(background_fn) => background_fn(theme),
+    }
   }
 }
