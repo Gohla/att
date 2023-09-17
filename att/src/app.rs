@@ -1,9 +1,9 @@
 use crates_io_api::AsyncClient;
 use iced::{Application, Command, Element, executor, Renderer, Subscription};
-use iced::widget::{Column, Container};
+use iced::widget::Container;
 use iced_core::Length;
 
-use crate::add_crate;
+use crate::{add_crate, col};
 use crate::add_crate::AddCrate;
 use crate::util::WidgetExt;
 
@@ -39,7 +39,9 @@ impl Application for App {
     match message {
       Message::ToAddCrate(message) => {
         if let Some(add_crate) = &mut self.add_crate {
-          add_crate.update(message);
+          add_crate.update(message).inspect_action(|krate| {
+            println!("Add crate: {:?}", krate);
+          });
         }
       }
     }
@@ -50,11 +52,9 @@ impl Application for App {
     let content = if let Some(add_crate) = &self.add_crate {
       add_crate
         .view()
-        .spacing(20)
-        .max_width(800)
         .map_into_element(|m| Message::ToAddCrate(m))
     } else {
-      Column::new().into()
+      col![].into_element()
     };
     Container::new(content)
       .width(Length::Fill)

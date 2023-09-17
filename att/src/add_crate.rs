@@ -2,16 +2,16 @@ use std::time::{Duration, Instant};
 
 use crates_io_api::{AsyncClient, Crate, CratesPage, CratesQuery, Sort};
 use iced::{futures, Subscription};
-use iced::widget::{Column, row, Scrollable, Text, TextInput};
+use iced::widget::{Button, Column, row, Scrollable, Text, TextInput};
 use iced_core::Length;
 
 use crate::col;
-use crate::util::WidgetExt;
+use crate::util::{ButtonEx, Update, WidgetExt};
 
+/// Search for a crate on crates.io and add it.
 #[derive(Debug)]
 pub struct AddCrate {
   wait_before_searching: Duration,
-
   search_term: String,
   next_search_time: Option<Instant>,
   crates: Option<Result<CratesPage, crates_io_api::Error>>,
@@ -24,16 +24,10 @@ pub enum Message {
   AddCrate(Crate),
 }
 
-#[derive(Debug)]
-pub enum Action {
-  AddCrate(Crate),
-}
-
 impl Default for AddCrate {
   fn default() -> Self {
     Self {
       wait_before_searching: Duration::from_millis(200),
-
       search_term: String::new(),
       next_search_time: None,
       crates: None,
@@ -46,8 +40,7 @@ impl AddCrate {
     self.wait_before_searching = wait_before_searching;
   }
 
-
-  pub fn update(&mut self, message: Message) -> Option<Action> {
+  pub fn update(&mut self, message: Message) -> Update<Crate> {
     match message {
       Message::SetSearchTerm(s) => {
         self.search_term = s;
@@ -59,9 +52,9 @@ impl AddCrate {
         }
       }
       Message::SetCrates(crates) => self.crates = Some(crates),
-      Message::AddCrate(krate) => return Some(Action::AddCrate(krate)),
+      Message::AddCrate(krate) => return Update::from_action(krate),
     }
-    None
+    Update::none()
   }
 
   pub fn view(&self) -> Column<'_, Message> {
@@ -74,10 +67,11 @@ impl AddCrate {
         let mut crate_rows = Vec::new();
         for krate in &crates.crates {
           let row = row![
-            Text::new(&krate.id).width(350),
+            Text::new(&krate.id).width(300),
             Text::new(&krate.max_version).width(150),
             Text::new(krate.updated_at.format("%Y-%m-%d").to_string()).width(150),
-            Text::new(format!("{}", krate.downloads)).width(150),
+            Text::new(format!("{}", krate.downloads)).width(100),
+            Button::new(Text::new("Add")).on_press_into_element(|| Message::AddCrate(krate.clone())),
           ];
           crate_rows.push(row.into())
         }
@@ -87,10 +81,9 @@ impl AddCrate {
       _ => col![].into_element()
     };
 
-    col![
-      search_term_input,
-      crates,
-    ]
+    col![search_term_input, crates]
+      .spacing(20)
+      .max_width(800)
   }
 
   pub fn subscription(&self, crates_io_api: &AsyncClient) -> Subscription<Message> {
