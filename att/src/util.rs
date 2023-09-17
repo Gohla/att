@@ -4,52 +4,58 @@ use iced_core::Widget;
 use iced_futures::MaybeSend;
 
 /// Update received from components.
-pub struct Update<A, M = ()> {
-  action: Option<A>,
-  command: Command<M>,
+#[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct Update<A = (), C = ()> {
+  action: A,
+  command: C,
 }
-impl<A, M> Update<A, M> {
-  pub fn new(action: Option<A>, command: Command<M>) -> Self { Self { command, action } }
-  pub fn from_action(action: A) -> Self { Self::new(Some(action), Command::none()) }
-  pub fn from_command(command: Command<M>) -> Self { Self::new(None, command) }
-  pub fn none() -> Self { Self::new(None, Command::none()) }
+impl<A, C> Update<A, C> {
+  pub fn new(action: A, command: C) -> Self { Self { action, command } }
+}
+impl<A> Update<A, ()> {
+  pub fn from_action(action: impl Into<A>) -> Self { Self::new(action.into(), ()) }
+}
+impl<C> Update<(), C> {
+  pub fn from_command(command: impl Into<C>) -> Self { Self::new((), command.into()) }
+}
+impl<A, C> Update<A, C> {
+  pub fn unwrap(self) -> (A, C) { (self.action, self.command) }
 
-  pub fn unwrap(self) -> (Option<A>, Command<M>) { (self.action, self.command) }
+  pub fn action(&self) -> &A { &self.action }
+  pub fn into_action(self) -> A { self.action }
+  pub fn take_action(self) -> (A, Update<(), C>) {
+    (self.action, Update::from_command(self.command))
+  }
+  pub fn discard_action(self) -> Update<(), C> {
+    Update::from_command(self.command)
+  }
+  pub fn map_action<AA>(self, f: impl Fn(A) -> AA) -> Update<AA, C> {
+    Update::new(f(self.action), self.command)
+  }
 
-  pub fn action(&self) -> Option<&A> { self.action.as_ref() }
+  pub fn command(&self) -> &C { &self.command }
+  pub fn into_command(self) -> C { self.command }
+  pub fn take_command(self) -> (C, Update<A, ()>) {
+    (self.command, Update::from_action(self.action))
+  }
+  pub fn discard_command(self) -> Update<A, ()> {
+    Update::from_action(self.action)
+  }
+}
+impl<A, C> Update<Option<A>, C> {
   pub fn inspect_action(&self, f: impl FnOnce(&A)) {
     if let Some(action) = &self.action {
       f(action)
     }
   }
-  pub fn into_action(self) -> Option<A> { self.action }
-  pub fn take_action(self) -> (Option<A>, Update<(), M>) {
-    (self.action, Update::from_command(self.command))
-  }
-  pub fn discard_action(self) -> Update<(), M> {
-    Update::from_command(self.command)
-  }
-  pub fn map_action<AA>(self, f: impl Fn(A) -> AA) -> Update<AA, M> {
-    Update::new(self.action.map(f), self.command)
-  }
-
-  pub fn command(&self) -> &Command<M> { &self.command }
-  pub fn into_command(self) -> Command<M> { self.command }
-  pub fn take_command(self) -> (Command<M>, Update<A, ()>) {
-    (self.command, Update::new(self.action, Command::none()))
-  }
-  pub fn discard_command(self) -> Update<A, ()> {
-    Update::new(self.action, Command::none())
-  }
-  pub fn map_command<MM>(self, f: impl Fn(M) -> MM + 'static + MaybeSend + Sync + Clone) -> Update<A, MM> where
+}
+impl<A, M> Update<A, Command<M>> {
+  pub fn map_command<MM>(self, f: impl Fn(M) -> MM + 'static + MaybeSend + Sync + Clone) -> Update<A, Command<MM>> where
     M: 'static,
     MM: 'static
   {
     Update::new(self.action, self.command.map(f))
   }
-}
-impl<A, M> Default for Update<A, M> {
-  fn default() -> Self { Self::none() }
 }
 
 /// Widget extensions

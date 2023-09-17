@@ -3,7 +3,7 @@ use iced::{Application, Command, Element, executor, Renderer, Subscription};
 use iced::widget::Container;
 use iced_core::Length;
 
-use crate::{add_crate, col};
+use crate::add_crate;
 use crate::add_crate::AddCrate;
 use crate::util::WidgetExt;
 
@@ -12,12 +12,15 @@ pub type AppRenderer = Renderer<AppTheme>;
 
 pub struct App {
   crates_io_api: AsyncClient,
-  add_crate: Option<AddCrate>,
+  add_crate: AddCrate,
 }
 
 impl App {
   pub fn new(crates_io_api: AsyncClient) -> Self {
-    Self { crates_io_api, add_crate: Some(AddCrate::default()) }
+    Self {
+      crates_io_api,
+      add_crate: AddCrate::default(),
+    }
   }
 }
 
@@ -38,10 +41,8 @@ impl Application for App {
   fn update(&mut self, message: Message) -> Command<Self::Message> {
     match message {
       Message::ToAddCrate(message) => {
-        if let Some(add_crate) = &mut self.add_crate {
-          add_crate.update(message).inspect_action(|krate| {
-            println!("Add crate: {:?}", krate);
-          });
+        if let Some(krate) = self.add_crate.update(message).into_action() {
+          println!("Add crate: {:?}", krate);
         }
       }
     }
@@ -49,13 +50,9 @@ impl Application for App {
   }
 
   fn view(&self) -> Element<'_, Message, AppRenderer> {
-    let content = if let Some(add_crate) = &self.add_crate {
-      add_crate
-        .view()
-        .map_into_element(|m| Message::ToAddCrate(m))
-    } else {
-      col![].into_element()
-    };
+    let content = self.add_crate
+      .view()
+      .map_into_element(Message::ToAddCrate);
     Container::new(content)
       .width(Length::Fill)
       .padding(40)
@@ -64,11 +61,6 @@ impl Application for App {
   }
 
   fn subscription(&self) -> Subscription<Message> {
-    if let Some(add_crate) = &self.add_crate {
-      add_crate.subscription(&self.crates_io_api)
-        .map(|m| Message::ToAddCrate(m))
-    } else {
-      Subscription::none()
-    }
+    self.add_crate.subscription(&self.crates_io_api).map(Message::ToAddCrate)
   }
 }

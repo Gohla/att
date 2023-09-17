@@ -40,7 +40,7 @@ impl AddCrate {
     self.wait_before_searching = wait_before_searching;
   }
 
-  pub fn update(&mut self, message: Message) -> Update<Crate> {
+  pub fn update(&mut self, message: Message) -> Update<Option<Crate>> {
     match message {
       Message::SetSearchTerm(s) => {
         self.search_term = s;
@@ -54,13 +54,13 @@ impl AddCrate {
       Message::SetCrates(crates) => self.crates = Some(crates),
       Message::AddCrate(krate) => return Update::from_action(krate),
     }
-    Update::none()
+    Update::default()
   }
 
   pub fn view(&self) -> Column<'_, Message> {
     let search_term_input = TextInput::new("Crate search term", &self.search_term)
       .on_input(|s| s)
-      .map_into_element(|s| Message::SetSearchTerm(s));
+      .map_into_element(Message::SetSearchTerm);
 
     let crates = match &self.crates {
       Some(Ok(crates)) => {
@@ -87,21 +87,20 @@ impl AddCrate {
   }
 
   pub fn subscription(&self, crates_io_api: &AsyncClient) -> Subscription<Message> {
-    if let Some(next_search) = self.next_search_time {
-      let search_term = self.search_term.clone();
-      let crates_io_api = crates_io_api.clone();
-      let stream = futures::stream::once(async move {
-        tokio::time::sleep_until(next_search.into()).await;
-        let query = CratesQuery::builder()
-          .search(search_term)
-          .sort(Sort::Relevance)
-          .build();
-        let response = crates_io_api.crates(query).await;
-        Message::SetCrates(response)
-      });
-      iced::subscription::run_with_id(next_search, stream)
-    } else {
-      Subscription::none()
-    }
+    let Some(next_search) = self.next_search_time else {
+      return Subscription::none();
+    };
+    let search_term = self.search_term.clone();
+    let crates_io_api = crates_io_api.clone();
+    let stream = futures::stream::once(async move {
+      tokio::time::sleep_until(next_search.into()).await;
+      let query = CratesQuery::builder()
+        .search(search_term)
+        .sort(Sort::Relevance)
+        .build();
+      let response = crates_io_api.crates(query).await;
+      Message::SetCrates(response)
+    });
+    iced::subscription::run_with_id(next_search, stream)
   }
 }
