@@ -1,7 +1,7 @@
-use iced::{Command, Element};
-use iced::advanced::Widget;
-use iced::widget::Button;
+use iced::Command;
 use iced_futures::MaybeSend;
+
+pub mod add_crate;
 
 /// Update received from components.
 #[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
@@ -56,44 +56,4 @@ impl<A, M> Update<A, Command<M>> {
   {
     Update::new(self.action, self.command.map(f))
   }
-}
-
-/// Widget extensions
-pub trait WidgetExt<'a, M, R> {
-  fn into_element(self) -> Element<'a, M, R>;
-  fn map_into_element<MM: 'a, F: Fn(M) -> MM + 'a>(self, f: F) -> Element<'a, MM, R>;
-}
-impl<'a, M: 'a, R: iced::advanced::Renderer + 'a, W: Widget<M, R> + 'a> WidgetExt<'a, M, R> for W {
-  #[inline]
-  fn into_element(self) -> Element<'a, M, R> {
-    Element::new(self)
-  }
-  #[inline]
-  fn map_into_element<MM: 'a, F: Fn(M) -> MM + 'a>(self, f: F) -> Element<'a, MM, R> {
-    self.into_element().map(f)
-  }
-}
-
-/// Button widget extensions
-pub trait ButtonEx<'a, R> {
-  fn on_press_into_element<M: 'a, F: Fn() -> M + 'a>(self, f: F) -> Element<'a, M, R>;
-}
-impl<'a, R> ButtonEx<'a, R> for Button<'a, (), R> where
-  R: iced::advanced::Renderer + 'a,
-  R::Theme: iced::widget::button::StyleSheet,
-{
-  fn on_press_into_element<M: 'a, F: Fn() -> M + 'a>(self, f: F) -> Element<'a, M, R> {
-    self.on_press(()).map_into_element(move |_| f())
-  }
-}
-
-/// Copy of column! macro, which the Rust plugin does not like due to the built-in column! macro.
-#[macro_export]
-macro_rules! col {
-    () => (
-        iced::widget::Column::new()
-    );
-    ($($x:expr),+ $(,)?) => (
-        iced::widget::Column::with_children(vec![$(iced::Element::from($x)),+])
-    );
 }

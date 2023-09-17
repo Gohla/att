@@ -4,8 +4,8 @@ use crates_io_api::{AsyncClient, Crate, CratesPage, CratesQuery, Sort};
 use iced::{Element, futures, Length, Subscription, theme};
 use iced::widget::{Button, Column, Container, row, Scrollable, Text, TextInput};
 
-use crate::col;
-use crate::util::{ButtonEx, Update, WidgetExt};
+use crate::component::Update;
+use crate::widget::{ButtonEx, col, WidgetExt};
 
 /// Search for a crate on crates.io and add it.
 #[derive(Debug)]

@@ -1,13 +1,13 @@
 use crates_io_api::AsyncClient;
-use iced::{Alignment, Application, Command, Element, executor, Length, Renderer, Subscription};
+use iced::{Alignment, Application, Command, Element, executor, Length, Subscription};
 use iced::widget::{Container, row, Space, Text};
 
-use crate::{add_crate, col};
-use crate::add_crate::AddCrate;
-use crate::modal::Modal;
+use crate::component::add_crate::{self, AddCrate};
+use crate::widget::col;
+use crate::widget::modal::Modal;
 
 pub type AppTheme = iced::Theme;
-pub type AppRenderer = Renderer<AppTheme>;
+pub type AppRenderer = iced::Renderer<AppTheme>;
 
 pub struct App {
   crates_io_api: AsyncClient,
@@ -26,8 +26,6 @@ impl App {
 #[derive(Debug)]
 pub enum Message {
   ToAddCrate(add_crate::Message),
-  ShowModal,
-  CloseModal,
 }
 
 impl Application for App {
@@ -46,8 +44,6 @@ impl Application for App {
           println!("Add crate: {:?}", krate);
         }
       }
-      Message::ShowModal => dbg!(),
-      Message::CloseModal => dbg!(),
     }
     Command::none()
   }
@@ -69,8 +65,7 @@ impl Application for App {
       .view()
       .map(Message::ToAddCrate);
 
-    let modal = Modal::new(content, add_crate)
-      .on_press_parent_area(|| Message::CloseModal);
+    let modal = Modal::new(content, add_crate);
     modal.into()
   }
 
