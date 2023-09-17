@@ -26,6 +26,7 @@ impl App {
 #[derive(Debug)]
 pub enum Message {
   ToAddCrate(add_crate::Message),
+  CloseModal,
 }
 
 impl Application for App {
@@ -44,12 +45,17 @@ impl Application for App {
           println!("Add crate: {:?}", krate);
         }
       }
+      Message::CloseModal => println!("Close modal"),
     }
     Command::none()
   }
 
   fn view(&self) -> Element<'_, Message, AppRenderer> {
-    let content = Container::new(col![
+    let overlay = self.add_crate
+      .view()
+      .map(Message::ToAddCrate);
+
+    let underlay = Container::new(col![
         row![Text::new("Top Left"), Space::with_width(Length::Fill), Text::new("Top Right")]
           .align_items(Alignment::Start)
           .height(Length::Fill),
@@ -61,11 +67,8 @@ impl Application for App {
       .width(Length::Fill)
       .height(Length::Fill);
 
-    let add_crate = self.add_crate
-      .view()
-      .map(Message::ToAddCrate);
-
-    let modal = Modal::new(content, add_crate);
+    let modal = Modal::new(overlay, underlay)
+      .on_press_underlay_area(|| Message::CloseModal);
     modal.into()
   }
 

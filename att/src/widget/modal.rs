@@ -1,47 +1,60 @@
 use std::rc::Rc;
-use std::sync::Arc;
 
 use iced::{Background, Color, Element, Event, Length, Point, Rectangle, Size, Theme};
-use iced::advanced::{self, Clipboard, Shell};
-use iced::advanced::layout::{self, Layout, Node};
+use iced::advanced::{Clipboard, Renderer, Shell};
+use iced::advanced::layout::{Layout, Limits, Node};
 use iced::advanced::overlay;
-use iced::advanced::renderer;
-use iced::advanced::widget::{self, Tree, Widget};
-use iced::alignment::Alignment;
+use iced::advanced::renderer::{self, Style};
+use iced::advanced::widget::{Operation, Tree, Widget};
+use iced::alignment::{Horizontal, Vertical};
 use iced::event;
 use iced::mouse::{self, Cursor};
 
-/// A widget that centers a modal element over a parent element.
+/// A widget that overlays an element over an underlay element in a modal way, disabling the underlay element.
 pub struct Modal<'a, M, R> {
-  parent: Element<'a, M, R>,
-  modal: Element<'a, M, R>,
-  on_press_parent_area: Option<Arc<dyn Fn() -> M>>,
+  overlay: Element<'a, M, R>,
+  underlay: Element<'a, M, R>,
+  on_press_underlay_area: Option<Rc<dyn Fn() -> M>>,
   background: ModalBackground,
+  horizontal_alignment: Horizontal,
+  vertical_alignment: Vertical,
 }
 impl<'a, M, R> Modal<'a, M, R> where
-  R: advanced::Renderer<Theme=Theme>,
+  R: Renderer<Theme=Theme>,
 {
-  /// Creates a new [`Modal`] that centers the `modal` element over the `parent` element.
+  /// Creates a new [`Modal`] that overlays the `overlay` element over the `underlay` element.
   pub fn new(
-    parent: impl Into<Element<'a, M, R>>,
-    modal: impl Into<Element<'a, M, R>>,
+    overlay: impl Into<Element<'a, M, R>>,
+    underlay: impl Into<Element<'a, M, R>>,
   ) -> Self {
     Self {
-      parent: parent.into(),
-      modal: modal.into(),
-      on_press_parent_area: None,
+      overlay: overlay.into(),
+      underlay: underlay.into(),
+      on_press_underlay_area: None,
       background: ModalBackground::default(),
+      horizontal_alignment: Horizontal::Center,
+      vertical_alignment: Vertical::Center,
     }
   }
 
-  /// Sets the `message_producer` to call when the parent (background) area of this modal is pressed.
-  pub fn on_press_parent_area(mut self, message_producer: impl Fn() -> M + 'static) -> Self {
-    self.on_press_parent_area = Some(Arc::new(message_producer));
+  /// Sets the `message_producer` to call when the underlay (background) area of this modal is pressed.
+  pub fn on_press_underlay_area(mut self, message_producer: impl Fn() -> M + 'static) -> Self {
+    self.on_press_underlay_area = Some(Rc::new(message_producer));
     self
   }
   /// Sets the `background` of this modal.
   pub fn background(mut self, background: ModalBackground) -> Self {
     self.background = background;
+    self
+  }
+  /// Sets the `horizontal_alignment` of this modal.
+  pub fn horizontal_alignment(mut self, horizontal_alignment: Horizontal) -> Self {
+    self.horizontal_alignment = horizontal_alignment;
+    self
+  }
+  /// Sets the `horizontal_alignment` of this modal.
+  pub fn vertical_alignment(mut self, vertical_alignment: Vertical) -> Self {
+    self.vertical_alignment = vertical_alignment;
     self
   }
 }
@@ -55,11 +68,11 @@ pub enum ModalBackground {
   CustomThemed(Rc<dyn Fn(&Theme) -> Background>),
 }
 impl ModalBackground {
-  /// Custom `background` color.
+  /// Custom `background`.
   pub fn custom(background: Background) -> Self {
     Self::Custom(background)
   }
-  /// Custom background color based on `background_fn` which has access to [`Theme`].
+  /// Custom background based on `background_fn` with has access to [`Theme`].
   pub fn custom_themed(background_fn: impl Fn(&Theme) -> Background + 'static) -> Self {
     Self::CustomThemed(Rc::new(background_fn))
   }
@@ -68,7 +81,7 @@ impl ModalBackground {
 /// Conversion into [`Element`].
 impl<'a, M, R> From<Modal<'a, M, R>> for Element<'a, M, R> where
   M: 'a,
-  R: advanced::Renderer<Theme=Theme> + 'a,
+  R: Renderer<Theme=Theme> + 'a,
 {
   fn from(modal: Modal<'a, M, R>) -> Self {
     Self::new(modal)
@@ -77,35 +90,76 @@ impl<'a, M, R> From<Modal<'a, M, R>> for Element<'a, M, R> where
 
 
 // Widget implementation
-impl<'a, M, R> Widget<M, R> for Modal<'a, M, R> where
-  R: advanced::Renderer<Theme=Theme>,
+impl<M, R> Widget<M, R> for Modal<'_, M, R> where
+  R: Renderer<Theme=Theme>,
 {
   fn children(&self) -> Vec<Tree> {
     vec![
-      Tree::new(&self.parent),
-      Tree::new(&self.modal),
+      Tree::new(&self.underlay),
+      Tree::new(&self.overlay),
     ]
   }
 
+  fn diff(&self, tree: &mut Tree) {
+    tree.diff_children(&[&self.underlay, &self.overlay]);
+  }
+
   fn width(&self) -> Length {
-    self.parent.as_widget().width()
+    self.underlay.as_widget().width()
   }
 
   fn height(&self) -> Length {
-    self.parent.as_widget().height()
+    self.underlay.as_widget().height()
   }
 
   fn layout(
     &self,
     tree: &mut Tree,
     renderer: &R,
-    limits: &layout::Limits,
+    limits: &Limits,
   ) -> Node {
-    self.parent.as_widget().layout(
+    self.underlay.as_widget().layout(
       &mut tree.children[0],
       renderer,
       limits,
     )
+  }
+
+  fn on_event(
+    &mut self,
+    _tree: &mut Tree,
+    _event: Event,
+    _layout: Layout<'_>,
+    _cursor: Cursor,
+    _renderer: &R,
+    _clipboard: &mut dyn Clipboard,
+    _shell: &mut Shell<'_, M>,
+    _viewport: &Rectangle,
+  ) -> event::Status {
+    // Ignored: modal overlay disables the underlay.
+    event::Status::Ignored
+  }
+
+  fn mouse_interaction(
+    &self,
+    _state: &Tree,
+    _layout: Layout<'_>,
+    _cursor: Cursor,
+    _viewport: &Rectangle,
+    _renderer: &R,
+  ) -> mouse::Interaction {
+    // Ignored: modal overlay disables the underlay.
+    mouse::Interaction::default()
+  }
+
+  fn operate(
+    &self,
+    _tree: &mut Tree,
+    _layout: Layout<'_>,
+    _renderer: &R,
+    _operation: &mut dyn Operation<M>,
+  ) {
+    // Ignored: modal overlay disables the underlay.
   }
 
   fn draw(
@@ -113,12 +167,12 @@ impl<'a, M, R> Widget<M, R> for Modal<'a, M, R> where
     tree: &Tree,
     renderer: &mut R,
     theme: &R::Theme,
-    style: &renderer::Style,
+    style: &Style,
     layout: Layout<'_>,
     cursor: Cursor,
     viewport: &Rectangle,
   ) {
-    self.parent.as_widget().draw(
+    self.underlay.as_widget().draw(
       &tree.children[0],
       renderer,
       theme,
@@ -129,159 +183,51 @@ impl<'a, M, R> Widget<M, R> for Modal<'a, M, R> where
     );
   }
 
-  fn diff(&self, tree: &mut Tree) {
-    tree.diff_children(&[&self.parent, &self.modal]);
-  }
-
-  fn operate(
-    &self,
-    tree: &mut Tree,
-    layout: Layout<'_>,
-    renderer: &R,
-    operation: &mut dyn widget::Operation<M>,
-  ) {
-    self.parent.as_widget().operate(
-      &mut tree.children[0],
-      layout,
-      renderer,
-      operation,
-    );
-  }
-
-  fn on_event(
-    &mut self,
-    tree: &mut Tree,
-    event: Event,
-    layout: Layout<'_>,
-    cursor: Cursor,
-    renderer: &R,
-    clipboard: &mut dyn Clipboard,
-    shell: &mut Shell<'_, M>,
-    viewport: &Rectangle,
-  ) -> event::Status {
-    self.parent.as_widget_mut().on_event(
-      &mut tree.children[0],
-      event,
-      layout,
-      cursor,
-      renderer,
-      clipboard,
-      shell,
-      viewport,
-    )
-  }
-
-  fn mouse_interaction(
-    &self,
-    state: &Tree,
-    layout: Layout<'_>,
-    cursor: Cursor,
-    viewport: &Rectangle,
-    renderer: &R,
-  ) -> mouse::Interaction {
-    self.parent.as_widget().mouse_interaction(
-      &state.children[0],
-      layout,
-      cursor,
-      viewport,
-      renderer,
-    )
-  }
-
-  fn overlay<'b>(
-    &'b mut self,
-    state: &'b mut Tree,
+  fn overlay<'o>(
+    &'o mut self,
+    tree: &'o mut Tree,
     layout: Layout<'_>,
     _renderer: &R,
-  ) -> Option<overlay::Element<'b, M, R>> {
+  ) -> Option<overlay::Element<'o, M, R>> {
     let modal_overlay = ModalOverlay {
-      content: &mut self.modal,
-      tree: &mut state.children[1],
-      size: layout.bounds().size(),
-      on_press_parent_area: self.on_press_parent_area.clone(),
+      overlay: &mut self.overlay,
+      overlay_tree: &mut tree.children[1],
+      on_press_underlay_area: self.on_press_underlay_area.clone(),
       background: self.background.clone(),
+      horizontal_alignment: self.horizontal_alignment,
+      vertical_alignment: self.vertical_alignment,
     };
     Some(overlay::Element::new(layout.position(), Box::new(modal_overlay)))
   }
 }
 
-// Modal overlay implementation
-struct ModalOverlay<'a, 'b, M, R> {
-  tree: &'b mut Tree,
-  content: &'b mut Element<'a, M, R>,
-  size: Size,
-  on_press_parent_area: Option<Arc<dyn Fn() -> M>>,
+// Overlay implementation
+struct ModalOverlay<'a, 'o, M, R> {
+  overlay: &'o mut Element<'a, M, R>,
+  overlay_tree: &'o mut Tree,
+  on_press_underlay_area: Option<Rc<dyn Fn() -> M>>,
   background: ModalBackground,
+  horizontal_alignment: Horizontal,
+  vertical_alignment: Vertical,
 }
-impl<'a, 'b, M, R> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R> where
-  R: advanced::Renderer<Theme=Theme>,
+impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
+  R: Renderer<Theme=Theme>,
 {
   fn layout(
     &mut self,
     renderer: &R,
-    _bounds: Size,
-    position: Point,
+    bounds: Size,
+    _position: Point,
   ) -> Node {
-    let limits = layout::Limits::new(Size::ZERO, self.size)
-      .width(Length::Fill)
-      .height(Length::Fill);
-
-    let mut child = self
-      .content
-      .as_widget()
-      .layout(self.tree, renderer, &limits);
-
-    child.align(Alignment::Center, Alignment::Center, limits.max());
-
-    let mut node = Node::with_children(self.size, vec![child]);
-    node.move_to(position);
-
-    node
-  }
-
-  fn draw(
-    &self,
-    renderer: &mut R,
-    theme: &R::Theme,
-    style: &renderer::Style,
-    layout: Layout<'_>,
-    cursor: Cursor,
-  ) {
-    let bounds = layout.bounds();
-
-    renderer.fill_quad(
-      renderer::Quad {
-        bounds,
-        border_radius: 0.0f32.into(),
-        border_width: 0.0,
-        border_color: Color::TRANSPARENT,
-      },
-      self.background.get_background_color(theme),
+    let limits = Limits::new(Size::ZERO, bounds);
+    let mut overlay_node = self.overlay.as_widget().layout(self.overlay_tree, renderer, &limits);
+    let max_size = limits.max();
+    overlay_node.align(
+      self.horizontal_alignment.into(),
+      self.vertical_alignment.into(),
+      max_size,
     );
-
-    self.content.as_widget().draw(
-      self.tree,
-      renderer,
-      theme,
-      style,
-      layout.children().next().unwrap(),
-      cursor,
-      &bounds,
-    );
-  }
-
-  fn operate(
-    &mut self,
-    layout: Layout<'_>,
-    renderer: &R,
-    operation: &mut dyn widget::Operation<M>,
-  ) {
-    self.content.as_widget().operate(
-      self.tree,
-      layout.children().next().unwrap(),
-      renderer,
-      operation,
-    );
+    Node::with_children(max_size, vec![overlay_node])
   }
 
   fn on_event(
@@ -293,21 +239,20 @@ impl<'a, 'b, M, R> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R> where
     clipboard: &mut dyn Clipboard,
     shell: &mut Shell<'_, M>,
   ) -> event::Status {
-    let content_bounds = layout.children().next().unwrap().bounds();
-
-    if let Some(message_producer) = self.on_press_parent_area.as_ref() {
+    let overlay_layout = layout.children().next().unwrap();
+    if let Some(on_press_underlay_area) = self.on_press_underlay_area.as_ref() {
       if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = &event {
-        if !cursor.is_over(content_bounds) {
-          shell.publish(message_producer());
+        let overlay_bounds = overlay_layout.bounds();
+        if !cursor.is_over(overlay_bounds) {
+          shell.publish(on_press_underlay_area());
           return event::Status::Captured;
         }
       }
     }
-
-    self.content.as_widget_mut().on_event(
-      self.tree,
+    self.overlay.as_widget_mut().on_event(
+      self.overlay_tree,
       event,
-      layout.children().next().unwrap(),
+      overlay_layout,
       cursor,
       renderer,
       clipboard,
@@ -323,27 +268,79 @@ impl<'a, 'b, M, R> overlay::Overlay<M, R> for ModalOverlay<'a, 'b, M, R> where
     viewport: &Rectangle,
     renderer: &R,
   ) -> mouse::Interaction {
-    self.content.as_widget().mouse_interaction(
-      self.tree,
-      layout.children().next().unwrap(),
+    let overlay_layout = layout.children().next().unwrap();
+    self.overlay.as_widget().mouse_interaction(
+      self.overlay_tree,
+      overlay_layout,
       cursor,
       viewport,
       renderer,
     )
   }
 
-  fn overlay<'c>(
-    &'c mut self,
+  fn operate(
+    &mut self,
     layout: Layout<'_>,
     renderer: &R,
-  ) -> Option<overlay::Element<'c, M, R>> {
-    self.content.as_widget_mut().overlay(
-      self.tree,
-      layout.children().next().unwrap(),
+    operation: &mut dyn Operation<M>,
+  ) {
+    let overlay_layout = layout.children().next().unwrap();
+    self.overlay.as_widget().operate(
+      self.overlay_tree,
+      overlay_layout,
+      renderer,
+      operation,
+    );
+  }
+
+
+  fn draw(
+    &self,
+    renderer: &mut R,
+    theme: &R::Theme,
+    style: &Style,
+    layout: Layout<'_>,
+    cursor: Cursor,
+  ) {
+    let bounds = layout.bounds();
+
+    renderer.fill_quad(
+      renderer::Quad {
+        bounds,
+        border_radius: 0.0f32.into(),
+        border_width: 0.0,
+        border_color: Color::TRANSPARENT,
+      },
+      self.background.get_background_color(theme),
+    );
+
+    let overlay_layout = layout.children().next().unwrap();
+    self.overlay.as_widget().draw(
+      self.overlay_tree,
+      renderer,
+      theme,
+      style,
+      overlay_layout,
+      cursor,
+      &bounds,
+    );
+  }
+
+  fn overlay(
+    &mut self,
+    layout: Layout<'_>,
+    renderer: &R,
+  ) -> Option<overlay::Element<M, R>> {
+    let overlay_layout = layout.children().next().unwrap();
+    self.overlay.as_widget_mut().overlay(
+      self.overlay_tree,
+      overlay_layout,
       renderer,
     )
   }
 }
+
+// Background calculation
 impl ModalBackground {
   fn get_background_color(&self, theme: &Theme) -> Background {
     match self {
