@@ -5,7 +5,7 @@ edition = "2021"
 publish = false
 
 [dependencies]
-iced = { version = "0.10", features = ["tokio"] }
+iced = { version = "0.10", features = ["lazy", "tokio"] }
 iced_core = { version = "0.10" }
 tokio = { version = "1", features = ["time"] }
 crates_io_api = "0.8"
