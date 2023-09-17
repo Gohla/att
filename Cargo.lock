@@ -143,7 +143,6 @@ dependencies = [
  "chrono",
  "crates_io_api",
  "iced",
- "iced_core",
  "iced_futures",
  "tokio",
 ]

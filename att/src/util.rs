@@ -1,6 +1,6 @@
 use iced::{Command, Element};
+use iced::advanced::Widget;
 use iced::widget::Button;
-use iced_core::Widget;
 use iced_futures::MaybeSend;
 
 /// Update received from components.
@@ -63,7 +63,7 @@ pub trait WidgetExt<'a, M, R> {
   fn into_element(self) -> Element<'a, M, R>;
   fn map_into_element<MM: 'a, F: Fn(M) -> MM + 'a>(self, f: F) -> Element<'a, MM, R>;
 }
-impl<'a, M: 'a, R: iced_core::Renderer + 'a, W: Widget<M, R> + 'a> WidgetExt<'a, M, R> for W {
+impl<'a, M: 'a, R: iced::advanced::Renderer + 'a, W: Widget<M, R> + 'a> WidgetExt<'a, M, R> for W {
   #[inline]
   fn into_element(self) -> Element<'a, M, R> {
     Element::new(self)
@@ -79,7 +79,7 @@ pub trait ButtonEx<'a, R> {
   fn on_press_into_element<M: 'a, F: Fn() -> M + 'a>(self, f: F) -> Element<'a, M, R>;
 }
 impl<'a, R> ButtonEx<'a, R> for Button<'a, (), R> where
-  R: iced_core::Renderer + 'a,
+  R: iced::advanced::Renderer + 'a,
   R::Theme: iced::widget::button::StyleSheet,
 {
   fn on_press_into_element<M: 'a, F: Fn() -> M + 'a>(self, f: F) -> Element<'a, M, R> {
@@ -94,6 +94,6 @@ macro_rules! col {
         iced::widget::Column::new()
     );
     ($($x:expr),+ $(,)?) => (
-        iced::widget::Column::with_children(vec![$(iced_core::Element::from($x)),+])
+        iced::widget::Column::with_children(vec![$(iced::Element::from($x)),+])
     );
 }

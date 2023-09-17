@@ -1,9 +1,8 @@
 use std::time::{Duration, Instant};
 
 use crates_io_api::{AsyncClient, Crate, CratesPage, CratesQuery, Sort};
-use iced::{futures, Subscription};
-use iced::widget::{Button, Column, row, Scrollable, Text, TextInput};
-use iced_core::Length;
+use iced::{Element, futures, Length, Subscription, theme};
+use iced::widget::{Button, Column, Container, row, Scrollable, Text, TextInput};
 
 use crate::col;
 use crate::util::{ButtonEx, Update, WidgetExt};
@@ -57,7 +56,7 @@ impl AddCrate {
     Update::default()
   }
 
-  pub fn view(&self) -> Column<'_, Message> {
+  pub fn view(&self) -> Element<'_, Message> {
     let search_term_input = TextInput::new("Crate search term", &self.search_term)
       .on_input(|s| s)
       .map_into_element(Message::SetSearchTerm);
@@ -81,9 +80,14 @@ impl AddCrate {
       _ => col![].into_element()
     };
 
-    col![search_term_input, crates]
+    let column = col![search_term_input, crates]
       .spacing(20)
-      .max_width(800)
+      .width(800)
+      .height(600);
+    Container::new(column)
+      .padding(10)
+      .style(theme::Container::Box)
+      .into()
   }
 
   pub fn subscription(&self, crates_io_api: &AsyncClient) -> Subscription<Message> {

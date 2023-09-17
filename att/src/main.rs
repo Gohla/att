@@ -9,6 +9,7 @@ use crate::app::App;
 pub mod app;
 pub mod util;
 pub mod add_crate;
+pub mod modal;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let crates_io_api = AsyncClient::new("Gohla (https://github.com/Gohla)", Duration::from_secs(1))?;

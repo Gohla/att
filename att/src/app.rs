@@ -1,11 +1,10 @@
 use crates_io_api::AsyncClient;
-use iced::{Application, Command, Element, executor, Renderer, Subscription};
-use iced::widget::Container;
-use iced_core::Length;
+use iced::{Alignment, Application, Command, Element, executor, Length, Renderer, Subscription};
+use iced::widget::{Container, row, Space, Text};
 
-use crate::add_crate;
+use crate::{add_crate, col};
 use crate::add_crate::AddCrate;
-use crate::util::WidgetExt;
+use crate::modal::Modal;
 
 pub type AppTheme = iced::Theme;
 pub type AppRenderer = Renderer<AppTheme>;
@@ -27,6 +26,8 @@ impl App {
 #[derive(Debug)]
 pub enum Message {
   ToAddCrate(add_crate::Message),
+  ShowModal,
+  CloseModal,
 }
 
 impl Application for App {
@@ -45,19 +46,32 @@ impl Application for App {
           println!("Add crate: {:?}", krate);
         }
       }
+      Message::ShowModal => dbg!(),
+      Message::CloseModal => dbg!(),
     }
     Command::none()
   }
 
   fn view(&self) -> Element<'_, Message, AppRenderer> {
-    let content = self.add_crate
-      .view()
-      .map_into_element(Message::ToAddCrate);
-    Container::new(content)
+    let content = Container::new(col![
+        row![Text::new("Top Left"), Space::with_width(Length::Fill), Text::new("Top Right")]
+          .align_items(Alignment::Start)
+          .height(Length::Fill),
+        row![Text::new("Bottom Left"), Space::with_width(Length::Fill), Text::new("Bottom Right")]
+          .align_items(Alignment::End)
+          .height(Length::Fill)
+      ].height(Length::Fill))
+      .padding(10)
       .width(Length::Fill)
-      .padding(40)
-      .center_x()
-      .into()
+      .height(Length::Fill);
+
+    let add_crate = self.add_crate
+      .view()
+      .map(Message::ToAddCrate);
+
+    let modal = Modal::new(content, add_crate)
+      .on_press_parent_area(|| Message::CloseModal);
+    modal.into()
   }
 
   fn subscription(&self) -> Subscription<Message> {
