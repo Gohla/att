@@ -91,7 +91,7 @@ impl Application for App {
         .view()
         .map(Message::ToAddCrate);
       let modal = Modal::new(overlay, content)
-        .on_press_underlay_area(|| Message::CloseAddCrateModal);
+        .on_close_modal(|| Message::CloseAddCrateModal);
       modal.into()
     } else {
       content.into()

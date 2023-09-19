@@ -1,7 +1,8 @@
 use std::rc::Rc;
 
-use iced::{Background, Color, Element, Event, Length, Point, Rectangle, Size, Theme};
+use iced::{Background, Color, Element, Event, keyboard, Length, Point, Rectangle, Size, Theme};
 use iced::advanced::{Clipboard, Renderer, Shell};
+use iced::advanced::graphics::core::touch;
 use iced::advanced::layout::{Layout, Limits, Node};
 use iced::advanced::overlay;
 use iced::advanced::renderer::{self, Style};
@@ -14,7 +15,10 @@ use iced::mouse::{self, Cursor};
 pub struct Modal<'a, M, R> {
   overlay: Element<'a, M, R>,
   underlay: Element<'a, M, R>,
+
   on_press_underlay_area: Option<Rc<dyn Fn() -> M>>,
+  on_esc_pressed: Option<Rc<dyn Fn() -> M>>,
+
   background: ModalBackground,
   horizontal_alignment: Horizontal,
   vertical_alignment: Vertical,
@@ -30,16 +34,34 @@ impl<'a, M, R> Modal<'a, M, R> where
     Self {
       overlay: overlay.into(),
       underlay: underlay.into(),
+
       on_press_underlay_area: None,
+      on_esc_pressed: None,
+
       background: ModalBackground::default(),
       horizontal_alignment: Horizontal::Center,
       vertical_alignment: Vertical::Center,
     }
   }
 
+  /// Sets the `message_producer` to call when the modal should be closed due to either:
+  /// - the underlay (background) area of this modal being pressed,
+  /// - the [escape key](keyboard::KeyCode::Escape) being pressed.
+  /// This sets both [`on_press_underlay_area`] and [`on_esc_pressed`] to `message_producer`.
+  pub fn on_close_modal(mut self, message_producer: impl Fn() -> M + 'static) -> Self {
+    let message_producer = Rc::new(message_producer);
+    self.on_press_underlay_area = Some(message_producer.clone());
+    self.on_esc_pressed = Some(message_producer);
+    self
+  }
   /// Sets the `message_producer` to call when the underlay (background) area of this modal is pressed.
   pub fn on_press_underlay_area(mut self, message_producer: impl Fn() -> M + 'static) -> Self {
     self.on_press_underlay_area = Some(Rc::new(message_producer));
+    self
+  }
+  /// Sets the `message_producer` to call when the [escape key](keyboard::KeyCode::Escape) is pressed.
+  pub fn on_esc_pressed(mut self, message_producer: impl Fn() -> M + 'static) -> Self {
+    self.on_esc_pressed = Some(Rc::new(message_producer));
     self
   }
   /// Sets the `background` of this modal.
@@ -99,19 +121,12 @@ impl<M, R> Widget<M, R> for Modal<'_, M, R> where
       Tree::new(&self.overlay),
     ]
   }
-
   fn diff(&self, tree: &mut Tree) {
     tree.diff_children(&[&self.underlay, &self.overlay]);
   }
 
-  fn width(&self) -> Length {
-    self.underlay.as_widget().width()
-  }
-
-  fn height(&self) -> Length {
-    self.underlay.as_widget().height()
-  }
-
+  fn width(&self) -> Length { self.underlay.as_widget().width() }
+  fn height(&self) -> Length { self.underlay.as_widget().height() }
   fn layout(
     &self,
     tree: &mut Tree,
@@ -124,43 +139,25 @@ impl<M, R> Widget<M, R> for Modal<'_, M, R> where
       limits,
     )
   }
-
-  fn on_event(
-    &mut self,
-    _tree: &mut Tree,
-    _event: Event,
-    _layout: Layout<'_>,
-    _cursor: Cursor,
+  fn overlay<'o>(
+    &'o mut self,
+    tree: &'o mut Tree,
+    layout: Layout<'_>,
     _renderer: &R,
-    _clipboard: &mut dyn Clipboard,
-    _shell: &mut Shell<'_, M>,
-    _viewport: &Rectangle,
-  ) -> event::Status {
-    // Ignored: modal overlay disables the underlay.
-    event::Status::Ignored
+  ) -> Option<overlay::Element<'o, M, R>> {
+    let modal_overlay = ModalOverlay {
+      overlay: &mut self.overlay,
+      overlay_tree: &mut tree.children[1],
+      on_press_underlay_area: self.on_press_underlay_area.clone(),
+      on_esc_pressed: self.on_esc_pressed.clone(),
+      background: self.background.clone(),
+      horizontal_alignment: self.horizontal_alignment,
+      vertical_alignment: self.vertical_alignment,
+    };
+    Some(overlay::Element::new(layout.position(), Box::new(modal_overlay)))
   }
 
-  fn mouse_interaction(
-    &self,
-    _state: &Tree,
-    _layout: Layout<'_>,
-    _cursor: Cursor,
-    _viewport: &Rectangle,
-    _renderer: &R,
-  ) -> mouse::Interaction {
-    // Ignored: modal overlay disables the underlay.
-    mouse::Interaction::default()
-  }
-
-  fn operate(
-    &self,
-    _tree: &mut Tree,
-    _layout: Layout<'_>,
-    _renderer: &R,
-    _operation: &mut dyn Operation<M>,
-  ) {
-    // Ignored: modal overlay disables the underlay.
-  }
+  // Note: did not override `on_event`, `mouse_interaction`, and `operate` as the modal overlay disables the underlay.
 
   fn draw(
     &self,
@@ -182,23 +179,6 @@ impl<M, R> Widget<M, R> for Modal<'_, M, R> where
       viewport,
     );
   }
-
-  fn overlay<'o>(
-    &'o mut self,
-    tree: &'o mut Tree,
-    layout: Layout<'_>,
-    _renderer: &R,
-  ) -> Option<overlay::Element<'o, M, R>> {
-    let modal_overlay = ModalOverlay {
-      overlay: &mut self.overlay,
-      overlay_tree: &mut tree.children[1],
-      on_press_underlay_area: self.on_press_underlay_area.clone(),
-      background: self.background.clone(),
-      horizontal_alignment: self.horizontal_alignment,
-      vertical_alignment: self.vertical_alignment,
-    };
-    Some(overlay::Element::new(layout.position(), Box::new(modal_overlay)))
-  }
 }
 
 // Overlay implementation
@@ -206,6 +186,7 @@ struct ModalOverlay<'a, 'o, M, R> {
   overlay: &'o mut Element<'a, M, R>,
   overlay_tree: &'o mut Tree,
   on_press_underlay_area: Option<Rc<dyn Fn() -> M>>,
+  on_esc_pressed: Option<Rc<dyn Fn() -> M>>,
   background: ModalBackground,
   horizontal_alignment: Horizontal,
   vertical_alignment: Vertical,
@@ -229,6 +210,18 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
     );
     Node::with_children(max_size, vec![overlay_node])
   }
+  fn overlay(
+    &mut self,
+    layout: Layout<'_>,
+    renderer: &R,
+  ) -> Option<overlay::Element<M, R>> {
+    let overlay_layout = layout.children().next().unwrap();
+    self.overlay.as_widget_mut().overlay(
+      self.overlay_tree,
+      overlay_layout,
+      renderer,
+    )
+  }
 
   fn on_event(
     &mut self,
@@ -240,15 +233,27 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
     shell: &mut Shell<'_, M>,
   ) -> event::Status {
     let overlay_layout = layout.children().next().unwrap();
+
     if let Some(on_press_underlay_area) = self.on_press_underlay_area.as_ref() {
-      if let Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) = &event {
-        let overlay_bounds = overlay_layout.bounds();
-        if !cursor.is_over(overlay_bounds) {
-          shell.publish(on_press_underlay_area());
-          return event::Status::Captured;
-        }
+      let overlay_bounds = overlay_layout.bounds();
+      let pressed_underlay_area = match event {
+        Event::Mouse(mouse::Event::ButtonPressed(mouse::Button::Left)) => !cursor.is_over(overlay_bounds),
+        Event::Touch(touch::Event::FingerPressed { position, .. }) => !overlay_bounds.contains(position),
+        _ => false,
+      };
+      if pressed_underlay_area {
+        shell.publish(on_press_underlay_area());
+        return event::Status::Captured;
       }
     }
+
+    if let Some(on_esc_pressed) = self.on_esc_pressed.as_ref() {
+      if let Event::Keyboard(keyboard::Event::KeyPressed { key_code: keyboard::KeyCode::Escape, .. }) = event {
+        shell.publish(on_esc_pressed());
+        return event::Status::Captured;
+      }
+    }
+
     self.overlay.as_widget_mut().on_event(
       self.overlay_tree,
       event,
@@ -260,7 +265,6 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
       &layout.bounds(),
     )
   }
-
   fn mouse_interaction(
     &self,
     layout: Layout<'_>,
@@ -277,7 +281,6 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
       renderer,
     )
   }
-
   fn operate(
     &mut self,
     layout: Layout<'_>,
@@ -292,7 +295,6 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
       operation,
     );
   }
-
 
   fn draw(
     &self,
@@ -325,22 +327,7 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
       &bounds,
     );
   }
-
-  fn overlay(
-    &mut self,
-    layout: Layout<'_>,
-    renderer: &R,
-  ) -> Option<overlay::Element<M, R>> {
-    let overlay_layout = layout.children().next().unwrap();
-    self.overlay.as_widget_mut().overlay(
-      self.overlay_tree,
-      overlay_layout,
-      renderer,
-    )
-  }
 }
-
-// Background calculation
 impl ModalBackground {
   fn get_background_color(&self, theme: &Theme) -> Background {
     match self {
