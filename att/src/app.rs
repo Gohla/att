@@ -1,29 +1,45 @@
-use crates_io_api::AsyncClient;
-use iced::{Application, Command, Element, executor, Length, Renderer, Subscription, Theme};
+use std::collections::HashMap;
+use std::error::Error;
+
+use crates_io_api::{AsyncClient, Crate};
+use iced::{Application, Command, Element, Event, event, executor, Length, Renderer, Subscription, Theme, window};
 use iced::widget::{self, Button, row, Text};
+use serde::{Deserialize, Serialize};
 
 use crate::component::add_crate::{self, AddCrate};
 use crate::component::view_crates::{self, ViewCrates};
 use crate::widget::{ButtonEx, col};
 use crate::widget::modal::Modal;
 
+#[derive(Default, Serialize, Deserialize)]
+pub struct Model {
+  blessed_crate_ids: Vec<String>,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+pub struct Cache {
+  crate_data: HashMap<String, Crate>
+}
+
+pub type SaveFn = Box<dyn FnMut(&Model, &Cache) -> Result<(), Box<dyn Error>> + 'static>;
+
+pub struct Flags {
+  pub model: Option<Model>,
+  pub cache: Option<Cache>,
+  pub save_fn: SaveFn,
+  pub crates_io_api: AsyncClient,
+}
+
 pub struct App {
-  crates_io_api: AsyncClient,
+  model: Model,
+  cache: Cache,
 
   view_crates: ViewCrates,
   add_crate: AddCrate,
   adding_crate: bool,
-}
 
-impl App {
-  pub fn new(crates_io_api: AsyncClient) -> Self {
-    Self {
-      crates_io_api,
-      view_crates: ViewCrates::default(),
-      add_crate: AddCrate::default(),
-      adding_crate: false,
-    }
-  }
+  save_fn: SaveFn,
+  crates_io_api: AsyncClient,
 }
 
 #[derive(Debug)]
@@ -32,15 +48,29 @@ pub enum Message {
   ToAddCrate(add_crate::Message),
   OpenAddCrateModal,
   CloseAddCrateModal,
+  Exit,
 }
 
 impl Application for App {
   type Executor = executor::Default;
   type Message = Message;
   type Theme = Theme;
-  type Flags = App;
+  type Flags = Flags;
 
-  fn new(flags: Self) -> (Self, Command<Message>) { (flags, Command::none()) }
+  fn new(flags: Flags) -> (Self, Command<Message>) {
+    let app = App {
+      model: flags.model.unwrap_or_default(),
+      cache: flags.cache.unwrap_or_default(),
+
+      view_crates: Default::default(),
+      add_crate: Default::default(),
+      adding_crate: false,
+
+      save_fn: flags.save_fn,
+      crates_io_api: flags.crates_io_api,
+    };
+    (app, Command::none())
+  }
   fn title(&self) -> String { "All The Things".to_string() }
 
   fn update(&mut self, message: Message) -> Command<Self::Message> {
@@ -62,6 +92,10 @@ impl Application for App {
       Message::CloseAddCrateModal => {
         self.add_crate.clear_search_term();
         self.adding_crate = false;
+      }
+      Message::Exit => {
+        let _ = (self.save_fn)(&self.model, &self.cache); // TODO: handle error
+        return window::close();
       }
     }
     Command::none()
@@ -101,6 +135,10 @@ impl Application for App {
   fn theme(&self) -> Theme { Theme::Light }
 
   fn subscription(&self) -> Subscription<Message> {
-    self.add_crate.subscription(&self.crates_io_api).map(Message::ToAddCrate)
+    let exit_subscription = event::listen_with(|event, _| {
+      (event == Event::Window(window::Event::CloseRequested)).then_some(Message::Exit)
+    });
+    let add_crate_subscription = self.add_crate.subscription(&self.crates_io_api).map(Message::ToAddCrate);
+    Subscription::batch([exit_subscription, add_crate_subscription])
   }
 }
