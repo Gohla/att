@@ -2,6 +2,7 @@ use iced::Command;
 use iced_futures::MaybeSend;
 
 pub mod add_crate;
+pub mod view_crates;
 
 /// Update received from components.
 #[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]

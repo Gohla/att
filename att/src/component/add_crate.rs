@@ -39,6 +39,14 @@ impl AddCrate {
     self.wait_before_searching = wait_before_searching;
   }
 
+  pub fn clear_search_term(&mut self) {
+    self.search_term.clear();
+    self.next_search_time = None;
+    self.crates = None;
+  }
+}
+
+impl AddCrate {
   pub fn update(&mut self, message: Message) -> Update<Option<Crate>> {
     match message {
       Message::SetSearchTerm(s) => {
@@ -51,7 +59,9 @@ impl AddCrate {
         }
       }
       Message::SetCrates(crates) => self.crates = Some(crates),
-      Message::AddCrate(krate) => return Update::from_action(krate),
+      Message::AddCrate(krate) => {
+        return Update::from_action(krate)
+      },
     }
     Update::default()
   }
@@ -65,16 +75,24 @@ impl AddCrate {
       Some(Ok(crates)) => {
         let mut crate_rows = Vec::new();
         for krate in &crates.crates {
+          let add_button = Button::new(Text::new("Add"))
+            .style(theme::Button::Positive)
+            .padding([0.0, 5.0, 0.0, 5.0])
+            .on_press_into_element(|| Message::AddCrate(krate.clone()));
           let row = row![
             Text::new(&krate.id).width(300),
             Text::new(&krate.max_version).width(150),
             Text::new(krate.updated_at.format("%Y-%m-%d").to_string()).width(150),
             Text::new(format!("{}", krate.downloads)).width(100),
-            Button::new(Text::new("Add")).on_press_into_element(|| Message::AddCrate(krate.clone())),
+            add_button,
           ];
           crate_rows.push(row.into())
         }
-        Scrollable::new(Column::with_children(crate_rows).width(Length::Fill)).into_element()
+        let column = Column::with_children(crate_rows)
+          .spacing(2.0)
+          .width(Length::Fill);
+        Scrollable::new(column)
+          .into_element()
       }
       Some(Err(e)) => Text::new(format!("{:?}", e)).into_element(),
       _ => col![].into_element()
