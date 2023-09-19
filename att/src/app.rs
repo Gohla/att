@@ -1,10 +1,9 @@
 use crates_io_api::AsyncClient;
 use iced::{Application, Command, Element, executor, Length, Renderer, Subscription, Theme};
-use iced::widget::{Button, row, Text};
+use iced::widget::{self, Button, row, Text};
 
 use crate::component::add_crate::{self, AddCrate};
-use crate::component::view_crates;
-use crate::component::view_crates::ViewCrates;
+use crate::component::view_crates::{self, ViewCrates};
 use crate::widget::{ButtonEx, col};
 use crate::widget::modal::Modal;
 
@@ -58,6 +57,7 @@ impl Application for App {
       }
       Message::OpenAddCrateModal => {
         self.adding_crate = true;
+        return widget::focus_next();
       }
       Message::CloseAddCrateModal => {
         self.add_crate.clear_search_term();
