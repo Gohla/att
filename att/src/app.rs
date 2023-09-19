@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 
 use crates_io_api::{AsyncClient, Crate};
@@ -13,12 +13,12 @@ use crate::widget::modal::Modal;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Model {
-  blessed_crate_ids: Vec<String>,
+  pub blessed_crate_ids: BTreeSet<String>,
 }
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Cache {
-  crate_data: HashMap<String, Crate>
+  pub crate_data: HashMap<String, Crate>
 }
 
 pub type SaveFn = Box<dyn FnMut(&Model, &Cache) -> Result<(), Box<dyn Error>> + 'static>;
@@ -76,12 +76,14 @@ impl Application for App {
   fn update(&mut self, message: Message) -> Command<Self::Message> {
     match message {
       Message::ToViewCrates(message) => {
-        self.view_crates.update(message);
+        self.view_crates.update(message, &mut self.model, &mut self.cache);
       }
       Message::ToAddCrate(message) => {
         if let Some(krate) = self.add_crate.update(message).into_action() {
+          self.model.blessed_crate_ids.insert(krate.id.clone());
+          self.cache.crate_data.insert(krate.id.clone(), krate);
+
           self.add_crate.clear_search_term();
-          self.view_crates.add_crate(krate);
           self.adding_crate = false;
         }
       }
@@ -112,7 +114,7 @@ impl Application for App {
         .width(Length::Fill)
     };
     let view_crates = self.view_crates
-      .view()
+      .view(&self.model, &self.cache)
       .map(Message::ToViewCrates);
     let content = col![header, view_crates]
       .spacing(10.0)
