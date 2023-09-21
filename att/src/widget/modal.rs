@@ -10,6 +10,7 @@ use iced::advanced::widget::{Operation, Tree, Widget};
 use iced::alignment::{Horizontal, Vertical};
 use iced::event;
 use iced::mouse::{self, Cursor};
+use iced::widget::container;
 
 /// A widget that overlays an element over an underlay element in a modal way, disabling the underlay element.
 pub struct Modal<'a, M, R> {
@@ -24,9 +25,10 @@ pub struct Modal<'a, M, R> {
   vertical_alignment: Vertical,
 }
 impl<'a, M, R> Modal<'a, M, R> where
-  R: Renderer<Theme=Theme>,
+  M: 'a,
+  R: Renderer<Theme=Theme> + 'a,
 {
-  /// Creates a new [`Modal`] that overlays the `overlay` element over the `underlay` element.
+  /// Creates a new [`Modal`] that overlays `overlay` over `underlay`.
   pub fn new(
     overlay: impl Into<Element<'a, M, R>>,
     underlay: impl Into<Element<'a, M, R>>,
@@ -42,6 +44,27 @@ impl<'a, M, R> Modal<'a, M, R> where
       horizontal_alignment: Horizontal::Center,
       vertical_alignment: Vertical::Center,
     }
+  }
+  /// Creates a new [`Modal`] that wraps `overlay` in a modal-styled container, and overlaps it over `underlay`.
+  pub fn with_container(
+    overlay: impl Into<Element<'a, M, R>>,
+    underlay: impl Into<Element<'a, M, R>>,
+  ) -> Self {
+    let overlay = container::Container::new(overlay)
+      .padding(10)
+      .style(|theme: &Theme| {
+        let palette = theme.extended_palette();
+        let background = palette.background.base;
+        container::Appearance {
+          text_color: Some(background.text),
+          background: Some(background.color.into()),
+          border_radius: 10.0.into(),
+          border_width: 2.0,
+          border_color: palette.primary.weak.color,
+          ..container::Appearance::default()
+        }
+      });
+    Self::new(overlay, underlay)
   }
 
   /// Sets the `message_producer` to call when the modal should be closed due to either:
@@ -332,11 +355,9 @@ impl ModalBackground {
   fn get_background_color(&self, theme: &Theme) -> Background {
     match self {
       ModalBackground::Default => {
-        let background_base_color = theme.extended_palette().background.base.color;
-        Background::Color(Color {
-          a: background_base_color.a * 0.75,
-          ..background_base_color.inverse()
-        })
+        let mut background_base_color = theme.extended_palette().background.strong.color.inverse();
+        background_base_color.a *= 0.75;
+        Background::Color(background_base_color)
       },
       ModalBackground::Custom(background) => *background,
       ModalBackground::CustomThemed(background_fn) => background_fn(theme),

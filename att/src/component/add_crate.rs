@@ -1,8 +1,8 @@
 use std::time::{Duration, Instant};
 
 use crates_io_api::{AsyncClient, Crate, CratesPage, CratesQuery, Sort};
-use iced::{Element, futures, Length, Subscription, theme};
-use iced::widget::{Button, Column, Container, row, Scrollable, Text, TextInput};
+use iced::{Command, Element, futures, Length, Subscription, theme};
+use iced::widget::{Button, Column, row, Scrollable, Text, text_input};
 
 use crate::component::Update;
 use crate::widget::{ButtonEx, col, WidgetExt};
@@ -11,6 +11,7 @@ use crate::widget::{ButtonEx, col, WidgetExt};
 #[derive(Debug)]
 pub struct AddCrate {
   wait_before_searching: Duration,
+  search_id: text_input::Id,
   search_term: String,
   next_search_time: Option<Instant>,
   crates: Option<Result<CratesPage, crates_io_api::Error>>,
@@ -27,6 +28,7 @@ impl Default for AddCrate {
   fn default() -> Self {
     Self {
       wait_before_searching: Duration::from_millis(200),
+      search_id: text_input::Id::unique(),
       search_term: String::new(),
       next_search_time: None,
       crates: None,
@@ -37,6 +39,10 @@ impl Default for AddCrate {
 impl AddCrate {
   pub fn wait_before_searching(&mut self, wait_before_searching: Duration) {
     self.wait_before_searching = wait_before_searching;
+  }
+
+  pub fn focus_search_term_input<M: 'static>(&self) -> Command<M> {
+    text_input::focus(self.search_id.clone())
   }
 
   pub fn clear_search_term(&mut self) {
@@ -67,7 +73,8 @@ impl AddCrate {
   }
 
   pub fn view(&self) -> Element<'_, Message> {
-    let search_term_input = TextInput::new("Crate search term", &self.search_term)
+    let search_term_input = text_input::TextInput::new("Crate search term", &self.search_term)
+      .id(self.search_id.clone())
       .on_input(|s| s)
       .map_into_element(Message::SetSearchTerm);
 
@@ -98,13 +105,10 @@ impl AddCrate {
       _ => col![].into_element()
     };
 
-    let column = col![search_term_input, crates]
+    col![search_term_input, crates]
       .spacing(20)
       .width(800)
-      .height(600);
-    Container::new(column)
-      .padding(10)
-      .style(theme::Container::Box)
+      .height(600)
       .into()
   }
 

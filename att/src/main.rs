@@ -23,6 +23,11 @@ fn main() -> Result<(), Box<dyn Error>> {
   let model = from_json_file_opt(data_file_path.as_ref())?;
   let cache = from_json_file_opt(cache_file_path.as_ref())?;
 
+  let dark_mode = match dark_light::detect() {
+    dark_light::Mode::Dark => true,
+    dark_light::Mode::Light | dark_light::Mode::Default => false,
+  };
+
   let save_fn = Box::new(move |model: &_, cache: &_| {
     create_dir_all_opt(data_directory_path.clone())?;
     to_json_file_opt(data_file_path.clone(), model)?;
@@ -36,6 +41,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   let flags = Flags {
     model,
     cache,
+    dark_mode,
     save_fn,
     crates_io_api,
   };

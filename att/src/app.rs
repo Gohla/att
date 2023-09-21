@@ -2,13 +2,14 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 
 use crates_io_api::{AsyncClient, Crate};
-use iced::{Application, Command, Element, Event, event, executor, Length, Renderer, Subscription, Theme, window};
-use iced::widget::{self, Button, row, Text};
+use iced::{Alignment, Application, Command, Element, Event, event, executor, Length, Renderer, Subscription, Theme, window};
+use iced::widget::{Button, row, Rule, Space, Text};
 use serde::{Deserialize, Serialize};
 
 use crate::component::add_crate::{self, AddCrate};
 use crate::component::view_crates::{self, ViewCrates};
-use crate::widget::{ButtonEx, col};
+use crate::widget::{ButtonEx, col, load_icon_font_command};
+use crate::widget::dark_light_toggle::light_dark_toggle;
 use crate::widget::modal::Modal;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -26,6 +27,7 @@ pub type SaveFn = Box<dyn FnMut(&Model, &Cache) -> Result<(), Box<dyn Error>> + 
 pub struct Flags {
   pub model: Option<Model>,
   pub cache: Option<Cache>,
+  pub dark_mode: bool,
   pub save_fn: SaveFn,
   pub crates_io_api: AsyncClient,
 }
@@ -37,6 +39,7 @@ pub struct App {
   view_crates: ViewCrates,
   add_crate: AddCrate,
   adding_crate: bool,
+  dark_mode: bool,
 
   save_fn: SaveFn,
   crates_io_api: AsyncClient,
@@ -46,8 +49,12 @@ pub struct App {
 pub enum Message {
   ToViewCrates(view_crates::Message),
   ToAddCrate(add_crate::Message),
+
   OpenAddCrateModal,
   CloseAddCrateModal,
+  ToggleLightDarkMode,
+
+  FontLoaded(Result<(), iced::font::Error>),
   Exit,
 }
 
@@ -65,11 +72,12 @@ impl Application for App {
       view_crates: Default::default(),
       add_crate: Default::default(),
       adding_crate: false,
+      dark_mode: flags.dark_mode,
 
       save_fn: flags.save_fn,
       crates_io_api: flags.crates_io_api,
     };
-    (app, Command::none())
+    (app, load_icon_font_command(Message::FontLoaded))
   }
   fn title(&self) -> String { "All The Things".to_string() }
 
@@ -87,14 +95,20 @@ impl Application for App {
           self.adding_crate = false;
         }
       }
+
       Message::OpenAddCrateModal => {
         self.adding_crate = true;
-        return widget::focus_next();
+        return self.add_crate.focus_search_term_input();
       }
       Message::CloseAddCrateModal => {
         self.add_crate.clear_search_term();
         self.adding_crate = false;
       }
+      Message::ToggleLightDarkMode => {
+        self.dark_mode = !self.dark_mode;
+      }
+
+      Message::FontLoaded(_) => {},
       Message::Exit => {
         let _ = (self.save_fn)(&self.model, &self.cache); // TODO: handle error
         return window::close();
@@ -109,14 +123,18 @@ impl Application for App {
         .size(20.0);
       let add_crate_button = Button::new("Add Crate")
         .on_press_into_element(|| Message::OpenAddCrateModal);
-      row![text, add_crate_button]
+      let space = Space::with_width(Length::Fill);
+      let light_dark_toggle = light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode);
+      row![text, add_crate_button, space, light_dark_toggle]
         .spacing(10.0)
+        .align_items(Alignment::Center)
         .width(Length::Fill)
     };
+    let rule = Rule::horizontal(1.0);
     let view_crates = self.view_crates
       .view(&self.model, &self.cache)
       .map(Message::ToViewCrates);
-    let content = col![header, view_crates]
+    let content = col![header, rule, view_crates]
       .spacing(10.0)
       .padding(10)
       .width(Length::Fill)
@@ -126,7 +144,7 @@ impl Application for App {
       let overlay = self.add_crate
         .view()
         .map(Message::ToAddCrate);
-      let modal = Modal::new(overlay, content)
+      let modal = Modal::with_container(overlay, content)
         .on_close_modal(|| Message::CloseAddCrateModal);
       modal.into()
     } else {
@@ -134,7 +152,12 @@ impl Application for App {
     }
   }
 
-  fn theme(&self) -> Theme { Theme::Light }
+  fn theme(&self) -> Theme {
+    match self.dark_mode {
+      false => Theme::Light,
+      true => Theme::Dark,
+    }
+  }
 
   fn subscription(&self) -> Subscription<Message> {
     let exit_subscription = event::listen_with(|event, _| {
