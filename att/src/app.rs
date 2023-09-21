@@ -122,12 +122,14 @@ impl Application for App {
     let header = builder()
       .text("Blessed Crates").size(20.0).done()
       .button("Add Crate").done(|| Message::OpenAddCrateModal)
-      .fill_width()
+      .space().fill_width().done()
       .element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .into_row()
       .spacing(10.0)
       .align_items(Alignment::Center)
       .width(Length::Fill)
+      .done()
+      .done()
       ;
     let rule = Rule::horizontal(1.0);
     let view_crates = self.view_crates
