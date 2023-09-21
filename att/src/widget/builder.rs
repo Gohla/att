@@ -60,7 +60,7 @@ impl<'a, M: 'a, R: Renderer> OneBuilder<'a, M, R> {
     Builder { elements: vec![self.0, element.into()] }
   }
 
-  pub fn done(self) -> Element<'a, M, R> {
+  pub fn take(self) -> Element<'a, M, R> {
     self.0
   }
 }
@@ -210,8 +210,8 @@ impl<'a, N: ConsumeElements<'a> + 'a> RowBuilder<N> {
   /// Custom margins per element do not exist in iced. You should use this
   /// method instead! While less flexible, it helps you keep spacing between
   /// elements consistent.
-  pub fn spacing(mut self, amount: impl Into<Pixels>) -> Self {
-    self.spacing = amount.into().0;
+  pub fn spacing(mut self, spacing: impl Into<Pixels>) -> Self {
+    self.spacing = spacing.into().0;
     self
   }
   /// Sets the [`Padding`] of the [`Row`].
@@ -236,14 +236,16 @@ impl<'a, N: ConsumeElements<'a> + 'a> RowBuilder<N> {
   }
 
   pub fn done(self) -> OneBuilder<'a, N::Message, N::Renderer> {
-    let row = Row::with_children(self.next.consume())
+    OneBuilder(self.take())
+  }
+  pub fn take(self) -> Element<'a, N::Message, N::Renderer> {
+    Row::with_children(self.next.consume())
       .spacing(self.spacing)
       .padding(self.padding)
       .width(self.width)
       .height(self.height)
       .align_items(self.align_items)
-      ;
-    OneBuilder(row.into())
+      .into()
   }
 }
 // Internals

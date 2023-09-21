@@ -124,13 +124,8 @@ impl Application for App {
       .button("Add Crate").done(|| Message::OpenAddCrateModal)
       .space().fill_width().done()
       .element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
-      .into_row()
-      .spacing(10.0)
-      .align_items(Alignment::Center)
-      .width(Length::Fill)
-      .done()
-      .done()
-      ;
+      .into_row().spacing(10.0).align_items(Alignment::Center).width(Length::Fill).done()
+      .take();
     let rule = Rule::horizontal(1.0);
     let view_crates = self.view_crates
       .view(&self.model, &self.cache)
