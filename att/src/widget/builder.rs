@@ -10,92 +10,39 @@ use iced::widget::button::{Button, StyleSheet as ButtonStyleSheet};
 
 use crate::widget::WidgetExt;
 
-pub fn builder<'a, M>() -> EmptyBuilder<'a, M, iced::Renderer> {
-  EmptyBuilder::default()
+pub fn builder<'a, M: 'a, R: Renderer + 'a>() -> ZeroBuilder<'a, M, R> {
+  ZeroBuilder::default()
 }
 
-#[must_use]
-pub struct EmptyBuilder<'a, M, R>(PhantomData<&'a M>, PhantomData<R>);
-impl<'a, M, R> Default for EmptyBuilder<'a, M, R> {
-  fn default() -> Self { Self(PhantomData::default(), PhantomData::default()) }
-}
-impl<'a, M: 'a, R: Renderer> EmptyBuilder<'a, M, R> {
-  pub fn space(self) -> SpaceBuilder<Self> {
+pub trait Builder<'a, M: 'a, R: Renderer + 'a> where Self: Sized {
+  fn space(self) -> SpaceBuilder<Self> {
     SpaceBuilder::new(self)
   }
-  pub fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<Text<'a, R>, Self> where
+  fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<Text<'a, R>, Self> where
     R: TextRenderer,
     R::Theme: TextStyleSheet,
   {
     TextBuilder::new(Text::new(content), self)
   }
-  pub fn button(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<Button<'a, (), R>, Self> where
+  fn button(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<Button<'a, (), R>, Self> where
     R::Theme: ButtonStyleSheet,
   {
     ButtonBuilder::new(Button::new(content), self)
   }
-  pub fn element(self, element: impl Into<Element<'a, M, R>>) -> OneBuilder<'a, M, R> {
-    OneBuilder(element.into())
-  }
-}
-
-#[must_use]
-pub struct OneBuilder<'a, M, R> (Element<'a, M, R>);
-impl<'a, M: 'a, R: Renderer> OneBuilder<'a, M, R> {
-  pub fn space(self) -> SpaceBuilder<Self> {
-    SpaceBuilder::new(self)
-  }
-  pub fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<Text<'a, R>, Self> where
-    R: TextRenderer,
-    R::Theme: TextStyleSheet,
+  fn element(self, element: impl Into<Element<'a, M, R>>) -> Self::Output where
+    Self: PushElement<'a, Message=M, Renderer=R>,
   {
-    TextBuilder::new(Text::new(content), self)
-  }
-  pub fn button(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<Button<'a, (), R>, Self> where
-    R::Theme: ButtonStyleSheet,
-  {
-    ButtonBuilder::new(Button::new(content), self)
-  }
-  pub fn element(self, element: impl Into<Element<'a, M, R>>) -> Builder<'a, M, R> {
-    Builder { elements: vec![self.0, element.into()] }
+    self.push(element.into())
   }
 
-  pub fn take(self) -> Element<'a, M, R> {
-    self.0
-  }
-}
-
-#[must_use]
-pub struct Builder<'a, M, R> {
-  elements: Vec<Element<'a, M, R>>
-}
-impl<'a, M: 'a, R: Renderer> Builder<'a, M, R> {
-  pub fn space(self) -> SpaceBuilder<Self> {
-    SpaceBuilder::new(self)
-  }
-  pub fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<Text<'a, R>, Self> where
-    R: TextRenderer,
-    R::Theme: TextStyleSheet,
-  {
-    TextBuilder::new(Text::new(content), self)
-  }
-  pub fn button(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<Button<'a, (), R>, Self> where
-    R::Theme: ButtonStyleSheet,
-  {
-    ButtonBuilder::new(Button::new(content), self)
-  }
-  pub fn element(mut self, element: impl Into<Element<'a, M, R>>) -> Self {
-    self.elements.push(element.into());
-    self
-  }
-
-  pub fn into_row(self) -> RowBuilder<Self> where
-    R: 'a,
+  fn into_row(self) -> RowBuilder<Self> where
+    Self: ConsumeElements<'a, Message=M, Renderer=R>
   {
     RowBuilder::new(self)
   }
 }
 
+/// Builder for a [`Space`] widget.
 #[must_use]
 pub struct SpaceBuilder<N> {
   width: Length,
@@ -132,6 +79,7 @@ impl<'a, N: PushElement<'a>> SpaceBuilder<N> {
   }
 }
 
+/// Builder for a [`Text`] widget.
 #[must_use]
 pub struct TextBuilder<W, N> {
   widget: W,
@@ -140,7 +88,7 @@ pub struct TextBuilder<W, N> {
 impl<W, N> TextBuilder<W, N> {
   fn new(widget: W, next: N) -> Self { Self { widget, next } }
 }
-impl<'a, N: PushElement<'a> + 'a> TextBuilder<Text<'a, N::Renderer>, N> where
+impl<'a, N: PushElement<'a>> TextBuilder<Text<'a, N::Renderer>, N> where
   N::Renderer: TextRenderer,
   <N::Renderer as Renderer>::Theme: TextStyleSheet,
 {
@@ -154,6 +102,7 @@ impl<'a, N: PushElement<'a> + 'a> TextBuilder<Text<'a, N::Renderer>, N> where
   }
 }
 
+/// Builder for a [`Button`] widget.
 #[must_use]
 pub struct ButtonBuilder<W, N> {
   widget: W,
@@ -163,7 +112,7 @@ pub struct ButtonBuilder<W, N> {
 impl<W, N> ButtonBuilder<W, N> {
   fn new(widget: W, next: N) -> Self { Self { widget, disabled: false, next } }
 }
-impl<'a, N: PushElement<'a> + 'a> ButtonBuilder<Button<'a, (), N::Renderer>, N> where
+impl<'a, N: PushElement<'a>> ButtonBuilder<Button<'a, (), N::Renderer>, N> where
   <N::Renderer as Renderer>::Theme: ButtonStyleSheet,
 {
   pub fn enabled(mut self) -> Self {
@@ -184,6 +133,7 @@ impl<'a, N: PushElement<'a> + 'a> ButtonBuilder<Button<'a, (), N::Renderer>, N> 
   }
 }
 
+/// Builder for a [`Row`] widget.
 #[must_use]
 pub struct RowBuilder<N> {
   spacing: f32,
@@ -193,7 +143,7 @@ pub struct RowBuilder<N> {
   align_items: Alignment,
   next: N,
 }
-impl<'a, N: ConsumeElements<'a> + 'a> RowBuilder<N> {
+impl<'a, N: ConsumeElements<'a>> RowBuilder<N> {
   fn new(next: N) -> Self {
     Self {
       spacing: 0.0,
@@ -248,15 +198,37 @@ impl<'a, N: ConsumeElements<'a> + 'a> RowBuilder<N> {
       .into()
   }
 }
+
 // Internals
+
+#[must_use]
+pub struct ZeroBuilder<'a, M, R>(PhantomData<&'a M>, PhantomData<R>);
+impl<'a, M, R> Default for ZeroBuilder<'a, M, R> {
+  fn default() -> Self { Self(PhantomData::default(), PhantomData::default()) }
+}
+impl<'a, M: 'a, R: Renderer + 'a> Builder<'a, M, R> for ZeroBuilder<'a, M, R> {}
+
+#[must_use]
+pub struct OneBuilder<'a, M, R>(Element<'a, M, R>);
+impl<'a, M: 'a, R: Renderer + 'a> Builder<'a, M, R> for OneBuilder<'a, M, R> {}
+impl<'a, M: 'a, R: Renderer + 'a> OneBuilder<'a, M, R> {
+  pub fn take(self) -> Element<'a, M, R> {
+    self.0
+  }
+}
+
+#[must_use]
+pub struct ManyBuilder<'a, M, R>(Vec<Element<'a, M, R>>);
+impl<'a, M: 'a, R: Renderer + 'a> Builder<'a, M, R> for ManyBuilder<'a, M, R> {}
+impl<'a, M: 'a, R: Renderer + 'a> ManyBuilder<'a, M, R> {}
 
 pub trait PushElement<'a> {
   type Message: 'a;
-  type Renderer: Renderer;
+  type Renderer: Renderer + 'a;
   type Output;
   fn push(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Output;
 }
-impl<'a, M: 'a, R: Renderer> PushElement<'a> for EmptyBuilder<'a, M, R> {
+impl<'a, M: 'a, R: Renderer + 'a> PushElement<'a> for ZeroBuilder<'a, M, R> {
   type Message = M;
   type Renderer = R;
   type Output = OneBuilder<'a, M, R>;
@@ -264,40 +236,40 @@ impl<'a, M: 'a, R: Renderer> PushElement<'a> for EmptyBuilder<'a, M, R> {
     OneBuilder(element)
   }
 }
-impl<'a, M: 'a, R: Renderer> PushElement<'a> for OneBuilder<'a, M, R> {
+impl<'a, M: 'a, R: Renderer + 'a> PushElement<'a> for OneBuilder<'a, M, R> {
   type Message = M;
   type Renderer = R;
-  type Output = Builder<'a, M, R>;
+  type Output = ManyBuilder<'a, M, R>;
   fn push(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Output {
-    Self::Output { elements: vec![self.0, element] }
+    ManyBuilder(vec![self.0, element])
   }
 }
-impl<'a, M: 'a, R: Renderer> PushElement<'a> for Builder<'a, M, R> {
+impl<'a, M: 'a, R: Renderer + 'a> PushElement<'a> for ManyBuilder<'a, M, R> {
   type Message = M;
   type Renderer = R;
   type Output = Self;
   fn push(mut self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Output {
-    self.elements.push(element);
+    self.0.push(element);
     self
   }
 }
 
 pub trait ConsumeElements<'a> {
   type Message: 'a;
-  type Renderer: Renderer;
+  type Renderer: Renderer + 'a;
   fn consume(self) -> Vec<Element<'a, Self::Message, Self::Renderer>>;
 }
-impl<'a, M: 'a, R: Renderer> ConsumeElements<'a> for OneBuilder<'a, M, R> {
+impl<'a, M: 'a, R: Renderer + 'a> ConsumeElements<'a> for OneBuilder<'a, M, R> {
   type Message = M;
   type Renderer = R;
   fn consume(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
     vec![self.0]
   }
 }
-impl<'a, M: 'a, R: Renderer> ConsumeElements<'a> for Builder<'a, M, R> {
+impl<'a, M: 'a, R: Renderer + 'a> ConsumeElements<'a> for ManyBuilder<'a, M, R> {
   type Message = M;
   type Renderer = R;
   fn consume(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
-    self.elements
+    self.0
   }
 }

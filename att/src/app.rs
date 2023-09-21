@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::component::add_crate::{self, AddCrate};
 use crate::component::view_crates::{self, ViewCrates};
 use crate::widget::{col, load_icon_font_command};
-use crate::widget::builder::builder;
+use crate::widget::builder::{Builder, builder};
 use crate::widget::dark_light_toggle::light_dark_toggle;
 use crate::widget::modal::Modal;
 
