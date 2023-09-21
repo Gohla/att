@@ -9,20 +9,24 @@ use iced::widget::button::{Button, StyleSheet as ButtonStyleSheet};
 
 use crate::widget::WidgetExt;
 
-pub struct Builder<'a, M, R = iced::Renderer> {
+pub fn builder<'a, M>() -> Builder<'a, M, iced::Renderer> {
+  Builder::default()
+}
+
+pub struct Builder<'a, M, R> {
   elements: Vec<Element<'a, M, R>>
 }
-impl<'a, M> Default for Builder<'a, M> {
-  fn default() -> Self {
-    Self { elements: Vec::new() }
-  }
+impl<'a, M> Default for Builder<'a, M, iced::Renderer> {
+  fn default() -> Self { Self { elements: Vec::new() } }
 }
 impl<'a, M: 'a, R: Renderer> Builder<'a, M, R> {
+  pub fn new() -> Self { Self { elements: Vec::new() } }
+
   pub fn space(self) -> SpaceBuilder<Self> {
-    SpaceBuilder::new( self)
+    SpaceBuilder::new(self)
   }
   pub fn fill_width(self) -> Self {
-    SpaceBuilder::new( self).width(Length::Fill).done()
+    SpaceBuilder::new(self).width(Length::Fill).done()
   }
   pub fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<Text<'a, R>, Self> where
     R: TextRenderer,
@@ -31,12 +35,11 @@ impl<'a, M: 'a, R: Renderer> Builder<'a, M, R> {
     TextBuilder::new(Text::new(content), self)
   }
   pub fn button(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<Button<'a, (), R>, Self> where
-    R: Renderer,
     R::Theme: ButtonStyleSheet,
   {
     ButtonBuilder::new(Button::new(content), self)
   }
-  pub fn push(mut self, element: impl Into<Element<'a, M, R>>) -> Self {
+  pub fn element(mut self, element: impl Into<Element<'a, M, R>>) -> Self {
     self.elements.push(element.into());
     self
   }
@@ -65,10 +68,7 @@ impl<P> SpaceBuilder<P> {
     }
   }
 }
-impl<'a, M, R> SpaceBuilder<Builder<'a, M, R>> where
-  M: 'a,
-  R: Renderer,
-{
+impl<'a, M: 'a, R: Renderer> SpaceBuilder<Builder<'a, M, R>> {
   pub fn width(mut self, width: impl Into<Length>) -> Self {
     self.width = width.into();
     self

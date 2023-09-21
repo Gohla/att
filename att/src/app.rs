@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::component::add_crate::{self, AddCrate};
 use crate::component::view_crates::{self, ViewCrates};
 use crate::widget::{col, load_icon_font_command};
-use crate::widget::builder::Builder;
+use crate::widget::builder::builder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
 use crate::widget::modal::Modal;
 
@@ -119,11 +119,11 @@ impl Application for App {
   }
 
   fn view(&self) -> Element<'_, Message, Renderer<Theme>> {
-    let header = Builder::default()
+    let header = builder()
       .text("Blessed Crates").size(20.0).done()
       .button("Add Crate").done(|| Message::OpenAddCrateModal)
       .fill_width()
-      .push(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
+      .element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .into_row()
       .spacing(10.0)
       .align_items(Alignment::Center)
