@@ -3,12 +3,13 @@ use std::error::Error;
 
 use crates_io_api::{AsyncClient, Crate};
 use iced::{Alignment, Application, Command, Element, Event, event, executor, Length, Renderer, Subscription, Theme, window};
-use iced::widget::{Button, row, Rule, Space, Text};
+use iced::widget::Rule;
 use serde::{Deserialize, Serialize};
 
 use crate::component::add_crate::{self, AddCrate};
 use crate::component::view_crates::{self, ViewCrates};
-use crate::widget::{ButtonEx, col, load_icon_font_command};
+use crate::widget::{col, load_icon_font_command};
+use crate::widget::builder::Builder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
 use crate::widget::modal::Modal;
 
@@ -118,18 +119,16 @@ impl Application for App {
   }
 
   fn view(&self) -> Element<'_, Message, Renderer<Theme>> {
-    let header = {
-      let text = Text::new("Blessed Crates")
-        .size(20.0);
-      let add_crate_button = Button::new("Add Crate")
-        .on_press_into_element(|| Message::OpenAddCrateModal);
-      let space = Space::with_width(Length::Fill);
-      let light_dark_toggle = light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode);
-      row![text, add_crate_button, space, light_dark_toggle]
-        .spacing(10.0)
-        .align_items(Alignment::Center)
-        .width(Length::Fill)
-    };
+    let header = Builder::default()
+      .text("Blessed Crates").size(20.0).done()
+      .button("Add Crate").done(|| Message::OpenAddCrateModal)
+      .fill_width()
+      .push(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
+      .into_row()
+      .spacing(10.0)
+      .align_items(Alignment::Center)
+      .width(Length::Fill)
+      ;
     let rule = Rule::horizontal(1.0);
     let view_crates = self.view_crates
       .view(&self.model, &self.cache)

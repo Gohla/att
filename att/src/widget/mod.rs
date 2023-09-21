@@ -5,6 +5,7 @@ use iced_futures::MaybeSend;
 
 pub mod modal;
 pub mod dark_light_toggle;
+pub mod builder;
 
 /// Widget extensions
 pub trait WidgetExt<'a, M, R> {
