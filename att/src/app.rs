@@ -3,12 +3,11 @@ use std::error::Error;
 
 use crates_io_api::{AsyncClient, Crate};
 use iced::{Alignment, Application, Command, Element, Event, event, executor, Length, Renderer, Subscription, Theme, window};
-use iced::widget::Rule;
 use serde::{Deserialize, Serialize};
 
 use crate::component::add_crate::{self, AddCrate};
 use crate::component::view_crates::{self, ViewCrates};
-use crate::widget::{col, load_icon_font_command};
+use crate::widget::load_icon_font_command;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
 use crate::widget::modal::Modal;
@@ -119,22 +118,16 @@ impl Application for App {
   }
 
   fn view(&self) -> Element<'_, Message, Renderer<Theme>> {
-    let header = WidgetBuilder::default()
-      .text("Blessed Crates").size(20.0).done()
-      .button("Add Crate").done(|| Message::OpenAddCrateModal)
-      .space().fill_width().done()
-      .element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
-      .into_row().spacing(10.0).align_items(Alignment::Center).width(Length::Fill).done()
+    let content = WidgetBuilder::default()
+      .text("Blessed Crates").size(20.0).add()
+      .button("Add Crate").add(|| Message::OpenAddCrateModal)
+      .add_space_fill_width()
+      .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
+      .into_row().spacing(10.0).align_items(Alignment::Center).width(Length::Fill).consume()
+      .add_horizontal_rule(1.0)
+      .add_element(self.view_crates.view(&self.model, &self.cache).map(Message::ToViewCrates))
+      .into_col().spacing(10.0).padding(10).width(Length::Fill).height(Length::Fill).consume()
       .take();
-    let rule = Rule::horizontal(1.0);
-    let view_crates = self.view_crates
-      .view(&self.model, &self.cache)
-      .map(Message::ToViewCrates);
-    let content = col![header, rule, view_crates]
-      .spacing(10.0)
-      .padding(10)
-      .width(Length::Fill)
-      .height(Length::Fill);
 
     if self.adding_crate {
       let overlay = self.add_crate
