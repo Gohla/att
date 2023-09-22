@@ -8,6 +8,8 @@ use iced::widget::{Column, Row, Rule, Space};
 use iced::widget::button::{Button, StyleSheet as ButtonStyleSheet};
 use iced::widget::rule::StyleSheet as RuleStyleSheet;
 
+use internal::{Add, Consume, State, Take};
+
 #[repr(transparent)]
 #[must_use]
 pub struct WidgetBuilder<S>(S);
@@ -16,25 +18,25 @@ impl<'a, M, R> Default for WidgetBuilder<internal::Empty<'a, M, R>> {
 }
 
 // Builder methods for building standalone widgets.
-impl<S> WidgetBuilder<S> {
+impl<'a, S: State<'a>> WidgetBuilder<S> {
   pub fn space(self) -> SpaceBuilder<S> {
     SpaceBuilder::new(self.0)
   }
   pub fn rule(self) -> RuleBuilder<S> {
     RuleBuilder::new(self.0)
   }
-  pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<S, Cow<'a, str>> {
+  pub fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<S, Cow<'a, str>> {
     TextBuilder::new(self.0, content.into())
   }
-  pub fn button<'a, R>(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<S, Element<'a, (), R>> {
+  pub fn button<R>(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<S, Element<'a, (), R>, ButtonStyle<'a, S>> {
     ButtonBuilder::new(self.0, content.into())
   }
-  pub fn element<'a, M, R>(self, element: impl Into<Element<'a, M, R>>) -> ElementBuilder<S, Element<'a, M, R>> {
+  pub fn element<M, R>(self, element: impl Into<Element<'a, M, R>>) -> ElementBuilder<S, Element<'a, M, R>> {
     ElementBuilder::new(self.0, element.into())
   }
 }
 // Builder methods for directly adding common widgets.
-impl<'a, S: internal::Add<'a>> WidgetBuilder<S> {
+impl<'a, S: Add<'a>> WidgetBuilder<S> {
   pub fn add_space_fill_width(self) -> S::Builder {
     self.space().fill_width().add()
   }
@@ -56,7 +58,7 @@ impl<'a, S: internal::Add<'a>> WidgetBuilder<S> {
   }
 }
 // Builder methods for creating container widgets with children widgets, such as columns and rows.
-impl<'a, S: internal::Consume<'a>> WidgetBuilder<S> {
+impl<'a, S: Consume<'a>> WidgetBuilder<S> {
   pub fn into_col(self) -> ColBuilder<S> {
     ColBuilder::new(self.0)
   }
@@ -65,7 +67,7 @@ impl<'a, S: internal::Consume<'a>> WidgetBuilder<S> {
   }
 }
 // Builder methods for taking the result of building.
-impl<'a, S: internal::Take<'a>> WidgetBuilder<S> {
+impl<'a, S: Take<'a>> WidgetBuilder<S> {
   pub fn take(self) -> S::Element {
     self.0.take()
   }
@@ -103,7 +105,7 @@ impl<S> SpaceBuilder<S> {
     self.height(Length::Fill)
   }
 }
-impl<'a, S: internal::Add<'a>> SpaceBuilder<S> {
+impl<'a, S: Add<'a>> SpaceBuilder<S> {
   pub fn add(self) -> S::Builder {
     let space = Space::new(self.width, self.height);
     self.state.add(space)
@@ -138,7 +140,7 @@ impl<S> RuleBuilder<S> {
     self
   }
 }
-impl<'a, S: internal::Add<'a>> RuleBuilder<S> where
+impl<'a, S: Add<'a>> RuleBuilder<S> where
   <S::Renderer as Renderer>::Theme: RuleStyleSheet,
 {
   pub fn add(self) -> S::Builder {
@@ -168,7 +170,7 @@ impl<S, C> TextBuilder<S, C> {
     self
   }
 }
-impl<'a, S: internal::Add<'a>> TextBuilder<S, Cow<'a, str>> where
+impl<'a, S: Add<'a>> TextBuilder<S, Cow<'a, str>> where
   S::Renderer: TextRenderer,
   <S::Renderer as Renderer>::Theme: TextStyleSheet,
 {
@@ -181,32 +183,71 @@ impl<'a, S: internal::Add<'a>> TextBuilder<S, Cow<'a, str>> where
   }
 }
 
+/// Type of styles for [`Button`].
+pub type ButtonStyle<'a, S> = <<S as State<'a>>::Theme as ButtonStyleSheet>::Style;
+
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<S, C> {
+pub struct ButtonBuilder<S, C, Y> {
   state: S,
-  contents: C,
+  content: C,
   disabled: bool,
+  width: Length,
+  height: Length,
+  padding: Padding,
+  style: Y,
 }
-impl<S, C> ButtonBuilder<S, C> {
-  fn new(state: S, contents: C) -> Self {
-    Self { state, contents, disabled: false }
+impl<'a, S: State<'a>, C> ButtonBuilder<S, C, ButtonStyle<'a, S>> {
+  fn new(state: S, content: C) -> Self {
+    Self {
+      state,
+      content,
+      disabled: false,
+      width: Length::Shrink,
+      height: Length::Shrink,
+      padding: 5.0.into(),
+      style: Default::default(),
+    }
   }
 
+  /// Enables this [`Button`].
   pub fn enabled(mut self) -> Self {
     self.disabled = false;
     self
   }
+  /// Disables this [`Button`].
   pub fn disabled(mut self) -> Self {
     self.disabled = true;
     self
   }
+  /// Sets the width of this [`Button`].
+  pub fn width(mut self, width: impl Into<Length>) -> Self {
+    self.width = width.into();
+    self
+  }
+  /// Sets the height of this [`Button`].
+  pub fn height(mut self, height: impl Into<Length>) -> Self {
+    self.height = height.into();
+    self
+  }
+  /// Sets the [`Padding`] of this [`Button`].
+  pub fn padding(mut self, padding: impl Into<Padding>) -> Self {
+    self.padding = padding.into();
+    self
+  }
+  /// Sets the style of this [`Button`].
+  pub fn style(mut self, style: ButtonStyle<'a, S>) -> Self {
+    self.style = style;
+    self
+  }
 }
-impl<'a, S: internal::Add<'a>> ButtonBuilder<S, Element<'a, (), S::Renderer>> where
-  <S::Renderer as Renderer>::Theme: ButtonStyleSheet,
-{
+impl<'a, S: Add<'a>> ButtonBuilder<S, Element<'a, (), S::Renderer>, ButtonStyle<'a, S>> {
   pub fn add(self, on_press: impl Fn() -> S::Message + 'a) -> S::Builder {
-    let mut button = Button::new(self.contents);
+    let mut button = Button::new(self.content)
+      .width(self.width)
+      .height(self.height)
+      .padding(self.padding)
+      .style(self.style);
     if !self.disabled {
       button = button.on_press(());
     }
@@ -226,13 +267,13 @@ impl<S, E> ElementBuilder<S, E> {
     Self { state, element }
   }
 }
-impl<'a, S: internal::Add<'a>, M: 'a> ElementBuilder<S, Element<'a, M, S::Renderer>> {
+impl<'a, S: Add<'a>, M: 'a> ElementBuilder<S, Element<'a, M, S::Renderer>> {
   pub fn map(self, f: impl Fn(M) -> S::Message + 'a) -> ElementBuilder<S, Element<'a, S::Message, S::Renderer>> {
     let element = self.element.map(f);
     ElementBuilder { state: self.state, element }
   }
 }
-impl<'a, S: internal::Add<'a>> ElementBuilder<S, Element<'a, S::Message, S::Renderer>> {
+impl<'a, S: Add<'a>> ElementBuilder<S, Element<'a, S::Message, S::Renderer>> {
   pub fn add(self) -> S::Builder {
     // TODO: calling this causes infinite recursion in Jetbrains Rust plugin!
     self.state.add(self.element)
@@ -316,7 +357,7 @@ impl<'a, S> ColBuilder<S> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, S: internal::Consume<'a>> ColBuilder<S> {
+impl<'a, S: Consume<'a>> ColBuilder<S> {
   pub fn consume(self) -> S::Builder {
     self.state.consume(|vec| {
       Column::with_children(vec)
@@ -401,7 +442,7 @@ impl<'a, S> RowBuilder<S> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, S: internal::Consume<'a>> RowBuilder<S> {
+impl<'a, S: Consume<'a>> RowBuilder<S> {
   pub fn consume(self) -> S::Builder {
     self.state.consume(|vec| {
       Row::with_children(vec)
@@ -421,6 +462,7 @@ mod internal {
 
   use iced::advanced::Renderer;
   use iced::Element;
+  use iced::widget::button::StyleSheet as ButtonStyleSheet;
 
   use super::WidgetBuilder;
 
@@ -437,30 +479,59 @@ mod internal {
   #[repr(transparent)]
   pub struct Many<'a, M, R>(Vec<Element<'a, M, R>>);
 
-  /// Internal trait for adding elements onto the state of a widget builder.
-  pub trait Add<'a> {
+  pub trait State<'a> {
     /// [`Element`] message type.
     type Message: 'a;
     /// [`Element`] renderer type.
-    type Renderer: Renderer + 'a;
+    type Renderer: Renderer<Theme=Self::Theme> + 'a;
+    /// Theme type of the [`Self::Renderer`].
+    type Theme: ThemeRequirements;
+  }
+  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for Empty<'a, M, R> where
+    R::Theme: ThemeRequirements
+  {
+    type Message = M;
+    type Renderer = R;
+    type Theme = R::Theme;
+  }
+  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for One<'a, M, R> where
+    R::Theme: ThemeRequirements
+  {
+    type Message = M;
+    type Renderer = R;
+    type Theme = R::Theme;
+  }
+  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for Many<'a, M, R> where
+    R::Theme: ThemeRequirements
+  {
+    type Message = M;
+    type Renderer = R;
+    type Theme = R::Theme;
+  }
+
+  pub trait ThemeRequirements: ButtonStyleSheet {}
+  impl<T: ButtonStyleSheet> ThemeRequirements for T {}
+
+  /// Internal trait for adding elements onto the state of a widget builder.
+  pub trait Add<'a>: State<'a> {
     /// Builder produced by [`push`].
     type Builder;
     /// Push the [`Element`] produced by `into_element` onto `self`, then return a new [builder](Self::Builder) with
     /// those elements.
     fn add<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for Empty<'a, M, R> {
-    type Message = M;
-    type Renderer = R;
+  impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for Empty<'a, M, R> where
+    R::Theme: ThemeRequirements
+  {
     type Builder = WidgetBuilder<One<'a, M, R>>;
     fn add<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder {
       let element = into_element.into();
       WidgetBuilder(One(element))
     }
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for One<'a, M, R> {
-    type Message = M;
-    type Renderer = R;
+  impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for One<'a, M, R> where
+    R::Theme: ThemeRequirements
+  {
     type Builder = WidgetBuilder<Many<'a, M, R>>;
     fn add<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder {
       let element = into_element.into();
@@ -468,9 +539,9 @@ mod internal {
       WidgetBuilder(Many(elements))
     }
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for Many<'a, M, R> {
-    type Message = M;
-    type Renderer = R;
+  impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for Many<'a, M, R> where
+    R::Theme: ThemeRequirements
+  {
     type Builder = WidgetBuilder<Many<'a, M, R>>;
     fn add<I: Into<Element<'a, Self::Message, Self::Renderer>>>(mut self, into_element: I) -> Self::Builder {
       let element = into_element.into();
@@ -480,20 +551,16 @@ mod internal {
   }
 
   /// Internal trait for consuming elements from the state of a widget builder.
-  pub trait Consume<'a> {
-    /// [`Element`] message type.
-    type Message: 'a;
-    /// [`Element`] renderer type.
-    type Renderer: Renderer + 'a;
+  pub trait Consume<'a>: State<'a> {
     /// Builder produced by [`consume`].
     type Builder;
     /// Consume the [elements](Element) from `self` into a [`Vec`], call `produce` on that [`Vec`] to create a new
     /// [`Element`], then return a new [builder](Self::Builder) with that element.
     fn consume<F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>>(self, produce: F) -> Self::Builder;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for One<'a, M, R> {
-    type Message = M;
-    type Renderer = R;
+  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for One<'a, M, R> where
+    R::Theme: ThemeRequirements
+  {
     type Builder = WidgetBuilder<One<'a, M, R>>;
     fn consume<F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>>(self, produce: F) -> Self::Builder {
       let elements = vec![self.0];
@@ -501,9 +568,9 @@ mod internal {
       WidgetBuilder(One(new_element))
     }
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for Many<'a, M, R> {
-    type Message = M;
-    type Renderer = R;
+  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for Many<'a, M, R> where
+    R::Theme: ThemeRequirements
+  {
     type Builder = WidgetBuilder<One<'a, M, R>>;
     fn consume<F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>>(self, produce: F) -> Self::Builder {
       let elements = self.0;
