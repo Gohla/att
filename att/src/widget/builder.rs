@@ -10,84 +10,84 @@ use iced::widget::rule::StyleSheet as RuleStyleSheet;
 
 #[repr(transparent)]
 #[must_use]
-pub struct WidgetBuilder<E>(E);
+pub struct WidgetBuilder<S>(S);
 impl<'a, M, R> Default for WidgetBuilder<internal::Empty<'a, M, R>> {
   fn default() -> Self { Self(Default::default()) }
 }
 
 // Builder methods for building standalone widgets.
-impl<E> WidgetBuilder<E> {
-  pub fn space(self) -> SpaceBuilder<E> {
+impl<S> WidgetBuilder<S> {
+  pub fn space(self) -> SpaceBuilder<S> {
     SpaceBuilder::new(self.0)
   }
-  pub fn rule(self) -> RuleBuilder<E> {
+  pub fn rule(self) -> RuleBuilder<S> {
     RuleBuilder::new(self.0)
   }
-  pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<E, Cow<'a, str>> {
+  pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<S, Cow<'a, str>> {
     TextBuilder::new(self.0, content.into())
   }
-  pub fn button<'a, R>(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<E, Element<'a, (), R>> {
+  pub fn button<'a, R>(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<S, Element<'a, (), R>> {
     ButtonBuilder::new(self.0, content.into())
   }
-  pub fn element<'a, M, R>(self, element: impl Into<Element<'a, M, R>>) -> ElementBuilder<E, Element<'a, M, R>> {
+  pub fn element<'a, M, R>(self, element: impl Into<Element<'a, M, R>>) -> ElementBuilder<S, Element<'a, M, R>> {
     ElementBuilder::new(self.0, element.into())
   }
 }
 // Builder methods for directly adding common widgets.
-impl<'a, E: internal::Add<'a>> WidgetBuilder<E> {
-  pub fn add_space_fill_width(self) -> E::Builder {
+impl<'a, S: internal::Add<'a>> WidgetBuilder<S> {
+  pub fn add_space_fill_width(self) -> S::Builder {
     self.space().fill_width().add()
   }
-  pub fn add_space_fill_height(self) -> E::Builder {
+  pub fn add_space_fill_height(self) -> S::Builder {
     self.space().fill_height().add()
   }
-  pub fn add_horizontal_rule(self, height: impl Into<Pixels>) -> E::Builder where
-    <E::Renderer as Renderer>::Theme: RuleStyleSheet,
+  pub fn add_horizontal_rule(self, height: impl Into<Pixels>) -> S::Builder where
+    <S::Renderer as Renderer>::Theme: RuleStyleSheet,
   {
     self.rule().horizontal(height).add()
   }
-  pub fn add_vertical_rule(self, width: impl Into<Pixels>) -> E::Builder where
-    <E::Renderer as Renderer>::Theme: RuleStyleSheet,
+  pub fn add_vertical_rule(self, width: impl Into<Pixels>) -> S::Builder where
+    <S::Renderer as Renderer>::Theme: RuleStyleSheet,
   {
     self.rule().vertical(width).add()
   }
-  pub fn add_element(self, element: impl Into<Element<'a, E::Message, E::Renderer>>) -> E::Builder {
+  pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Renderer>>) -> S::Builder {
     self.element(element).add()
   }
 }
 // Builder methods for creating container widgets with children widgets, such as columns and rows.
-impl<'a, E: internal::Consume<'a>> WidgetBuilder<E> {
-  pub fn into_col(self) -> ColBuilder<E> {
+impl<'a, S: internal::Consume<'a>> WidgetBuilder<S> {
+  pub fn into_col(self) -> ColBuilder<S> {
     ColBuilder::new(self.0)
   }
-  pub fn into_row(self) -> RowBuilder<E> {
+  pub fn into_row(self) -> RowBuilder<S> {
     RowBuilder::new(self.0)
   }
 }
 // Builder methods for taking the result of building.
-impl<'a, E: internal::Take<'a>> WidgetBuilder<E> {
-  pub fn take(self) -> E::Element {
+impl<'a, S: internal::Take<'a>> WidgetBuilder<S> {
+  pub fn take(self) -> S::Element {
     self.0.take()
   }
 }
 
 /// Builder for a [`Space`] widget.
 #[must_use]
-pub struct SpaceBuilder<E> {
-  elements: E,
+pub struct SpaceBuilder<S> {
+  state: S,
   width: Length,
   height: Length,
 }
-impl<E> SpaceBuilder<E> {
-  fn new(elements: E) -> Self {
+impl<S> SpaceBuilder<S> {
+  fn new(state: S) -> Self {
     Self {
-      elements,
+      state,
       width: Length::Shrink,
       height: Length::Shrink,
     }
   }
 }
-impl<E> SpaceBuilder<E> {
+impl<S> SpaceBuilder<S> {
   pub fn width(mut self, width: impl Into<Length>) -> Self {
     self.width = width.into();
     self
@@ -103,30 +103,30 @@ impl<E> SpaceBuilder<E> {
     self.height(Length::Fill)
   }
 }
-impl<'a, E: internal::Add<'a>> SpaceBuilder<E> {
-  pub fn add(self) -> E::Builder {
+impl<'a, S: internal::Add<'a>> SpaceBuilder<S> {
+  pub fn add(self) -> S::Builder {
     let space = Space::new(self.width, self.height);
-    self.elements.add(space)
+    self.state.add(space)
   }
 }
 
 /// Builder for a [`Rule`] widget.
 #[must_use]
-pub struct RuleBuilder<E> {
-  elements: E,
+pub struct RuleBuilder<S> {
+  state: S,
   width_or_height: Pixels,
   is_vertical: bool,
 }
-impl<E> RuleBuilder<E> {
-  fn new(elements: E) -> Self {
+impl<S> RuleBuilder<S> {
+  fn new(state: S) -> Self {
     Self {
-      elements,
+      state,
       width_or_height: 1.0.into(),
       is_vertical: false,
     }
   }
 }
-impl<E> RuleBuilder<E> {
+impl<S> RuleBuilder<S> {
   pub fn horizontal(mut self, height: impl Into<Pixels>) -> Self {
     self.width_or_height = height.into();
     self.is_vertical = false;
@@ -138,29 +138,29 @@ impl<E> RuleBuilder<E> {
     self
   }
 }
-impl<'a, E: internal::Add<'a>> RuleBuilder<E> where
-  <E::Renderer as Renderer>::Theme: RuleStyleSheet,
+impl<'a, S: internal::Add<'a>> RuleBuilder<S> where
+  <S::Renderer as Renderer>::Theme: RuleStyleSheet,
 {
-  pub fn add(self) -> E::Builder {
+  pub fn add(self) -> S::Builder {
     let rule = if self.is_vertical {
       Rule::vertical(self.width_or_height)
     } else {
       Rule::horizontal(self.width_or_height)
     };
-    self.elements.add(rule)
+    self.state.add(rule)
   }
 }
 
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<E, C> {
-  elements: E,
+pub struct TextBuilder<S, C> {
+  state: S,
   content: C,
   size: Option<Pixels>,
 }
-impl<E, C> TextBuilder<E, C> {
-  fn new(elements: E, content: C) -> Self {
-    Self { elements, content, size: None }
+impl<S, C> TextBuilder<S, C> {
+  fn new(state: S, content: C) -> Self {
+    Self { state, content, size: None }
   }
 
   pub fn size(mut self, size: impl Into<Pixels>) -> Self {
@@ -168,29 +168,29 @@ impl<E, C> TextBuilder<E, C> {
     self
   }
 }
-impl<'a, E: internal::Add<'a>> TextBuilder<E, Cow<'a, str>> where
-  E::Renderer: TextRenderer,
-  <E::Renderer as Renderer>::Theme: TextStyleSheet,
+impl<'a, S: internal::Add<'a>> TextBuilder<S, Cow<'a, str>> where
+  S::Renderer: TextRenderer,
+  <S::Renderer as Renderer>::Theme: TextStyleSheet,
 {
-  pub fn add(self) -> E::Builder {
+  pub fn add(self) -> S::Builder {
     let mut text = Text::new(self.content);
     if let Some(size) = self.size {
       text = text.size(size);
     }
-    self.elements.add(text)
+    self.state.add(text)
   }
 }
 
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<E, C> {
-  elements: E,
+pub struct ButtonBuilder<S, C> {
+  state: S,
   contents: C,
   disabled: bool,
 }
-impl<E, C> ButtonBuilder<E, C> {
-  fn new(elements: E, contents: C) -> Self {
-    Self { elements, contents, disabled: false }
+impl<S, C> ButtonBuilder<S, C> {
+  fn new(state: S, contents: C) -> Self {
+    Self { state, contents, disabled: false }
   }
 
   pub fn enabled(mut self) -> Self {
@@ -202,47 +202,47 @@ impl<E, C> ButtonBuilder<E, C> {
     self
   }
 }
-impl<'a, E: internal::Add<'a>> ButtonBuilder<E, Element<'a, (), E::Renderer>> where
-  <E::Renderer as Renderer>::Theme: ButtonStyleSheet,
+impl<'a, S: internal::Add<'a>> ButtonBuilder<S, Element<'a, (), S::Renderer>> where
+  <S::Renderer as Renderer>::Theme: ButtonStyleSheet,
 {
-  pub fn add(self, on_press: impl Fn() -> E::Message + 'a) -> E::Builder {
+  pub fn add(self, on_press: impl Fn() -> S::Message + 'a) -> S::Builder {
     let mut button = Button::new(self.contents);
     if !self.disabled {
       button = button.on_press(());
     }
     let element = Element::new(button).map(move |_| on_press());
-    self.elements.add(element)
+    self.state.add(element)
   }
 }
 
 /// Builder for an [`Element`]
 #[must_use]
-pub struct ElementBuilder<E, C> {
-  elements: E,
-  element: C,
+pub struct ElementBuilder<S, E> {
+  state: S,
+  element: E,
 }
-impl<E, C> ElementBuilder<E, C> {
-  fn new(elements: E, element: C) -> Self {
-    Self { elements, element }
+impl<S, E> ElementBuilder<S, E> {
+  fn new(state: S, element: E) -> Self {
+    Self { state, element }
   }
 }
-impl<'a, M: 'a, E: internal::Add<'a>> ElementBuilder<E, Element<'a, M, E::Renderer>> {
-  pub fn map(self, f: impl Fn(M) -> E::Message + 'a) -> ElementBuilder<E, Element<'a, E::Message, E::Renderer>> {
+impl<'a, S: internal::Add<'a>, M: 'a> ElementBuilder<S, Element<'a, M, S::Renderer>> {
+  pub fn map(self, f: impl Fn(M) -> S::Message + 'a) -> ElementBuilder<S, Element<'a, S::Message, S::Renderer>> {
     let element = self.element.map(f);
-    ElementBuilder { elements: self.elements, element }
+    ElementBuilder { state: self.state, element }
   }
 }
-impl<'a, E: internal::Add<'a>> ElementBuilder<E, Element<'a, E::Message, E::Renderer>> {
-  pub fn add(self) -> E::Builder {
+impl<'a, S: internal::Add<'a>> ElementBuilder<S, Element<'a, S::Message, S::Renderer>> {
+  pub fn add(self) -> S::Builder {
     // TODO: calling this causes infinite recursion in Jetbrains Rust plugin!
-    self.elements.add(self.element)
+    self.state.add(self.element)
   }
 }
 
 /// Builder for a [`Column`] widget.
 #[must_use]
-pub struct ColBuilder<E> {
-  elements: E,
+pub struct ColBuilder<S> {
+  state: S,
   spacing: f32,
   padding: Padding,
   width: Length,
@@ -250,10 +250,10 @@ pub struct ColBuilder<E> {
   max_width: f32,
   align_items: Alignment,
 }
-impl<'a, E> ColBuilder<E> {
-  fn new(elements: E) -> Self {
+impl<'a, S> ColBuilder<S> {
+  fn new(state: S) -> Self {
     Self {
-      elements,
+      state,
       spacing: 0.0,
       padding: Padding::ZERO,
       width: Length::Shrink,
@@ -316,9 +316,9 @@ impl<'a, E> ColBuilder<E> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, E: internal::Consume<'a>> ColBuilder<E> {
-  pub fn consume(self) -> E::Builder {
-    self.elements.consume(|vec| {
+impl<'a, S: internal::Consume<'a>> ColBuilder<S> {
+  pub fn consume(self) -> S::Builder {
+    self.state.consume(|vec| {
       Column::with_children(vec)
         .spacing(self.spacing)
         .padding(self.padding)
@@ -333,18 +333,18 @@ impl<'a, E: internal::Consume<'a>> ColBuilder<E> {
 
 /// Builder for a [`Row`] widget.
 #[must_use]
-pub struct RowBuilder<E> {
-  elements: E,
+pub struct RowBuilder<S> {
+  state: S,
   spacing: f32,
   padding: Padding,
   width: Length,
   height: Length,
   align_items: Alignment,
 }
-impl<'a, E> RowBuilder<E> {
-  fn new(elements: E) -> Self {
+impl<'a, S> RowBuilder<S> {
+  fn new(state: S) -> Self {
     Self {
-      elements,
+      state,
       spacing: 0.0,
       padding: Padding::ZERO,
       width: Length::Shrink,
@@ -401,9 +401,9 @@ impl<'a, E> RowBuilder<E> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, E: internal::Consume<'a>> RowBuilder<E> {
-  pub fn consume(self) -> E::Builder {
-    self.elements.consume(|vec| {
+impl<'a, S: internal::Consume<'a>> RowBuilder<S> {
+  pub fn consume(self) -> S::Builder {
+    self.state.consume(|vec| {
       Row::with_children(vec)
         .spacing(self.spacing)
         .padding(self.padding)
@@ -424,20 +424,20 @@ mod internal {
 
   use super::WidgetBuilder;
 
-  /// Empty: 0 elements.
+  /// State with exactly 0 elements.
   #[repr(transparent)]
   pub struct Empty<'a, M, R>(PhantomData<&'a M>, PhantomData<R>);
   impl<'a, M, R> Default for Empty<'a, M, R> {
     fn default() -> Self { Self(PhantomData::default(), PhantomData::default()) }
   }
-  /// 1 element.
+  /// State with exactly 1 element.
   #[repr(transparent)]
   pub struct One<'a, M, R>(Element<'a, M, R>);
-  /// >1 elements.
+  /// State with more than 1 element.
   #[repr(transparent)]
   pub struct Many<'a, M, R>(Vec<Element<'a, M, R>>);
 
-  /// Internal trait for adding elements onto a builder.
+  /// Internal trait for adding elements onto the state of a widget builder.
   pub trait Add<'a> {
     /// [`Element`] message type.
     type Message: 'a;
@@ -479,7 +479,7 @@ mod internal {
     }
   }
 
-  /// Internal trait for consuming elements from a builder.
+  /// Internal trait for consuming elements from the state of a widget builder.
   pub trait Consume<'a> {
     /// [`Element`] message type.
     type Message: 'a;
@@ -512,7 +512,7 @@ mod internal {
     }
   }
 
-  /// Internal trait for taking the single element from a builder.
+  /// Internal trait for taking a single element from the state of a widget builder.
   pub trait Take<'a> {
     /// [`Element`] type
     type Element;
