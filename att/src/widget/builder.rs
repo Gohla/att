@@ -485,6 +485,7 @@ mod internal {
   #[repr(transparent)]
   pub struct Many<'a, M, R>(Vec<Element<'a, M, R>>);
 
+  /// Internal trait for the state of a widget builder.
   pub trait State<'a> {
     /// [`Element`] message type.
     type Message: 'a;
