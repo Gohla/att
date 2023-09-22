@@ -18,7 +18,7 @@ impl<E> Builder<E> {
   pub fn space(self) -> SpaceBuilder<E> {
     SpaceBuilder::new(self.0)
   }
-  pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<'a, E> {
+  pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<Cow<'a, str>, E> {
     TextBuilder::new(content.into(), self.0)
   }
   pub fn button<'a, R>(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<Element<'a, (), R>, E> {
@@ -26,8 +26,8 @@ impl<E> Builder<E> {
   }
 }
 impl<'a, E: ElementsPush<'a>> Builder<E> {
-  pub fn element(self, element: impl Into<Element<'a, E::Message, E::Renderer>>) -> Builder<E::Output> {
-    Builder(self.0.push(element.into()))
+  pub fn element(self, element: impl Into<Element<'a, E::Message, E::Renderer>>) -> E::Output {
+    self.0.push(element.into())
   }
 }
 // Builder methods for creating container widgets that have multiple children widgets, such as [`Row`] and [`Col`].
@@ -75,20 +75,20 @@ impl<'a, E: ElementsPush<'a>> SpaceBuilder<E> {
     self.height(Length::Fill)
   }
 
-  pub fn done(self) -> Builder<E::Output> {
-    Builder(self.elements.push(Space::new(self.width, self.height).into()))
+  pub fn done(self) -> E::Output {
+    self.elements.push(Space::new(self.width, self.height).into())
   }
 }
 
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<'a, E> {
-  content: Cow<'a, str>,
+pub struct TextBuilder<C, E> {
+  content: C,
   size: Option<Pixels>,
   elements: E,
 }
-impl<'a, E> TextBuilder<'a, E> {
-  fn new(content: Cow<'a, str>, elements: E) -> Self {
+impl<C, E> TextBuilder<C, E> {
+  fn new(content: C, elements: E) -> Self {
     Self { content, size: None, elements }
   }
 
@@ -97,16 +97,16 @@ impl<'a, E> TextBuilder<'a, E> {
     self
   }
 }
-impl<'a, E: ElementsPush<'a>> TextBuilder<'a, E> where
+impl<'a, E: ElementsPush<'a>> TextBuilder<Cow<'a, str>, E> where
   E::Renderer: TextRenderer,
   <E::Renderer as Renderer>::Theme: TextStyleSheet,
 {
-  pub fn done(self) -> Builder<E::Output> {
+  pub fn done(self) -> E::Output {
     let mut text = Text::new(self.content);
     if let Some(size) = self.size {
       text = text.size(size);
     }
-    Builder(self.elements.push(text.into()))
+    self.elements.push(text.into())
   }
 }
 
@@ -134,13 +134,13 @@ impl<C, E> ButtonBuilder<C, E> {
 impl<'a, E: ElementsPush<'a>> ButtonBuilder<Element<'a, (), E::Renderer>, E> where
   <E::Renderer as Renderer>::Theme: ButtonStyleSheet,
 {
-  pub fn done(self, on_press: impl Fn() -> E::Message + 'a) -> Builder<E::Output> {
+  pub fn done(self, on_press: impl Fn() -> E::Message + 'a) -> E::Output {
     let mut button = Button::new(self.contents);
     if !self.disabled {
       button = button.on_press(());
     }
     let element = Element::new(button).map(move |_| on_press());
-    Builder(self.elements.push(element))
+    self.elements.push(element)
   }
 }
 
@@ -231,26 +231,26 @@ pub trait ElementsPush<'a> {
 impl<'a, M: 'a, R: Renderer + 'a> ElementsPush<'a> for Elements0<'a, M, R> {
   type Message = M;
   type Renderer = R;
-  type Output = Elements1<'a, M, R>;
+  type Output = Builder<Elements1<'a, M, R>>;
   fn push(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Output {
-    Elements1(element)
+    Builder(Elements1(element))
   }
 }
 impl<'a, M: 'a, R: Renderer + 'a> ElementsPush<'a> for Elements1<'a, M, R> {
   type Message = M;
   type Renderer = R;
-  type Output = ElementsN<'a, M, R>;
+  type Output = Builder<ElementsN<'a, M, R>>;
   fn push(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Output {
-    ElementsN(vec![self.0, element])
+    Builder(ElementsN(vec![self.0, element]))
   }
 }
 impl<'a, M: 'a, R: Renderer + 'a> ElementsPush<'a> for ElementsN<'a, M, R> {
   type Message = M;
   type Renderer = R;
-  type Output = ElementsN<'a, M, R>;
+  type Output = Builder<ElementsN<'a, M, R>>;
   fn push(mut self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Output {
     self.0.push(element);
-    self
+    Builder(self)
   }
 }
 
