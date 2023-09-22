@@ -10,11 +10,11 @@ use iced::widget::button::{Button, StyleSheet as ButtonStyleSheet};
 #[repr(transparent)]
 #[must_use]
 pub struct WidgetBuilder<E>(E);
-impl<'a, M, R> Default for WidgetBuilder<internal::Elements0<'a, M, R>> {
-  fn default() -> Self { Self(internal::Elements0::default()) }
+impl<'a, M, R> Default for WidgetBuilder<internal::Empty<'a, M, R>> {
+  fn default() -> Self { Self(Default::default()) }
 }
 
-/// Builder methods for creating standalone widgets.
+// Builder methods for creating standalone widgets.
 impl<E> WidgetBuilder<E> {
   pub fn space(self) -> SpaceBuilder<E> {
     SpaceBuilder::new(self.0)
@@ -31,13 +31,13 @@ impl<'a, E: internal::Push<'a>> WidgetBuilder<E> {
     self.0.push(element.into())
   }
 }
-/// Builder methods for creating container widgets with children widgets, such as [`Row`] and [`Col`].
+// Builder methods for creating container widgets with children widgets, such as rows and columns.
 impl<'a, E: internal::Consume<'a>> WidgetBuilder<E> {
   pub fn into_row(self) -> RowBuilder<E> {
     RowBuilder::new(self.0)
   }
 }
-/// Builder methods for taking the result of building.
+// Builder methods for taking the result of building.
 impl<'a, E: internal::Take<'a>> WidgetBuilder<E> {
   pub fn take(self) -> E::Element {
     self.0.take()
@@ -212,6 +212,7 @@ impl<'a, E: internal::Consume<'a>> RowBuilder<E> {
   }
 }
 
+/// Internal state management for widget builder.
 mod internal {
   use std::marker::PhantomData;
 
@@ -220,16 +221,20 @@ mod internal {
 
   use super::WidgetBuilder;
 
+  /// Empty: 0 elements.
   #[repr(transparent)]
-  pub struct Elements0<'a, M, R>(PhantomData<&'a M>, PhantomData<R>);
-  impl<'a, M, R> Default for Elements0<'a, M, R> {
+  pub struct Empty<'a, M, R>(PhantomData<&'a M>, PhantomData<R>);
+  impl<'a, M, R> Default for Empty<'a, M, R> {
     fn default() -> Self { Self(PhantomData::default(), PhantomData::default()) }
   }
+  /// 1 element.
   #[repr(transparent)]
-  pub struct Elements1<'a, M, R>(pub Element<'a, M, R>);
+  pub struct One<'a, M, R>(Element<'a, M, R>);
+  /// >1 elements.
   #[repr(transparent)]
-  pub struct ElementsN<'a, M, R>(pub Vec<Element<'a, M, R>>);
+  pub struct Many<'a, M, R>(Vec<Element<'a, M, R>>);
 
+  /// Internal trait for pushing elements onto a builder.
   pub trait Push<'a> {
     /// [`Element`] message type.
     type Message: 'a;
@@ -241,29 +246,29 @@ mod internal {
     /// those elements.
     fn push<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Push<'a> for Elements0<'a, M, R> {
+  impl<'a, M: 'a, R: Renderer + 'a> Push<'a> for Empty<'a, M, R> {
     type Message = M;
     type Renderer = R;
-    type Builder = WidgetBuilder<Elements1<'a, M, R>>;
+    type Builder = WidgetBuilder<One<'a, M, R>>;
     fn push<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder {
       let element = into_element.into();
-      WidgetBuilder(Elements1(element))
+      WidgetBuilder(One(element))
     }
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Push<'a> for Elements1<'a, M, R> {
+  impl<'a, M: 'a, R: Renderer + 'a> Push<'a> for One<'a, M, R> {
     type Message = M;
     type Renderer = R;
-    type Builder = WidgetBuilder<ElementsN<'a, M, R>>;
+    type Builder = WidgetBuilder<Many<'a, M, R>>;
     fn push<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder {
       let element = into_element.into();
       let elements = vec![self.0, element];
-      WidgetBuilder(ElementsN(elements))
+      WidgetBuilder(Many(elements))
     }
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Push<'a> for ElementsN<'a, M, R> {
+  impl<'a, M: 'a, R: Renderer + 'a> Push<'a> for Many<'a, M, R> {
     type Message = M;
     type Renderer = R;
-    type Builder = WidgetBuilder<ElementsN<'a, M, R>>;
+    type Builder = WidgetBuilder<Many<'a, M, R>>;
     fn push<I: Into<Element<'a, Self::Message, Self::Renderer>>>(mut self, into_element: I) -> Self::Builder {
       let element = into_element.into();
       self.0.push(element);
@@ -271,6 +276,7 @@ mod internal {
     }
   }
 
+  /// Internal trait for consuming elements from a builder.
   pub trait Consume<'a> {
     /// [`Element`] message type.
     type Message: 'a;
@@ -282,34 +288,35 @@ mod internal {
     /// [`Element`], then return a new [builder](Self::Builder) with that element.
     fn consume<F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>>(self, produce: F) -> Self::Builder;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for Elements1<'a, M, R> {
+  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for One<'a, M, R> {
     type Message = M;
     type Renderer = R;
-    type Builder = WidgetBuilder<Elements1<'a, M, R>>;
+    type Builder = WidgetBuilder<One<'a, M, R>>;
     fn consume<F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>>(self, produce: F) -> Self::Builder {
       let elements = vec![self.0];
       let new_element = produce(elements);
-      WidgetBuilder(Elements1(new_element))
+      WidgetBuilder(One(new_element))
     }
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for ElementsN<'a, M, R> {
+  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for Many<'a, M, R> {
     type Message = M;
     type Renderer = R;
-    type Builder = WidgetBuilder<Elements1<'a, M, R>>;
+    type Builder = WidgetBuilder<One<'a, M, R>>;
     fn consume<F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>>(self, produce: F) -> Self::Builder {
       let elements = self.0;
       let new_element = produce(elements);
-      WidgetBuilder(Elements1(new_element))
+      WidgetBuilder(One(new_element))
     }
   }
 
+  /// Internal trait for taking the single element from a builder.
   pub trait Take<'a> {
     /// [`Element`] type
     type Element;
     /// Take the single [`Element`] from `self` and return it.
     fn take(self) -> Self::Element;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Take<'a> for Elements1<'a, M, R> {
+  impl<'a, M: 'a, R: Renderer + 'a> Take<'a> for One<'a, M, R> {
     type Element = Element<'a, M, R>;
     fn take(self) -> Self::Element {
       self.0
