@@ -2,7 +2,6 @@ use std::borrow::Cow;
 
 use iced::{Alignment, Element, Length, Padding, Pixels};
 use iced::advanced::Renderer;
-use iced::advanced::text::Renderer as TextRenderer;
 use iced::advanced::widget::text::{StyleSheet as TextStyleSheet, Text};
 use iced::widget::{Column, Row, Rule, Space};
 use iced::widget::button::{Button, StyleSheet as ButtonStyleSheet};
@@ -25,7 +24,7 @@ impl<'a, S: State<'a>> WidgetBuilder<S> {
   pub fn rule(self) -> RuleBuilder<S> {
     RuleBuilder::new(self.0)
   }
-  pub fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<S, Cow<'a, str>> {
+  pub fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<S, Cow<'a, str>, TextStyle<'a, S>> {
     TextBuilder::new(self.0, content.into())
   }
   pub fn button<R>(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<S, Element<'a, (), R>, ButtonStyle<'a, S>> {
@@ -153,16 +152,24 @@ impl<'a, S: Add<'a>> RuleBuilder<S> where
   }
 }
 
+/// Type of styles for [`Text`].
+pub type TextStyle<'a, S> = <<S as State<'a>>::Theme as TextStyleSheet>::Style;
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<S, C> {
+pub struct TextBuilder<S, C, Y> {
   state: S,
   content: C,
   size: Option<Pixels>,
+  style: Y,
 }
-impl<S, C> TextBuilder<S, C> {
+impl<'a, S: State<'a>, C> TextBuilder<S, C, TextStyle<'a, S>> {
   fn new(state: S, content: C) -> Self {
-    Self { state, content, size: None }
+    Self {
+      state,
+      content,
+      size: None,
+      style: Default::default(),
+    }
   }
 
   pub fn size(mut self, size: impl Into<Pixels>) -> Self {
@@ -170,12 +177,10 @@ impl<S, C> TextBuilder<S, C> {
     self
   }
 }
-impl<'a, S: Add<'a>> TextBuilder<S, Cow<'a, str>> where
-  S::Renderer: TextRenderer,
-  <S::Renderer as Renderer>::Theme: TextStyleSheet,
-{
+impl<'a, S: Add<'a>> TextBuilder<S, Cow<'a, str>, TextStyle<'a, S>> {
   pub fn add(self) -> S::Builder {
-    let mut text = Text::new(self.content);
+    let mut text = Text::new(self.content)
+      .style(self.style);
     if let Some(size) = self.size {
       text = text.size(size);
     }
@@ -185,7 +190,6 @@ impl<'a, S: Add<'a>> TextBuilder<S, Cow<'a, str>> where
 
 /// Type of styles for [`Button`].
 pub type ButtonStyle<'a, S> = <<S as State<'a>>::Theme as ButtonStyleSheet>::Style;
-
 /// Builder for a [`Button`] widget.
 #[must_use]
 pub struct ButtonBuilder<S, C, Y> {
@@ -461,6 +465,8 @@ mod internal {
   use std::marker::PhantomData;
 
   use iced::advanced::Renderer;
+  use iced::advanced::text::Renderer as TextRenderer;
+  use iced::advanced::widget::text::StyleSheet as TextStyleSheet;
   use iced::Element;
   use iced::widget::button::StyleSheet as ButtonStyleSheet;
 
@@ -483,25 +489,25 @@ mod internal {
     /// [`Element`] message type.
     type Message: 'a;
     /// [`Element`] renderer type.
-    type Renderer: Renderer<Theme=Self::Theme> + 'a;
+    type Renderer: Renderer<Theme=Self::Theme> + TextRenderer + 'a;
     /// Theme type of the [`Self::Renderer`].
     type Theme: ThemeRequirements;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for Empty<'a, M, R> where
+  impl<'a, M: 'a, R: TextRenderer + 'a> State<'a> for Empty<'a, M, R> where
     R::Theme: ThemeRequirements
   {
     type Message = M;
     type Renderer = R;
     type Theme = R::Theme;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for One<'a, M, R> where
+  impl<'a, M: 'a, R: TextRenderer + 'a> State<'a> for One<'a, M, R> where
     R::Theme: ThemeRequirements
   {
     type Message = M;
     type Renderer = R;
     type Theme = R::Theme;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for Many<'a, M, R> where
+  impl<'a, M: 'a, R: TextRenderer + 'a> State<'a> for Many<'a, M, R> where
     R::Theme: ThemeRequirements
   {
     type Message = M;
@@ -509,8 +515,8 @@ mod internal {
     type Theme = R::Theme;
   }
 
-  pub trait ThemeRequirements: ButtonStyleSheet {}
-  impl<T: ButtonStyleSheet> ThemeRequirements for T {}
+  pub trait ThemeRequirements: ButtonStyleSheet + TextStyleSheet {}
+  impl<T: ButtonStyleSheet + TextStyleSheet> ThemeRequirements for T {}
 
   /// Internal trait for adding elements onto the state of a widget builder.
   pub trait Add<'a>: State<'a> {
@@ -520,7 +526,7 @@ mod internal {
     /// those elements.
     fn add<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for Empty<'a, M, R> where
+  impl<'a, M: 'a, R: TextRenderer + 'a> Add<'a> for Empty<'a, M, R> where
     R::Theme: ThemeRequirements
   {
     type Builder = WidgetBuilder<One<'a, M, R>>;
@@ -529,7 +535,7 @@ mod internal {
       WidgetBuilder(One(element))
     }
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for One<'a, M, R> where
+  impl<'a, M: 'a, R: TextRenderer + 'a> Add<'a> for One<'a, M, R> where
     R::Theme: ThemeRequirements
   {
     type Builder = WidgetBuilder<Many<'a, M, R>>;
@@ -539,7 +545,7 @@ mod internal {
       WidgetBuilder(Many(elements))
     }
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for Many<'a, M, R> where
+  impl<'a, M: 'a, R: TextRenderer + 'a> Add<'a> for Many<'a, M, R> where
     R::Theme: ThemeRequirements
   {
     type Builder = WidgetBuilder<Many<'a, M, R>>;
@@ -558,7 +564,7 @@ mod internal {
     /// [`Element`], then return a new [builder](Self::Builder) with that element.
     fn consume<F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>>(self, produce: F) -> Self::Builder;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for One<'a, M, R> where
+  impl<'a, M: 'a, R: TextRenderer + 'a> Consume<'a> for One<'a, M, R> where
     R::Theme: ThemeRequirements
   {
     type Builder = WidgetBuilder<One<'a, M, R>>;
@@ -568,7 +574,7 @@ mod internal {
       WidgetBuilder(One(new_element))
     }
   }
-  impl<'a, M: 'a, R: Renderer + 'a> Consume<'a> for Many<'a, M, R> where
+  impl<'a, M: 'a, R: TextRenderer + 'a> Consume<'a> for Many<'a, M, R> where
     R::Theme: ThemeRequirements
   {
     type Builder = WidgetBuilder<One<'a, M, R>>;
