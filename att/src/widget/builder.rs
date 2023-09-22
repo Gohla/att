@@ -14,23 +14,24 @@ pub fn builder<'a, M: 'a, R: Renderer + 'a>() -> ZeroBuilder<'a, M, R> {
   ZeroBuilder::default()
 }
 
-pub trait Builder<'a, M: 'a, R: Renderer + 'a> where Self: Sized {
+pub trait Builder<'a, M: 'a, R: Renderer + 'a> where
+  Self: Sized + PushElement<'a, Message=M, Renderer=R>
+{
   fn space(self) -> SpaceBuilder<Self> {
     SpaceBuilder::new(self)
   }
-  fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<Text<'a, R>, Self> where
+  fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<'a, Self> where
     R: TextRenderer,
     R::Theme: TextStyleSheet,
   {
-    TextBuilder::new(Text::new(content), self)
+    TextBuilder::new(content.into(), self)
   }
   fn button(self, content: impl Into<Element<'a, (), R>>) -> ButtonBuilder<Button<'a, (), R>, Self> where
     R::Theme: ButtonStyleSheet,
   {
     ButtonBuilder::new(Button::new(content), self)
   }
-  fn element(self, element: impl Into<Element<'a, M, R>>) -> Self::Output where
-    Self: PushElement<'a, Message=M, Renderer=R>,
+  fn element(self, element: impl Into<Element<'a, M, R>>) -> Self::Output
   {
     self.push(element.into())
   }
@@ -81,24 +82,35 @@ impl<'a, N: PushElement<'a>> SpaceBuilder<N> {
 
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<W, N> {
-  widget: W,
-  next: N,
+pub struct TextBuilder<'a, B> {
+  content: Cow<'a, str>,
+  size: Option<Pixels>,
+  builder: B,
 }
-impl<W, N> TextBuilder<W, N> {
-  fn new(widget: W, next: N) -> Self { Self { widget, next } }
+impl<'a, B> TextBuilder<'a, B> {
+  fn new(content: Cow<'a, str>, builder: B) -> Self {
+    Self {
+      content,
+      size: None,
+      builder
+    }
+  }
 }
-impl<'a, N: PushElement<'a>> TextBuilder<Text<'a, N::Renderer>, N> where
-  N::Renderer: TextRenderer,
-  <N::Renderer as Renderer>::Theme: TextStyleSheet,
+impl<'a, B: PushElement<'a>> TextBuilder<'a, B> where
+  B::Renderer: TextRenderer,
+  <B::Renderer as Renderer>::Theme: TextStyleSheet,
 {
   pub fn size(mut self, size: impl Into<Pixels>) -> Self {
-    self.widget = self.widget.size(size);
+    self.size = Some(size.into());
     self
   }
 
-  pub fn done(self) -> N::Output {
-    self.next.push(self.widget.into())
+  pub fn done(self) -> B::Output {
+    let mut text = Text::new(self.content);
+    if let Some(size) = self.size {
+      text = text.size(size);
+    }
+    self.builder.push(text.into())
   }
 }
 
