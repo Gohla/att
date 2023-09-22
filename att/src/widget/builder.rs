@@ -277,6 +277,7 @@ impl<'a, E> ColBuilder<E> {
     self.padding = padding.into();
     self
   }
+
   /// Sets the width of the [`Column`].
   pub fn width(mut self, width: impl Into<Length>) -> Self {
     self.width = width.into();
@@ -292,10 +293,27 @@ impl<'a, E> ColBuilder<E> {
     self.max_width = max_width.into().0;
     self
   }
+  /// Sets the width of the [`Column`] to [`Length::Fill`].
+  pub fn fill_width(self) -> Self {
+    self.width(Length::Fill)
+  }
+  /// Sets the height of the [`Column`] to [`Length::Fill`].
+  pub fn fill_height(self) -> Self {
+    self.height(Length::Fill)
+  }
+  /// Sets the width and height of the [`Column`] to [`Length::Fill`].
+  pub fn fill(self) -> Self {
+    self.fill_width().fill_height()
+  }
+
   /// Sets the horizontal alignment of the contents of the [`Column`] .
   pub fn align_items(mut self, align: Alignment) -> Self {
     self.align_items = align;
     self
+  }
+  /// Sets the horizontal alignment of the contents of the [`Column`] to [`Align::Center`].
+  pub fn align_center(self) -> Self {
+    self.align_items(Alignment::Center)
   }
 }
 impl<'a, E: internal::Consume<'a>> ColBuilder<E> {
@@ -349,6 +367,7 @@ impl<'a, E> RowBuilder<E> {
     self.padding = padding.into();
     self
   }
+
   /// Sets the width of the [`Row`].
   pub fn width(mut self, width: impl Into<Length>) -> Self {
     self.width = width.into();
@@ -359,10 +378,27 @@ impl<'a, E> RowBuilder<E> {
     self.height = height.into();
     self
   }
-  /// Sets the vertical alignment of the contents of the [`Row`] .
+  /// Sets the width of the [`Row`] to [`Length::Fill`].
+  pub fn fill_width(self) -> Self {
+    self.width(Length::Fill)
+  }
+  /// Sets the height of the [`Row`] to [`Length::Fill`].
+  pub fn fill_height(self) -> Self {
+    self.height(Length::Fill)
+  }
+  /// Sets the width and height of the [`Row`] to [`Length::Fill`].
+  pub fn fill(self) -> Self {
+    self.fill_width().fill_height()
+  }
+
+  /// Sets the vertical alignment of the contents of the [`Row`].
   pub fn align_items(mut self, align: Alignment) -> Self {
     self.align_items = align;
     self
+  }
+  /// Sets the vertical alignment of the contents of the [`Row`] to [`Alignment::Center`].
+  pub fn align_center(self) -> Self {
+    self.align_items(Alignment::Center)
   }
 }
 impl<'a, E: internal::Consume<'a>> RowBuilder<E> {

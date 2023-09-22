@@ -2,14 +2,14 @@ use std::collections::{BTreeSet, HashMap};
 use std::error::Error;
 
 use crates_io_api::{AsyncClient, Crate};
-use iced::{Alignment, Application, Command, Element, Event, event, executor, Length, Renderer, Subscription, Theme, window};
+use iced::{Application, Command, Element, Event, event, executor, Renderer, Subscription, Theme, window};
 use serde::{Deserialize, Serialize};
 
 use crate::component::add_crate::{self, AddCrate};
 use crate::component::view_crates::{self, ViewCrates};
-use crate::widget::load_icon_font_command;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
+use crate::widget::load_icon_font_command;
 use crate::widget::modal::Modal;
 
 #[derive(Default, Serialize, Deserialize)]
@@ -123,10 +123,10 @@ impl Application for App {
       .button("Add Crate").add(|| Message::OpenAddCrateModal)
       .add_space_fill_width()
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
-      .into_row().spacing(10.0).align_items(Alignment::Center).width(Length::Fill).consume()
+      .into_row().spacing(10.0).align_center().fill_width().consume()
       .add_horizontal_rule(1.0)
       .add_element(self.view_crates.view(&self.model, &self.cache).map(Message::ToViewCrates))
-      .into_col().spacing(10.0).padding(10).width(Length::Fill).height(Length::Fill).consume()
+      .into_col().spacing(10.0).padding(10).fill().consume()
       .take();
 
     if self.adding_crate {
