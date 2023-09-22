@@ -7,12 +7,12 @@ use iced::widget::{Column, Row, Rule, Space};
 use iced::widget::button::{Button, StyleSheet as ButtonStyleSheet};
 use iced::widget::rule::StyleSheet as RuleStyleSheet;
 
-use internal::{Add, Consume, State, Take};
+use internal::{Add, Consume, Empty, State, Take};
 
 #[repr(transparent)]
 #[must_use]
 pub struct WidgetBuilder<S>(S);
-impl<'a, M, R> Default for WidgetBuilder<internal::Empty<'a, M, R>> {
+impl<'a, M, R> Default for WidgetBuilder<Empty<'a, M, R>> {
   fn default() -> Self { Self(Default::default()) }
 }
 
