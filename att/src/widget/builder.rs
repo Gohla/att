@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use iced::{Alignment, Element, Length, Padding, Pixels};
-use iced::advanced::Renderer;
 use iced::advanced::text::Renderer as TextRenderer;
 use iced::advanced::widget::text::{StyleSheet as TextStyleSheet, Text};
 use iced::widget::{Column, Row, Rule, Space};
@@ -16,63 +15,76 @@ pub struct WidgetBuilder<S>(S);
 impl<'a, M, R> Default for WidgetBuilder<Empty<'a, M, R>> {
   fn default() -> Self { Self(Default::default()) }
 }
-
-// Builder methods for building and adding standalone widgets.
 impl<'a, S: Add<'a>> WidgetBuilder<S> {
+  /// Build a [`Space`] widget.
   pub fn space(self) -> SpaceBuilder<S> {
     SpaceBuilder::new(self.0)
   }
+  /// Adds a width-filling [`Space`] to this builder.
   pub fn add_space_fill_width(self) -> S::Builder {
     self.space().fill_width().add()
   }
+  /// Adds a height-filling [`Space`] to this builder.
   pub fn add_space_fill_height(self) -> S::Builder {
     self.space().fill_height().add()
   }
 
-  pub fn rule(self) -> RuleBuilder<S> {
+  /// Build a [`Rule`] widget.
+  pub fn rule(self) -> RuleBuilder<S> where
+    S::Theme: RuleStyleSheet
+  {
     RuleBuilder::new(self.0)
   }
+  /// Adds a horizontal [`Rule`] with `height` to this builder.
   pub fn add_horizontal_rule(self, height: impl Into<Pixels>) -> S::Builder where
-    <S::Renderer as Renderer>::Theme: RuleStyleSheet,
+    S::Theme: RuleStyleSheet
   {
     self.rule().horizontal(height).add()
   }
+  /// Adds a vertical [`Rule`] with `width` to this builder.
   pub fn add_vertical_rule(self, width: impl Into<Pixels>) -> S::Builder where
-    <S::Renderer as Renderer>::Theme: RuleStyleSheet,
+    S::Theme: RuleStyleSheet
   {
     self.rule().vertical(width).add()
   }
 
+  /// Build a [`Text`] widget from `content`.
   pub fn text(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<'a, S> where
     S::Renderer: TextRenderer,
     S::Theme: TextStyleSheet
   {
     TextBuilder::new(self.0, content)
   }
+  /// Build a [`Button`] widget from `content`.
   pub fn button(self, content: impl Into<Element<'a, (), S::Renderer>>) -> ButtonBuilder<'a, S> where
     S::Theme: ButtonStyleSheet
   {
     ButtonBuilder::new(self.0, content)
   }
 
+  /// Build an [`Element`] from `element`.
   pub fn element<M: 'a>(self, element: impl Into<Element<'a, M, S::Renderer>>) -> ElementBuilder<'a, S, M> {
     ElementBuilder::new(self.0, element)
   }
+  /// Adds `element` to this builder.
   pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Renderer>>) -> S::Builder {
     self.element(element).add()
   }
 }
-// Builder methods for creating container widgets with children widgets, such as columns and rows.
 impl<'a, S: Consume<'a>> WidgetBuilder<S> {
+  /// Build a [`Column`] widget that will consume all elements in this builder. Can only be called when this builder has
+  /// at least one widget.
   pub fn into_col(self) -> ColBuilder<S> {
     ColBuilder::new(self.0)
   }
+  /// Build a [`Row`] widget that will consume all elements in this builder. Can only be called when this builder has at
+  /// least one widget.
   pub fn into_row(self) -> RowBuilder<S> {
     RowBuilder::new(self.0)
   }
 }
-// Builder methods for taking the result of building.
 impl<'a, S: Take<'a>> WidgetBuilder<S> {
+  /// Take the single element out of this builder. Can only be called when this builder has exactly one widget.
   pub fn take(self) -> S::Element {
     self.0.take()
   }
@@ -123,7 +135,9 @@ pub struct RuleBuilder<S> {
   width_or_height: Pixels,
   is_vertical: bool,
 }
-impl<S> RuleBuilder<S> {
+impl<'a, S: Add<'a>> RuleBuilder<S> where
+  S::Theme: RuleStyleSheet
+{
   fn new(state: S) -> Self {
     Self {
       state,
@@ -142,10 +156,7 @@ impl<S> RuleBuilder<S> {
     self.is_vertical = true;
     self
   }
-}
-impl<'a, S: Add<'a>> RuleBuilder<S> where
-  <S::Renderer as Renderer>::Theme: RuleStyleSheet,
-{
+
   pub fn add(self) -> S::Builder {
     let rule = if self.is_vertical {
       Rule::vertical(self.width_or_height)
