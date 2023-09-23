@@ -1,11 +1,14 @@
 use std::borrow::Cow;
 
-use iced::{Alignment, Element, Length, Padding, Pixels};
+use iced::{Alignment, Color, Element, Length, Padding, Pixels};
 use iced::advanced::text::Renderer as TextRenderer;
 use iced::advanced::widget::text::{StyleSheet as TextStyleSheet, Text};
+use iced::alignment::{Horizontal, Vertical};
 use iced::widget::{Column, Row, Rule, Space};
 use iced::widget::button::{Button, StyleSheet as ButtonStyleSheet};
 use iced::widget::rule::StyleSheet as RuleStyleSheet;
+use iced::widget::text::{LineHeight, Shaping};
+use iced::theme;
 
 use internal::{Add, Consume, Empty, Take};
 
@@ -124,7 +127,7 @@ impl<S> SpaceBuilder<S> {
 impl<'a, S: Add<'a>> SpaceBuilder<S> {
   pub fn add(self) -> S::Builder {
     let space = Space::new(self.width, self.height);
-    self.state.add(space)
+    self.state.add(space.into())
   }
 }
 
@@ -163,7 +166,7 @@ impl<'a, S: Add<'a>> RuleBuilder<S> where
     } else {
       Rule::horizontal(self.width_or_height)
     };
-    self.state.add(rule)
+    self.state.add(rule.into())
   }
 }
 
@@ -187,13 +190,67 @@ impl<'a, S: Add<'a>> TextBuilder<'a, S> where
     }
   }
 
+  /// Sets the size of the [`Text`].
   pub fn size(mut self, size: impl Into<Pixels>) -> Self {
     self.text = self.text.size(size);
     self
   }
+  /// Sets the [`LineHeight`] of the [`Text`].
+  pub fn line_height(mut self, line_height: impl Into<LineHeight>) -> Self {
+    self.text = self.text.line_height(line_height);
+    self
+  }
+  /// Sets the [`Font`] of the [`Text`].
+  ///
+  /// [`Font`]: S::Renderer::Font
+  pub fn font(mut self, font: impl Into<<S::Renderer as TextRenderer>::Font>) -> Self {
+    self.text = self.text.font(font);
+    self
+  }
+  /// Sets the [`Style`] of the [`Text`].
+  ///
+  /// [`Style`]: S::Theme::Style
+  pub fn style(mut self, style: impl Into<<S::Theme as TextStyleSheet>::Style>) -> Self {
+    self.text = self.text.style(style);
+    self
+  }
+  /// Sets a [`Color`] as the [`Style`] of the [`Text`]. Only available when the [built-in theme](theme::Theme) is used.
+  ///
+  /// [`Style`]: S::Theme::Style
+  pub fn style_color<T>(mut self, color: impl Into<Color>) -> Self where
+    S: Add<'a, Theme = theme::Theme>
+  {
+    self.text = self.text.style(color.into());
+    self
+  }
+  /// Sets the width of the [`Text`] boundaries.
+  pub fn width(mut self, width: impl Into<Length>) -> Self {
+    self.text = self.text.width(width);
+    self
+  }
+  /// Sets the height of the [`Text`] boundaries.
+  pub fn height(mut self, height: impl Into<Length>) -> Self {
+    self.text = self.text.height(height);
+    self
+  }
+  /// Sets the [`Horizontal`] alignment of the [`Text`].
+  pub fn horizontal_alignment(mut self, alignment: Horizontal) -> Self {
+    self.text = self.text.horizontal_alignment(alignment);
+    self
+  }
+  /// Sets the [`Vertical`] alignment of the [`Text`].
+  pub fn vertical_alignment(mut self, alignment: Vertical) -> Self {
+    self.text = self.text.vertical_alignment(alignment);
+    self
+  }
+  /// Sets the [`Shaping`] strategy of the [`Text`].
+  pub fn shaping(mut self, shaping: Shaping) -> Self {
+    self.text = self.text.shaping(shaping);
+    self
+  }
 
   pub fn add(self) -> S::Builder {
-    self.state.add(self.text)
+    self.state.add(self.text.into())
   }
 }
 
@@ -505,29 +562,25 @@ mod internal {
   pub trait Add<'a>: Types<'a> {
     /// Builder produced by [`push`].
     type Builder;
-    /// Push the [`Element`] produced by `into_element` onto `self`, then return a new [builder](Self::Builder) with
-    /// those elements.
-    fn add<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder;
+    /// Push `element` onto `self`, then return a new builder with those elements.
+    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Builder;
   }
   impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for Empty<'a, M, R> {
     type Builder = WidgetBuilder<One<'a, M, R>>;
-    fn add<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder {
-      let element = into_element.into();
+    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Builder {
       WidgetBuilder(One(element))
     }
   }
   impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for One<'a, M, R> {
     type Builder = WidgetBuilder<Many<'a, M, R>>;
-    fn add<I: Into<Element<'a, Self::Message, Self::Renderer>>>(self, into_element: I) -> Self::Builder {
-      let element = into_element.into();
+    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Builder {
       let elements = vec![self.0, element];
       WidgetBuilder(Many(elements))
     }
   }
   impl<'a, M: 'a, R: Renderer + 'a> Add<'a> for Many<'a, M, R> {
     type Builder = WidgetBuilder<Many<'a, M, R>>;
-    fn add<I: Into<Element<'a, Self::Message, Self::Renderer>>>(mut self, into_element: I) -> Self::Builder {
-      let element = into_element.into();
+    fn add(mut self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::Builder {
       self.0.push(element);
       WidgetBuilder(self)
     }
