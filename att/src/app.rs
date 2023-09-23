@@ -125,7 +125,7 @@ impl Application for App {
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .into_row().spacing(10.0).align_center().fill_width().consume()
       .add_horizontal_rule(1.0)
-      .add_element(self.view_crates.view(&self.model, &self.cache).map(Message::ToViewCrates))
+      .element(self.view_crates.view(&self.model, &self.cache)).map(Message::ToViewCrates).add()
       .into_col().spacing(10.0).padding(10).fill().consume()
       .take();
 

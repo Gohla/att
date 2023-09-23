@@ -8,7 +8,7 @@ use iced::widget::{Column, Row, Rule, Space};
 use iced::widget::button::{Button, StyleSheet as ButtonStyleSheet};
 use iced::widget::rule::StyleSheet as RuleStyleSheet;
 
-use internal::{Add, Consume, Empty, State, Take};
+use internal::{Add, Consume, Empty, Take};
 
 #[repr(transparent)]
 #[must_use]
@@ -55,8 +55,8 @@ impl<'a, S: Add<'a>> WidgetBuilder<S> {
     ButtonBuilder::new(self.0, content)
   }
 
-  pub fn element<M, R>(self, element: impl Into<Element<'a, M, R>>) -> ElementBuilder<S, Element<'a, M, R>> {
-    ElementBuilder::new(self.0, element.into())
+  pub fn element<M: 'a>(self, element: impl Into<Element<'a, M, S::Renderer>>) -> ElementBuilder<'a, S, M> {
+    ElementBuilder::new(self.0, element)
   }
   pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Renderer>>) -> S::Builder {
     self.element(element).add()
@@ -93,8 +93,7 @@ impl<S> SpaceBuilder<S> {
       height: Length::Shrink,
     }
   }
-}
-impl<S> SpaceBuilder<S> {
+
   pub fn width(mut self, width: impl Into<Length>) -> Self {
     self.width = width.into();
     self
@@ -159,7 +158,7 @@ impl<'a, S: Add<'a>> RuleBuilder<S> where
 
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<'a, S: State<'a>> where
+pub struct TextBuilder<'a, S: Add<'a>> where
   S::Renderer: TextRenderer,
   S::Theme: TextStyleSheet
 {
@@ -189,7 +188,7 @@ impl<'a, S: Add<'a>> TextBuilder<'a, S> where
 
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<'a, S: State<'a>> where
+pub struct ButtonBuilder<'a, S: Add<'a>> where
   S::Theme: ButtonStyleSheet
 {
   state: S,
@@ -247,24 +246,22 @@ impl<'a, S: Add<'a>> ButtonBuilder<'a, S> where
 
 /// Builder for an [`Element`]
 #[must_use]
-pub struct ElementBuilder<S, E> {
+pub struct ElementBuilder<'a, S: Add<'a>, M> {
   state: S,
-  element: E,
+  element: Element<'a, M, S::Renderer>,
 }
-impl<S, E> ElementBuilder<S, E> {
-  fn new(state: S, element: E) -> Self {
-    Self { state, element }
+impl<'a, S: Add<'a>, M: 'a> ElementBuilder<'a, S, M> {
+  fn new(state: S, element: impl Into<Element<'a, M, S::Renderer>>) -> Self {
+    Self { state, element: element.into() }
   }
-}
-impl<'a, S: Add<'a>, M: 'a> ElementBuilder<S, Element<'a, M, S::Renderer>> {
-  pub fn map(self, f: impl Fn(M) -> S::Message + 'a) -> ElementBuilder<S, Element<'a, S::Message, S::Renderer>> {
+
+  pub fn map(self, f: impl Fn(M) -> S::Message + 'a) -> ElementBuilder<'a, S, S::Message> {
     let element = self.element.map(f);
     ElementBuilder { state: self.state, element }
   }
 }
-impl<'a, S: Add<'a>> ElementBuilder<S, Element<'a, S::Message, S::Renderer>> {
+impl<'a, S: Add<'a>> ElementBuilder<'a, S, S::Message> {
   pub fn add(self) -> S::Builder {
-    // TODO: calling this causes infinite recursion in Jetbrains Rust plugin!
     self.state.add(self.element)
   }
 }
@@ -468,8 +465,8 @@ mod internal {
   #[repr(transparent)]
   pub struct Many<'a, M, R>(Vec<Element<'a, M, R>>);
 
-  /// Internal trait for the state of a widget builder.
-  pub trait State<'a> {
+  /// Internal trait for the types used in widget building.
+  pub trait Types<'a> {
     /// [`Element`] message type.
     type Message: 'a;
     /// [`Element`] renderer type.
@@ -477,24 +474,24 @@ mod internal {
     /// Theme type of the [`Self::Renderer`].
     type Theme;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for Empty<'a, M, R> {
+  impl<'a, M: 'a, R: Renderer + 'a> Types<'a> for Empty<'a, M, R> {
     type Message = M;
     type Renderer = R;
     type Theme = R::Theme;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for One<'a, M, R> {
+  impl<'a, M: 'a, R: Renderer + 'a> Types<'a> for One<'a, M, R> {
     type Message = M;
     type Renderer = R;
     type Theme = R::Theme;
   }
-  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for Many<'a, M, R> {
+  impl<'a, M: 'a, R: Renderer + 'a> Types<'a> for Many<'a, M, R> {
     type Message = M;
     type Renderer = R;
     type Theme = R::Theme;
   }
 
   /// Internal trait for adding elements onto the state of a widget builder.
-  pub trait Add<'a>: State<'a> {
+  pub trait Add<'a>: Types<'a> {
     /// Builder produced by [`push`].
     type Builder;
     /// Push the [`Element`] produced by `into_element` onto `self`, then return a new [builder](Self::Builder) with
@@ -526,7 +523,7 @@ mod internal {
   }
 
   /// Internal trait for consuming elements from the state of a widget builder.
-  pub trait Consume<'a>: State<'a> {
+  pub trait Consume<'a>: Types<'a> {
     /// Builder produced by [`consume`].
     type Builder;
     /// Consume the [elements](Element) from `self` into a [`Vec`], call `produce` on that [`Vec`] to create a new
