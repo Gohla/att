@@ -80,8 +80,10 @@ impl AddCrate {
 
     let crates = match &self.crates {
       Some(Ok(crates)) => {
+        // TODO: make a "column" builder, reserve `crates.crates.len()` elements.
         let mut crate_rows = Vec::new();
         for krate in &crates.crates {
+          // TODO: nest or make a "row" builder, reserve `5` elements.
           let add_button = Button::new(Text::new("Add"))
             .style(theme::Button::Positive)
             .padding([0.0, 5.0, 0.0, 5.0])

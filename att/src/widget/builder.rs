@@ -2,13 +2,14 @@ use std::borrow::Cow;
 
 use iced::{Alignment, Color, Element, Length, Padding, Pixels};
 use iced::advanced::text::Renderer as TextRenderer;
-use iced::advanced::widget::text::{StyleSheet as TextStyleSheet, Text};
+pub use iced::advanced::widget::text::StyleSheet as TextStyleSheet;
 use iced::alignment::{Horizontal, Vertical};
-use iced::widget::{Column, Row, Rule, Space};
-use iced::widget::button::{Button, StyleSheet as ButtonStyleSheet};
-use iced::widget::rule::StyleSheet as RuleStyleSheet;
+pub use iced::theme::Button as ButtonStyle;
+pub use iced::theme::Theme as BuiltinTheme;
+use iced::widget::{Button, Column, Row, Rule, Space, Text};
+pub use iced::widget::button::StyleSheet as ButtonStyleSheet;
+pub use iced::widget::rule::StyleSheet as RuleStyleSheet;
 use iced::widget::text::{LineHeight, Shaping};
-use iced::theme;
 
 use internal::{Add, Consume, Empty, Take};
 
@@ -214,14 +215,13 @@ impl<'a, S: Add<'a>> TextBuilder<'a, S> where
     self.text = self.text.style(style);
     self
   }
-  /// Sets a [`Color`] as the [`Style`] of the [`Text`]. Only available when the [built-in theme](theme::Theme) is used.
+  /// Sets a [`Color`] as the style of the [`Text`].
   ///
-  /// [`Style`]: S::Theme::Style
-  pub fn style_color<T>(mut self, color: impl Into<Color>) -> Self where
-    S: Add<'a, Theme = theme::Theme>
+  /// Only available when the [`BuiltinTheme`] is used.
+  pub fn style_color(self, color: impl Into<Color>) -> Self where
+    S: Add<'a, Theme=BuiltinTheme>
   {
-    self.text = self.text.style(color.into());
-    self
+    self.style(color.into())
   }
   /// Sets the width of the [`Text`] boundaries.
   pub fn width(mut self, width: impl Into<Length>) -> Self {
@@ -294,14 +294,35 @@ impl<'a, S: Add<'a>> ButtonBuilder<'a, S> where
     self.disabled = disabled;
     self
   }
-  /// Sets the style of the [`Button`].
+  /// Sets the [`Style`] of the [`Button`].
+  ///
+  /// [`Style`]: S::Theme::Style
   pub fn style(mut self, style: impl Into<<S::Theme as ButtonStyleSheet>::Style>) -> Self {
     self.button = self.button.style(style);
     self
   }
+  /// Sets the [`ButtonStyle`] of the [`Button`].
+  ///
+  /// Only available when the [`BuiltinTheme`] is used.
+  pub fn style_builtin(self, style: ButtonStyle) -> Self where
+    S: Add<'a, Theme=BuiltinTheme>
+  {
+    self.style(style)
+  }
+  /// Sets the style of the [`Button`] to a custom [`ButtonStyleSheet`] implementation.
+  ///
+  /// Only available when the [`BuiltinTheme`] is used.
+  pub fn style_custom(self, style_sheet: impl ButtonStyleSheet<Style=BuiltinTheme> + 'static) -> Self where
+    S: Add<'a, Theme=BuiltinTheme>
+  {
+    self.style(ButtonStyle::custom(style_sheet))
+  }
 
   /// Sets the function that will be called when the [`Button`] is pressed to `on_press`, then adds the [`Button`] to
   /// the builder and returns the builder.
+  ///
+  /// Implementation note: the reason for this convoluted way to set the `on_press` function is to avoid a [`Clone`]
+  /// requirement for the application message type.
   pub fn add(self, on_press: impl Fn() -> S::Message + 'a) -> S::Builder {
     let mut button = self.button;
     if !self.disabled {
