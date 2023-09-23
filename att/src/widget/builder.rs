@@ -6,12 +6,15 @@ pub use iced::advanced::widget::text::StyleSheet as TextStyleSheet;
 use iced::alignment::{Horizontal, Vertical};
 pub use iced::theme::Button as ButtonStyle;
 pub use iced::theme::Theme as BuiltinTheme;
-use iced::widget::{Button, Column, Row, Rule, Space, Text};
+use iced::widget::{Button, Column, Container, Row, Rule, Scrollable, Space, Text};
 pub use iced::widget::button::StyleSheet as ButtonStyleSheet;
+pub use iced::widget::container::{Id as ContainerId, StyleSheet as ContainerStyleSheet};
 pub use iced::widget::rule::StyleSheet as RuleStyleSheet;
+pub use iced::widget::scrollable::{Id as ScrollableId, StyleSheet as ScrollableStyleSheet};
+use iced::widget::scrollable::{Direction, Viewport};
 use iced::widget::text::{LineHeight, Shaping};
 
-use internal::{Nil, State, Take};
+use internal::{AnyState, Nil, OneState};
 
 #[repr(transparent)]
 #[must_use]
@@ -19,17 +22,17 @@ pub struct WidgetBuilder<S>(S);
 impl<'a, M, R> Default for WidgetBuilder<Nil<Element<'a, M, R>>> {
   fn default() -> Self { Self(Nil::default()) }
 }
-impl<'a, S: State<'a>> WidgetBuilder<S> {
+impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   /// Build a [`Space`] widget.
   pub fn space(self) -> SpaceBuilder<S> {
     SpaceBuilder::new(self.0)
   }
   /// Adds a width-filling [`Space`] to this builder.
-  pub fn add_space_fill_width(self) -> S::AddOutput {
+  pub fn add_space_fill_width(self) -> S::AddBuilder {
     self.space().fill_width().add()
   }
   /// Adds a height-filling [`Space`] to this builder.
-  pub fn add_space_fill_height(self) -> S::AddOutput {
+  pub fn add_space_fill_height(self) -> S::AddBuilder {
     self.space().fill_height().add()
   }
 
@@ -40,13 +43,13 @@ impl<'a, S: State<'a>> WidgetBuilder<S> {
     RuleBuilder::new(self.0)
   }
   /// Adds a horizontal [`Rule`] with `height` to this builder.
-  pub fn add_horizontal_rule(self, height: impl Into<Pixels>) -> S::AddOutput where
+  pub fn add_horizontal_rule(self, height: impl Into<Pixels>) -> S::AddBuilder where
     S::Theme: RuleStyleSheet
   {
     self.rule().horizontal(height).add()
   }
   /// Adds a vertical [`Rule`] with `width` to this builder.
-  pub fn add_vertical_rule(self, width: impl Into<Pixels>) -> S::AddOutput where
+  pub fn add_vertical_rule(self, width: impl Into<Pixels>) -> S::AddBuilder where
     S::Theme: RuleStyleSheet
   {
     self.rule().vertical(width).add()
@@ -57,21 +60,21 @@ impl<'a, S: State<'a>> WidgetBuilder<S> {
     S::Renderer: TextRenderer,
     S::Theme: TextStyleSheet
   {
-    TextBuilder::new(self.0, content)
+    TextBuilder::new(self.0, content.into())
   }
   /// Build a [`Button`] widget from `content`.
   pub fn button(self, content: impl Into<Element<'a, (), S::Renderer>>) -> ButtonBuilder<'a, S> where
     S::Theme: ButtonStyleSheet
   {
-    ButtonBuilder::new(self.0, content)
+    ButtonBuilder::new(self.0, content.into())
   }
 
   /// Build an [`Element`] from `element`.
   pub fn element<M: 'a>(self, element: impl Into<Element<'a, M, S::Renderer>>) -> ElementBuilder<'a, S, M> {
-    ElementBuilder::new(self.0, element)
+    ElementBuilder::new(self.0, element.into())
   }
   /// Adds `element` to this builder.
-  pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Renderer>>) -> S::AddOutput {
+  pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Renderer>>) -> S::AddBuilder {
     self.element(element).add()
   }
 
@@ -84,9 +87,29 @@ impl<'a, S: State<'a>> WidgetBuilder<S> {
     RowBuilder::new(self.0)
   }
 }
-impl<S: Take> WidgetBuilder<S> {
-  /// Take the single element out of this builder. Can only be called when this builder has exactly one widget.
-  pub fn take(self) -> S::Element {
+impl<'a, S: OneState<'a>> WidgetBuilder<S> {
+  /// Build a [`Scrollable`] widget that will consume the single element in this builder.
+  ///
+  /// Can only be called when this builder has exactly one widget.
+  pub fn scrollable(self) -> ScrollableBuilder<'a, S> where
+    S::Theme: ScrollableStyleSheet
+  {
+    ScrollableBuilder::new(self.0)
+  }
+
+  /// Build a [`Container`] widget that will consume the single element in this builder.
+  ///
+  /// Can only be called when this builder has exactly one widget.
+  pub fn container(self) -> ContainerBuilder<'a, S> where
+    S::Theme: ContainerStyleSheet
+  {
+    ContainerBuilder::new(self.0)
+  }
+
+  /// Take the single element out of this builder.
+  ///
+  /// Can only be called when this builder has exactly one widget.
+  pub fn take(self) -> Element<'a, S::Message, S::Renderer> {
     self.0.take()
   }
 }
@@ -98,7 +121,7 @@ pub struct SpaceBuilder<S> {
   width: Length,
   height: Length,
 }
-impl<S> SpaceBuilder<S> {
+impl<'a, S: AnyState<'a>> SpaceBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -121,9 +144,8 @@ impl<S> SpaceBuilder<S> {
   pub fn fill_height(self) -> Self {
     self.height(Length::Fill)
   }
-}
-impl<'a, S: State<'a>> SpaceBuilder<S> {
-  pub fn add(self) -> S::AddOutput {
+
+  pub fn add(self) -> S::AddBuilder {
     let space = Space::new(self.width, self.height);
     self.state.add(space.into())
   }
@@ -136,7 +158,7 @@ pub struct RuleBuilder<S> {
   width_or_height: Pixels,
   is_vertical: bool,
 }
-impl<'a, S: State<'a>> RuleBuilder<S> where
+impl<'a, S: AnyState<'a>> RuleBuilder<S> where
   S::Theme: RuleStyleSheet
 {
   fn new(state: S) -> Self {
@@ -158,7 +180,7 @@ impl<'a, S: State<'a>> RuleBuilder<S> where
     self
   }
 
-  pub fn add(self) -> S::AddOutput {
+  pub fn add(self) -> S::AddBuilder {
     let rule = if self.is_vertical {
       Rule::vertical(self.width_or_height)
     } else {
@@ -170,18 +192,18 @@ impl<'a, S: State<'a>> RuleBuilder<S> where
 
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<'a, S: State<'a>> where
+pub struct TextBuilder<'a, S: AnyState<'a>> where
   S::Renderer: TextRenderer,
   S::Theme: TextStyleSheet
 {
   state: S,
   text: Text<'a, S::Renderer>
 }
-impl<'a, S: State<'a>> TextBuilder<'a, S> where
+impl<'a, S: AnyState<'a>> TextBuilder<'a, S> where
   S::Renderer: TextRenderer,
   S::Theme: TextStyleSheet
 {
-  fn new(state: S, content: impl Into<Cow<'a, str>>) -> Self {
+  fn new(state: S, content: Cow<'a, str>) -> Self {
     Self {
       state,
       text: Text::new(content),
@@ -216,7 +238,7 @@ impl<'a, S: State<'a>> TextBuilder<'a, S> where
   ///
   /// Only available when the [`BuiltinTheme`] is used.
   pub fn style_color(self, color: impl Into<Color>) -> Self where
-    S: State<'a, Theme=BuiltinTheme>
+    S: AnyState<'a, Theme=BuiltinTheme>
   {
     self.style(color.into())
   }
@@ -246,24 +268,24 @@ impl<'a, S: State<'a>> TextBuilder<'a, S> where
     self
   }
 
-  pub fn add(self) -> S::AddOutput {
+  pub fn add(self) -> S::AddBuilder {
     self.state.add(self.text.into())
   }
 }
 
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<'a, S: State<'a>> where
+pub struct ButtonBuilder<'a, S: AnyState<'a>> where
   S::Theme: ButtonStyleSheet
 {
   state: S,
   button: Button<'a, (), S::Renderer>,
   disabled: bool,
 }
-impl<'a, S: State<'a>> ButtonBuilder<'a, S> where
+impl<'a, S: AnyState<'a>> ButtonBuilder<'a, S> where
   S::Theme: ButtonStyleSheet
 {
-  fn new(state: S, content: impl Into<Element<'a, (), S::Renderer>>) -> Self {
+  fn new(state: S, content: Element<'a, (), S::Renderer>) -> Self {
     Self {
       state,
       button: Button::new(content),
@@ -302,7 +324,7 @@ impl<'a, S: State<'a>> ButtonBuilder<'a, S> where
   ///
   /// Only available when the [`BuiltinTheme`] is used.
   pub fn style_builtin(self, style: ButtonStyle) -> Self where
-    S: State<'a, Theme=BuiltinTheme>
+    S: AnyState<'a, Theme=BuiltinTheme>
   {
     self.style(style)
   }
@@ -310,7 +332,7 @@ impl<'a, S: State<'a>> ButtonBuilder<'a, S> where
   ///
   /// Only available when the [`BuiltinTheme`] is used.
   pub fn style_custom(self, style_sheet: impl ButtonStyleSheet<Style=BuiltinTheme> + 'static) -> Self where
-    S: State<'a, Theme=BuiltinTheme>
+    S: AnyState<'a, Theme=BuiltinTheme>
   {
     self.style(ButtonStyle::custom(style_sheet))
   }
@@ -320,7 +342,7 @@ impl<'a, S: State<'a>> ButtonBuilder<'a, S> where
   ///
   /// Implementation note: the reason for this convoluted way to set the `on_press` function is to avoid a [`Clone`]
   /// requirement for the application message type.
-  pub fn add(self, on_press: impl Fn() -> S::Message + 'a) -> S::AddOutput {
+  pub fn add(self, on_press: impl Fn() -> S::Message + 'a) -> S::AddBuilder {
     let mut button = self.button;
     if !self.disabled {
       button = button.on_press(());
@@ -332,13 +354,13 @@ impl<'a, S: State<'a>> ButtonBuilder<'a, S> where
 
 /// Builder for an [`Element`]
 #[must_use]
-pub struct ElementBuilder<'a, S: State<'a>, M> {
+pub struct ElementBuilder<'a, S: AnyState<'a>, M> {
   state: S,
   element: Element<'a, M, S::Renderer>,
 }
-impl<'a, S: State<'a>, M: 'a> ElementBuilder<'a, S, M> {
-  fn new(state: S, element: impl Into<Element<'a, M, S::Renderer>>) -> Self {
-    Self { state, element: element.into() }
+impl<'a, S: AnyState<'a>, M: 'a> ElementBuilder<'a, S, M> {
+  fn new(state: S, element: Element<'a, M, S::Renderer>) -> Self {
+    Self { state, element }
   }
 
   pub fn map(self, f: impl Fn(M) -> S::Message + 'a) -> ElementBuilder<'a, S, S::Message> {
@@ -346,8 +368,8 @@ impl<'a, S: State<'a>, M: 'a> ElementBuilder<'a, S, M> {
     ElementBuilder { state: self.state, element }
   }
 }
-impl<'a, S: State<'a>> ElementBuilder<'a, S, S::Message> {
-  pub fn add(self) -> S::AddOutput {
+impl<'a, S: AnyState<'a>> ElementBuilder<'a, S, S::Message> {
+  pub fn add(self) -> S::AddBuilder {
     self.state.add(self.element)
   }
 }
@@ -430,8 +452,8 @@ impl<'a, S> ColBuilder<S> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, S: State<'a>> ColBuilder<S> {
-  pub fn consume(self) -> S::ConsumeOutput {
+impl<'a, S: AnyState<'a>> ColBuilder<S> {
+  pub fn consume(self) -> S::ConsumeBuilder {
     self.state.consume(|vec| {
       Column::with_children(vec)
         .spacing(self.spacing)
@@ -515,8 +537,8 @@ impl<'a, S> RowBuilder<S> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, S: State<'a>> RowBuilder<S> {
-  pub fn consume(self) -> S::ConsumeOutput {
+impl<'a, S: AnyState<'a>> RowBuilder<S> {
+  pub fn consume(self) -> S::ConsumeBuilder {
     self.state.consume(|vec| {
       Row::with_children(vec)
         .spacing(self.spacing)
@@ -528,6 +550,197 @@ impl<'a, S: State<'a>> RowBuilder<S> {
     })
   }
 }
+
+/// Builder for a [`Scrollable`] widget.
+#[must_use]
+pub struct ScrollableBuilder<'a, S: OneState<'a>> where
+  S::Theme: ScrollableStyleSheet
+{
+  state: S,
+  id: Option<ScrollableId>,
+  width: Length,
+  height: Length,
+  direction: Direction,
+  on_scroll: Option<Box<dyn Fn(Viewport) -> S::Message + 'a>>,
+  style: <S::Theme as ScrollableStyleSheet>::Style,
+}
+impl<'a, S: OneState<'a>> ScrollableBuilder<'a, S> where
+  S::Theme: ScrollableStyleSheet
+{
+  fn new(state: S) -> Self {
+    Self {
+      state,
+      id: None,
+      width: Length::Shrink,
+      height: Length::Shrink,
+      direction: Default::default(),
+      on_scroll: None,
+      style: Default::default(),
+    }
+  }
+
+  /// Sets the [`Id`] of the [`Scrollable`].
+  pub fn id(mut self, id: ScrollableId) -> Self {
+    self.id = Some(id);
+    self
+  }
+  /// Sets the width of the [`Scrollable`].
+  pub fn width(mut self, width: impl Into<Length>) -> Self {
+    self.width = width.into();
+    self
+  }
+  /// Sets the height of the [`Scrollable`].
+  pub fn height(mut self, height: impl Into<Length>) -> Self {
+    self.height = height.into();
+    self
+  }
+  /// Sets the [`Direction`] of the [`Scrollable`] .
+  pub fn direction(mut self, direction: Direction) -> Self {
+    self.direction = direction;
+    self
+  }
+  /// Sets a function to call when the [`Scrollable`] is scrolled.
+  ///
+  /// The function takes the [`Viewport`] of the [`Scrollable`].
+  pub fn on_scroll(mut self, f: impl Fn(Viewport) -> S::Message + 'a) -> Self {
+    self.on_scroll = Some(Box::new(f));
+    self
+  }
+  /// Sets the style of the [`Scrollable`] .
+  pub fn style(mut self, style: impl Into<<S::Theme as ScrollableStyleSheet>::Style>) -> Self {
+    self.style = style.into();
+    self
+  }
+
+  pub fn add(self) -> S::MapBuilder {
+    self.state.map(|content| {
+      let mut scrollable = Scrollable::new(content)
+        .width(self.width)
+        .height(self.height)
+        .direction(self.direction)
+        .style(self.style);
+      if let Some(id) = self.id {
+        scrollable = scrollable.id(id);
+      }
+      if let Some(on_scroll) = self.on_scroll {
+        scrollable = scrollable.on_scroll(on_scroll);
+      }
+      scrollable.into()
+    })
+  }
+}
+
+/// Builder for a [`Container`] widget.
+#[must_use]
+pub struct ContainerBuilder<'a, S: OneState<'a>> where
+  S::Theme: ContainerStyleSheet
+{
+  state: S,
+  id: Option<ContainerId>,
+  padding: Padding,
+  width: Length,
+  height: Length,
+  max_width: f32,
+  max_height: f32,
+  horizontal_alignment: Horizontal,
+  vertical_alignment: Vertical,
+  style: <S::Theme as ContainerStyleSheet>::Style,
+}
+impl<'a, S: OneState<'a>> ContainerBuilder<'a, S> where
+  S::Theme: ContainerStyleSheet
+{
+  fn new(state: S) -> Self {
+    Self {
+      state,
+      id: None,
+      padding: Padding::ZERO,
+      width: Length::Shrink,
+      height: Length::Shrink,
+      max_width: f32::INFINITY,
+      max_height: f32::INFINITY,
+      horizontal_alignment: Horizontal::Left,
+      vertical_alignment: Vertical::Top,
+      style: Default::default(),
+    }
+  }
+
+
+  /// Sets the [`Id`] of the [`Container`].
+  pub fn id(mut self, id: ContainerId) -> Self {
+    self.id = Some(id);
+    self
+  }
+  /// Sets the [`Padding`] of the [`Container`].
+  pub fn padding<P: Into<Padding>>(mut self, padding: P) -> Self {
+    self.padding = padding.into();
+    self
+  }
+  /// Sets the width of the [`Container`].
+  pub fn width(mut self, width: impl Into<Length>) -> Self {
+    self.width = width.into();
+    self
+  }
+  /// Sets the height of the [`Container`].
+  pub fn height(mut self, height: impl Into<Length>) -> Self {
+    self.height = height.into();
+    self
+  }
+  /// Sets the maximum width of the [`Container`].
+  pub fn max_width(mut self, max_width: impl Into<Pixels>) -> Self {
+    self.max_width = max_width.into().0;
+    self
+  }
+  /// Sets the maximum height of the [`Container`].
+  pub fn max_height(mut self, max_height: impl Into<Pixels>) -> Self {
+    self.max_height = max_height.into().0;
+    self
+  }
+  /// Sets the content alignment for the horizontal axis of the [`Container`].
+  pub fn align_x(mut self, alignment: Horizontal) -> Self {
+    self.horizontal_alignment = alignment;
+    self
+  }
+  /// Sets the content alignment for the vertical axis of the [`Container`].
+  pub fn align_y(mut self, alignment: Vertical) -> Self {
+    self.vertical_alignment = alignment;
+    self
+  }
+  /// Centers the contents in the horizontal axis of the [`Container`].
+  pub fn center_x(mut self) -> Self {
+    self.horizontal_alignment = Horizontal::Center;
+    self
+  }
+  /// Centers the contents in the vertical axis of the [`Container`].
+  pub fn center_y(mut self) -> Self {
+    self.vertical_alignment = Vertical::Center;
+    self
+  }
+  /// Sets the style of the [`Container`].
+  pub fn style(mut self, style: impl Into<<S::Theme as ContainerStyleSheet>::Style>) -> Self {
+    self.style = style.into();
+    self
+  }
+
+  pub fn add(self) -> S::MapBuilder {
+    self.state.map(|content| {
+      let mut container = Container::new(content)
+        .padding(self.padding)
+        .width(self.width)
+        .height(self.height)
+        .max_width(self.max_width)
+        .max_height(self.max_width)
+        .align_x(self.horizontal_alignment)
+        .align_y(self.vertical_alignment)
+        .style(self.style)
+        ;
+      if let Some(id) = self.id {
+        container = container.id(id);
+      }
+      container.into()
+    })
+  }
+}
+
 
 /// Internal state management for widget builder.
 mod internal {
@@ -543,62 +756,93 @@ mod internal {
   /// Empty list.
   #[repr(transparent)]
   pub struct Nil<E>(PhantomData<E>);
+
   impl<E> Default for Nil<E> {
+    #[inline]
     fn default() -> Self { Self(PhantomData::default()) }
   }
+  #[inline]
+  fn one<E>(element: E) -> Cons<E, Nil<E>> { Cons(element, Nil::default()) }
 
-  /// Internal trait for tracking and updating the state of a widget builder.
-  pub trait State<'a> {
+  /// Internal trait for access to element types.
+  pub trait Types<'a> {
     /// [`Element`] message type.
     type Message: 'a;
     /// [`Element`] renderer type.
     type Renderer: Renderer<Theme=Self::Theme> + 'a;
     /// Theme type of the [`Self::Renderer`].
     type Theme;
-
-    /// Output type of [`Self::add`].
-    type AddOutput;
-    /// Add `element` onto `self`, then return a [new builder](Self::AddOutput) with those elements.
-    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::AddOutput;
-
-    /// Output type of [`Self::consume`].
-    type ConsumeOutput;
-    /// Consume the [elements](Element) from `self` into a [`Vec`], call `produce` on that [`Vec`] to create a new
-    /// [`Element`], then return a [new builder](Self::ConsumeOutput) with that element.
-    fn consume<F>(self, produce: F) -> Self::ConsumeOutput where
-      F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>;
   }
-  impl<'a, M: 'a, R: Renderer + 'a, L: List<E=Element<'a, M, R>>> State<'a> for L {
+  impl<'a, M, R, L> Types<'a> for L where
+    M: 'a,
+    R: Renderer + 'a,
+    L: List<E=Element<'a, M, R>>
+  {
     type Message = M;
     type Renderer = R;
     type Theme = R::Theme;
+  }
 
-    type AddOutput = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
+  /// Internal trait for widget builder state of any length, providing add and consume operations.
+  pub trait AnyState<'a>: Types<'a> {
+    /// Builder type to return from [`Self::add`].
+    type AddBuilder;
+    /// Add `element` onto `self`, then return a [new builder](Self::AddBuilder) with those elements.
+    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::AddBuilder;
+
+    /// Builder type to return from [`Self::consume`].
+    type ConsumeBuilder;
+    /// Consume the [elements](Element) from `self` into a [`Vec`], call `produce` on that [`Vec`] to create a new
+    /// [`Element`], then return a [new builder](Self::ConsumeBuilder) with that element.
+    fn consume<F>(self, produce: F) -> Self::ConsumeBuilder where
+      F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>;
+  }
+  impl<'a, M, R, L> AnyState<'a> for L where
+    M: 'a,
+    R: Renderer + 'a,
+    L: List<E=Element<'a, M, R>>
+  {
+    type AddBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
     #[inline]
-    fn add(self, produce: Element<'a, M, R>) -> Self::AddOutput {
+    fn add(self, produce: Element<'a, M, R>) -> Self::AddBuilder {
       WidgetBuilder(List::add(self, produce))
     }
 
-    type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
+    type ConsumeBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
     #[inline]
-    fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeOutput {
+    fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeBuilder {
       let vec = self.into_vec();
       let element = produce(vec);
-      WidgetBuilder(Cons(element, Nil::default()))
+      WidgetBuilder(one(element))
     }
   }
 
-  /// Internal trait for taking a single element from the state of a widget builder.
-  pub trait Take {
-    /// [`Element`] type
-    type Element;
+  /// Internal trait for widget builder state of length 1, providing map and take operations.
+  pub trait OneState<'a>: Types<'a> {
+    /// Builder type to return from [`Self::map`].
+    type MapBuilder;
+    /// Take the single [`Element`] from `self`, call `map` on that [`Element`] to create a new [`Element`], then return
+    /// a [new builder](Self::MapBuilder) with that element.
+    fn map<F>(self, map: F) -> Self::MapBuilder where
+      F: FnOnce(Element<'a, Self::Message, Self::Renderer>) -> Element<'a, Self::Message, Self::Renderer>;
+
     /// Take the single [`Element`] from `self` and return it.
-    fn take(self) -> Self::Element;
+    fn take(self) -> Element<'a, Self::Message, Self::Renderer>;
   }
-  impl<E> Take for Cons<E, Nil<E>> {
-    type Element = E;
+  impl<'a, M, R> OneState<'a> for Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>> where
+    M: 'a,
+    R: Renderer + 'a
+  {
+    type MapBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
     #[inline]
-    fn take(self) -> Self::Element {
+    fn map<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapBuilder {
+      let element = self.take();
+      let new_element = map(element);
+      WidgetBuilder(one(new_element))
+    }
+
+    #[inline]
+    fn take(self) -> Element<'a, M, R> {
       self.0
     }
   }
