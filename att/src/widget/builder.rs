@@ -540,27 +540,112 @@ mod internal {
 
   /// Algebraic list constructor.
   pub struct Cons<T, Rest>(T, Rest);
-  /// Empty list constructor.
+  /// Empty list.
   #[repr(transparent)]
   pub struct Nil<T>(PhantomData<T>);
   impl<T> Default for Nil<T> {
     fn default() -> Self { Self(PhantomData::default()) }
   }
 
-  /// Trait for adding to algebraic list and converting it into a [`Vec`].
-  pub trait List<T>: Sized {
+  /// Internal trait for tracking and updating the state of a widget builder.
+  pub trait State<'a> {
+    /// [`Element`] message type.
+    type Message: 'a;
+    /// [`Element`] renderer type.
+    type Renderer: Renderer<Theme=Self::Theme> + 'a;
+    /// Theme type of the [`Self::Renderer`].
+    type Theme;
+
+    /// Output type of [`Self::add`].
+    type AddOutput;
+    /// Add `element` onto `self`, then return a [new builder](Self::AddOutput) with those elements.
+    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::AddOutput;
+
+    /// Output type of [`Self::consume`].
+    type ConsumeOutput;
+    /// Consume the [elements](Element) from `self` into a [`Vec`], call `produce` on that [`Vec`] to create a new
+    /// [`Element`], then return a [new builder](Self::ConsumeOutput) with that element.
+    fn consume<F>(self, produce: F) -> Self::ConsumeOutput where
+      F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>;
+  }
+  impl<'a, M: 'a, R: Renderer + 'a, L: List<Element<'a, M, R>>> State<'a> for Cons<Element<'a, M, R>, L> {
+    type Message = M;
+    type Renderer = R;
+    type Theme = R::Theme;
+
+    type AddOutput = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
     #[inline]
-    fn add(self, val: T) -> Cons<T, Self> {
-      Cons(val, self)
+    fn add(self, produce: Element<'a, Self::Message, Self::Renderer>) -> Self::AddOutput {
+      WidgetBuilder(List::add(self, produce))
     }
+
+    type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
+    #[inline]
+    fn consume<F>(self, produce: F) -> Self::ConsumeOutput
+      where F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>
+    {
+      let vec = self.into_vec();
+      let element = produce(vec);
+      WidgetBuilder(Cons(element, Nil::default()))
+    }
+  }
+  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for Nil<Element<'a, M, R>> {
+    // TODO: can we avoid implementing State for both Cons and Nil? If we make the impl generic over List, we get an
+    //       error that M and R are not used :(
+
+    type Message = M;
+    type Renderer = R;
+    type Theme = R::Theme;
+
+    type AddOutput = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
+    #[inline]
+    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::AddOutput {
+      WidgetBuilder(List::add(self, element))
+    }
+
+    type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
+    #[inline]
+    fn consume<F>(self, consume: F) -> Self::ConsumeOutput where
+      F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>
+    {
+      let vec = self.into_vec();
+      let element = consume(vec);
+      WidgetBuilder(Cons(element, Nil::default()))
+    }
+  }
+
+  /// Internal trait for taking a single element from the state of a widget builder.
+  pub trait Take {
+    /// [`Element`] type
+    type Element;
+    /// Take the single [`Element`] from `self` and return it.
+    fn take(self) -> Self::Element;
+  }
+  impl<T> Take for Cons<T, Nil<T>> {
+    type Element = T;
+    #[inline]
+    fn take(self) -> Self::Element {
+      self.0
+    }
+  }
+
+  /// Internal trait for algebraic list operations.
+  trait List<T>: Sized {
+    /// Return a new list with `value` added to it.
+    #[inline]
+    fn add(self, value: T) -> Cons<T, Self> {
+      Cons(value, self)
+    }
+    /// Collect the values from this list into a [`Vec`].
     #[inline]
     fn into_vec(self) -> Vec<T> {
       let mut vec = Vec::with_capacity(Self::LEN);
       self.add_to_vec(&mut vec);
       vec
     }
-
+    /// The length of this list.
     const LEN: usize;
+    /// Add the elements of this list into `vec`.
     fn add_to_vec(self, vec: &mut Vec<T>);
   }
   impl<T, Rest: List<T>> List<T> for Cons<T, Rest> {
@@ -576,73 +661,5 @@ mod internal {
     const LEN: usize = 0;
     #[inline]
     fn add_to_vec(self, _vec: &mut Vec<T>) {}
-  }
-
-  pub trait State<'a> {
-    /// [`Element`] message type.
-    type Message: 'a;
-    /// [`Element`] renderer type.
-    type Renderer: Renderer<Theme=Self::Theme> + 'a;
-    /// Theme type of the [`Self::Renderer`].
-    type Theme;
-
-    type AddOutput;
-    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::AddOutput;
-
-    type ConsumeOutput;
-    fn consume<F>(self, consume: F) -> Self::ConsumeOutput where
-      F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>;
-  }
-  impl<'a, M: 'a, R: Renderer + 'a, L: List<Element<'a, M, R>>> State<'a> for Cons<Element<'a, M, R>, L> {
-    type Message = M;
-    type Renderer = R;
-    type Theme = R::Theme;
-
-    type AddOutput = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
-    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::AddOutput {
-      WidgetBuilder(List::add(self, element))
-    }
-
-    type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
-    fn consume<F>(self, consume: F) -> Self::ConsumeOutput
-      where F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>
-    {
-      let vec = self.into_vec();
-      let element = consume(vec);
-      WidgetBuilder(Cons(element, Nil::default()))
-    }
-  }
-  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for Nil<Element<'a, M, R>> {
-    // TODO: can we avoid implementing State for both Cons and Nil? If we make the impl generic over List, we get an
-    //       error that M and R are not used :(
-
-    type Message = M;
-    type Renderer = R;
-    type Theme = R::Theme;
-
-    type AddOutput = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
-    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::AddOutput {
-      WidgetBuilder(List::add(self, element))
-    }
-
-    type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
-    fn consume<F>(self, consume: F) -> Self::ConsumeOutput where
-      F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>
-    {
-      let vec = self.into_vec();
-      let element = consume(vec);
-      WidgetBuilder(Cons(element, Nil::default()))
-    }
-  }
-
-  pub trait Take {
-    type Element;
-    fn take(self) -> Self::Element;
-  }
-  impl<T> Take for Cons<T, Nil<T>> {
-    type Element = T;
-    fn take(self) -> Self::Element {
-      self.0
-    }
   }
 }
