@@ -536,14 +536,14 @@ mod internal {
   use iced::advanced::Renderer;
   use iced::Element;
 
-  use crate::widget::builder::WidgetBuilder;
+  use super::WidgetBuilder;
 
   /// Algebraic list constructor.
   pub struct Cons<E, Rest>(E, Rest);
   /// Empty list.
   #[repr(transparent)]
-  pub struct Nil<T>(PhantomData<T>);
-  impl<T> Default for Nil<T> {
+  pub struct Nil<E>(PhantomData<E>);
+  impl<E> Default for Nil<E> {
     fn default() -> Self { Self(PhantomData::default()) }
   }
 
