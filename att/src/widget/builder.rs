@@ -14,13 +14,20 @@ pub use iced::widget::scrollable::{Id as ScrollableId, StyleSheet as ScrollableS
 use iced::widget::scrollable::{Direction, Viewport};
 use iced::widget::text::{LineHeight, Shaping};
 
-use internal::{AnyState, Nil, OneState};
+use internal::{AnyState, Nil, OneState, Heap};
 
 #[repr(transparent)]
 #[must_use]
 pub struct WidgetBuilder<S>(S);
+impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
+  pub fn new_stack() -> Self { Self(Nil::default()) }
+}
+impl<'a, M, R> WidgetBuilder<Heap<Element<'a, M, R>>> {
+  pub fn new_heap() -> Self { Self(Heap::new()) }
+  pub fn new_heap_with_capacity(capacity: usize) -> Self { Self(Heap::with_capacity(capacity)) }
+}
 impl<'a, M, R> Default for WidgetBuilder<Nil<Element<'a, M, R>>> {
-  fn default() -> Self { Self(Nil::default()) }
+  fn default() -> Self { Self::new_stack() }
 }
 impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   /// Build a [`Space`] widget.
@@ -91,7 +98,7 @@ impl<'a, S: OneState<'a>> WidgetBuilder<S> {
   /// Build a [`Scrollable`] widget that will consume the single element in this builder.
   ///
   /// Can only be called when this builder has exactly one widget.
-  pub fn scrollable(self) -> ScrollableBuilder<'a, S> where
+  pub fn into_scrollable(self) -> ScrollableBuilder<'a, S> where
     S::Theme: ScrollableStyleSheet
   {
     ScrollableBuilder::new(self.0)
@@ -100,7 +107,7 @@ impl<'a, S: OneState<'a>> WidgetBuilder<S> {
   /// Build a [`Container`] widget that will consume the single element in this builder.
   ///
   /// Can only be called when this builder has exactly one widget.
-  pub fn container(self) -> ContainerBuilder<'a, S> where
+  pub fn into_container(self) -> ContainerBuilder<'a, S> where
     S::Theme: ContainerStyleSheet
   {
     ContainerBuilder::new(self.0)
@@ -111,6 +118,12 @@ impl<'a, S: OneState<'a>> WidgetBuilder<S> {
   /// Can only be called when this builder has exactly one widget.
   pub fn take(self) -> Element<'a, S::Message, S::Renderer> {
     self.0.take()
+  }
+}
+impl<E> WidgetBuilder<Heap<E>> {
+  pub fn reserve(mut self, additional: usize) -> Self {
+    self.0.reserve(additional);
+    self
   }
 }
 
@@ -320,18 +333,40 @@ impl<'a, S: AnyState<'a>> ButtonBuilder<'a, S> where
     self.button = self.button.style(style);
     self
   }
-  /// Sets the [`ButtonStyle`] of the [`Button`].
+  /// Sets the style of the [`Button`] to [`ButtonStyle::Primary`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn style_builtin(self, style: ButtonStyle) -> Self where
-    S: AnyState<'a, Theme=BuiltinTheme>
-  {
-    self.style(style)
+  pub fn primary_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+    self.style(ButtonStyle::Secondary)
+  }
+  /// Sets the style of the [`Button`] to [`ButtonStyle::Secondary`].
+  ///
+  /// Only available when the [`BuiltinTheme`] is used.
+  pub fn secondary_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+    self.style(ButtonStyle::Secondary)
+  }
+  /// Sets the style of the [`Button`] to [`ButtonStyle::Positive`].
+  ///
+  /// Only available when the [`BuiltinTheme`] is used.
+  pub fn positive_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+    self.style(ButtonStyle::Positive)
+  }
+  /// Sets the style of the [`Button`] to [`ButtonStyle::Destructive`].
+  ///
+  /// Only available when the [`BuiltinTheme`] is used.
+  pub fn destructive_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+    self.style(ButtonStyle::Destructive)
+  }
+  /// Sets the style of the [`Button`] to [`ButtonStyle::Text`].
+  ///
+  /// Only available when the [`BuiltinTheme`] is used.
+  pub fn text_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+    self.style(ButtonStyle::Text)
   }
   /// Sets the style of the [`Button`] to a custom [`ButtonStyleSheet`] implementation.
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn style_custom(self, style_sheet: impl ButtonStyleSheet<Style=BuiltinTheme> + 'static) -> Self where
+  pub fn custom_style(self, style_sheet: impl ButtonStyleSheet<Style=BuiltinTheme> + 'static) -> Self where
     S: AnyState<'a, Theme=BuiltinTheme>
   {
     self.style(ButtonStyle::custom(style_sheet))
@@ -453,7 +488,7 @@ impl<'a, S> ColBuilder<S> {
   }
 }
 impl<'a, S: AnyState<'a>> ColBuilder<S> {
-  pub fn consume(self) -> S::ConsumeBuilder {
+  pub fn add(self) -> S::ConsumeBuilder {
     self.state.consume(|vec| {
       Column::with_children(vec)
         .spacing(self.spacing)
@@ -538,7 +573,7 @@ impl<'a, S> RowBuilder<S> {
   }
 }
 impl<'a, S: AnyState<'a>> RowBuilder<S> {
-  pub fn consume(self) -> S::ConsumeBuilder {
+  pub fn add(self) -> S::ConsumeBuilder {
     self.state.consume(|vec| {
       Row::with_children(vec)
         .spacing(self.spacing)
@@ -751,19 +786,6 @@ mod internal {
 
   use super::WidgetBuilder;
 
-  /// Algebraic list constructor.
-  pub struct Cons<E, Rest>(E, Rest);
-  /// Empty list.
-  #[repr(transparent)]
-  pub struct Nil<E>(PhantomData<E>);
-
-  impl<E> Default for Nil<E> {
-    #[inline]
-    fn default() -> Self { Self(PhantomData::default()) }
-  }
-  #[inline]
-  fn one<E>(element: E) -> Cons<E, Nil<E>> { Cons(element, Nil::default()) }
-
   /// Internal trait for access to element types.
   pub trait Types<'a> {
     /// [`Element`] message type.
@@ -772,15 +794,6 @@ mod internal {
     type Renderer: Renderer<Theme=Self::Theme> + 'a;
     /// Theme type of the [`Self::Renderer`].
     type Theme;
-  }
-  impl<'a, M, R, L> Types<'a> for L where
-    M: 'a,
-    R: Renderer + 'a,
-    L: List<E=Element<'a, M, R>>
-  {
-    type Message = M;
-    type Renderer = R;
-    type Theme = R::Theme;
   }
 
   /// Internal trait for widget builder state of any length, providing add and consume operations.
@@ -797,25 +810,6 @@ mod internal {
     fn consume<F>(self, produce: F) -> Self::ConsumeBuilder where
       F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>;
   }
-  impl<'a, M, R, L> AnyState<'a> for L where
-    M: 'a,
-    R: Renderer + 'a,
-    L: List<E=Element<'a, M, R>>
-  {
-    type AddBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
-    #[inline]
-    fn add(self, produce: Element<'a, M, R>) -> Self::AddBuilder {
-      WidgetBuilder(List::add(self, produce))
-    }
-
-    type ConsumeBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
-    #[inline]
-    fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeBuilder {
-      let vec = self.into_vec();
-      let element = produce(vec);
-      WidgetBuilder(one(element))
-    }
-  }
 
   /// Internal trait for widget builder state of length 1, providing map and take operations.
   pub trait OneState<'a>: Types<'a> {
@@ -829,26 +823,22 @@ mod internal {
     /// Take the single [`Element`] from `self` and return it.
     fn take(self) -> Element<'a, Self::Message, Self::Renderer>;
   }
-  impl<'a, M, R> OneState<'a> for Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>> where
-    M: 'a,
-    R: Renderer + 'a
-  {
-    type MapBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
-    #[inline]
-    fn map<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapBuilder {
-      let element = self.take();
-      let new_element = map(element);
-      WidgetBuilder(one(new_element))
-    }
 
+
+  // Stack implementation: full compile-time safety and zero-cost, but every operation changes the type of the state.
+
+  /// Algebraic stack list constructor.
+  pub struct Cons<E, Rest>(E, Rest);
+  /// Empty list.
+  #[repr(transparent)]
+  pub struct Nil<E>(PhantomData<E>);
+  impl<E> Default for Nil<E> {
     #[inline]
-    fn take(self) -> Element<'a, M, R> {
-      self.0
-    }
+    fn default() -> Self { Self(PhantomData::default()) }
   }
 
-  /// Internal trait for algebraic list operations.
-  trait List: Sized {
+  /// Internal trait for algebraic stack list operations.
+  trait StackList: Sized {
     /// Type of elements in the list.
     type E;
     /// The length of this list.
@@ -858,9 +848,9 @@ mod internal {
     fn add(self, element: Self::E) -> Cons<Self::E, Self> {
       Cons(element, self)
     }
-    /// Collect the values from this list into a [`Vec`].
+    /// Consume the elements from this list into a [`Vec`].
     #[inline]
-    fn into_vec(self) -> Vec<Self::E> {
+    fn consume(self) -> Vec<Self::E> {
       let mut vec = Vec::with_capacity(Self::LEN);
       self.add_to_vec(&mut vec);
       vec
@@ -868,7 +858,7 @@ mod internal {
     /// Add the elements of this list into `vec`.
     fn add_to_vec(self, vec: &mut Vec<Self::E>);
   }
-  impl<E, Rest: List<E=E>> List for Cons<E, Rest> {
+  impl<E, Rest: StackList<E=E>> StackList for Cons<E, Rest> {
     type E = E;
     const LEN: usize = 1 + Rest::LEN;
     #[inline]
@@ -878,10 +868,169 @@ mod internal {
       vec.push(self.0);
     }
   }
-  impl<E> List for Nil<E> {
+  impl<E> StackList for Nil<E> {
     type E = E;
     const LEN: usize = 0;
     #[inline]
     fn add_to_vec(self, _vec: &mut Vec<E>) {}
+  }
+
+  impl<'a, M, R, L> Types<'a> for L where
+    M: 'a,
+    R: Renderer + 'a,
+    L: StackList<E=Element<'a, M, R>>
+  {
+    type Message = M;
+    type Renderer = R;
+    type Theme = R::Theme;
+  }
+
+  impl<'a, M, R, L> AnyState<'a> for L where
+    M: 'a,
+    R: Renderer + 'a,
+    L: StackList<E=Element<'a, M, R>>
+  {
+    type AddBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
+    #[inline]
+    fn add(self, element: Element<'a, M, R>) -> Self::AddBuilder {
+      WidgetBuilder(StackList::add(self, element))
+    }
+
+    type ConsumeBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
+    #[inline]
+    fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeBuilder {
+      let vec = self.consume();
+      let element = produce(vec);
+      WidgetBuilder(Cons(element, Nil::default()))
+    }
+  }
+
+  impl<'a, M, R> OneState<'a> for Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>> where
+    M: 'a,
+    R: Renderer + 'a
+  {
+    type MapBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
+    #[inline]
+    fn map<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapBuilder {
+      let element = self.take();
+      let element = map(element);
+      WidgetBuilder(Cons(element, Nil::default()))
+    }
+
+    #[inline]
+    fn take(self) -> Element<'a, M, R> {
+      self.0
+    }
+  }
+
+
+  // Heap implementation: run-time type safety, not zero-cost, but type does not change.
+
+  pub enum Heap<E> {
+    Any(Vec<E>),
+    One(E, usize),
+  }
+  impl<E> Heap<E> {
+    #[inline]
+    pub fn new() -> Self { Self::Any(Vec::new()) }
+    #[inline]
+    pub fn with_capacity(capacity: usize) -> Self { Self::Any(Vec::with_capacity(capacity)) }
+
+    #[inline]
+    pub fn reserve(&mut self, additional: usize) {
+      match self {
+        Heap::Any(ref mut vec) => vec.reserve(additional),
+        Heap::One(_, reserve_additional) => *reserve_additional += additional,
+      }
+    }
+
+    #[inline]
+    fn push(self, new_element: E) -> Self {
+      match self {
+        Heap::Any(mut vec) => {
+          vec.push(new_element);
+          Heap::Any(vec)
+        },
+        Heap::One(element, reserve_additional) => {
+          let vec = if reserve_additional > 0 {
+            let mut vec = Vec::with_capacity(2 + reserve_additional);
+            vec.push(element);
+            vec.push(new_element);
+            vec
+          } else {
+            vec![element, new_element]
+          };
+          Heap::Any(vec)
+        },
+      }
+    }
+    #[inline]
+    fn consume(self) -> Vec<E> {
+      match self {
+        Heap::Any(vec) => vec,
+        Heap::One(element, _) => vec![element], // Note: ignore reserve_additional, since the vec will be consumed as-is.
+      }
+    }
+    #[inline]
+    fn take(self) -> (E, usize) {
+      match self {
+        Heap::Any(mut vec) => {
+          let len = vec.len();
+          let 1 = len else {
+            panic!("builder should have precisely 1 element, but it has {}", len);
+          };
+          let element = vec.drain(..).next().unwrap();
+          (element, 0)
+        }
+        Heap::One(element, reserve_additional) => (element, reserve_additional),
+      }
+    }
+  }
+
+  impl<'a, M, R> Types<'a> for Heap<Element<'a, M, R>> where
+    M: 'a,
+    R: Renderer + 'a,
+  {
+    type Message = M;
+    type Renderer = R;
+    type Theme = R::Theme;
+  }
+
+  impl<'a, M, R> AnyState<'a> for Heap<Element<'a, M, R>> where
+    M: 'a,
+    R: Renderer + 'a,
+  {
+    type AddBuilder = WidgetBuilder<Self>;
+    #[inline]
+    fn add(self, element: Element<'a, M, R>) -> Self::AddBuilder {
+      let heap = self.push(element);
+      WidgetBuilder(heap)
+    }
+
+    type ConsumeBuilder = WidgetBuilder<Self>;
+    #[inline]
+    fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeBuilder {
+      let vec = self.consume();
+      let element = produce(vec);
+      WidgetBuilder(Heap::One(element, 0))
+    }
+  }
+
+  impl<'a, M, R> OneState<'a> for Heap<Element<'a, M, R>> where
+    M: 'a,
+    R: Renderer + 'a
+  {
+    type MapBuilder = WidgetBuilder<Self>;
+    #[inline]
+    fn map<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapBuilder {
+      let (element, reserve_additional) = self.take();
+      let element = map(element);
+      WidgetBuilder(Heap::One(element, reserve_additional))
+    }
+
+    #[inline]
+    fn take(self) -> Element<'a, M, R> {
+      self.take().0
+    }
   }
 }
