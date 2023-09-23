@@ -539,7 +539,7 @@ mod internal {
   use crate::widget::builder::WidgetBuilder;
 
   /// Algebraic list constructor.
-  pub struct Cons<T, Rest>(T, Rest);
+  pub struct Cons<E, Rest>(E, Rest);
   /// Empty list.
   #[repr(transparent)]
   pub struct Nil<T>(PhantomData<T>);
@@ -568,48 +568,22 @@ mod internal {
     fn consume<F>(self, produce: F) -> Self::ConsumeOutput where
       F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>;
   }
-  impl<'a, M: 'a, R: Renderer + 'a, L: List<Element<'a, M, R>>> State<'a> for Cons<Element<'a, M, R>, L> {
+  impl<'a, M: 'a, R: Renderer + 'a, L: List<E=Element<'a, M, R>>> State<'a> for L {
     type Message = M;
     type Renderer = R;
     type Theme = R::Theme;
 
     type AddOutput = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
     #[inline]
-    fn add(self, produce: Element<'a, Self::Message, Self::Renderer>) -> Self::AddOutput {
+    fn add(self, produce: Element<'a, M, R>) -> Self::AddOutput {
       WidgetBuilder(List::add(self, produce))
     }
 
     type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
     #[inline]
-    fn consume<F>(self, produce: F) -> Self::ConsumeOutput
-      where F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>
-    {
+    fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeOutput {
       let vec = self.into_vec();
       let element = produce(vec);
-      WidgetBuilder(Cons(element, Nil::default()))
-    }
-  }
-  impl<'a, M: 'a, R: Renderer + 'a> State<'a> for Nil<Element<'a, M, R>> {
-    // TODO: can we avoid implementing State for both Cons and Nil? If we make the impl generic over List, we get an
-    //       error that M and R are not used :(
-
-    type Message = M;
-    type Renderer = R;
-    type Theme = R::Theme;
-
-    type AddOutput = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
-    #[inline]
-    fn add(self, element: Element<'a, Self::Message, Self::Renderer>) -> Self::AddOutput {
-      WidgetBuilder(List::add(self, element))
-    }
-
-    type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
-    #[inline]
-    fn consume<F>(self, consume: F) -> Self::ConsumeOutput where
-      F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>
-    {
-      let vec = self.into_vec();
-      let element = consume(vec);
       WidgetBuilder(Cons(element, Nil::default()))
     }
   }
@@ -621,8 +595,8 @@ mod internal {
     /// Take the single [`Element`] from `self` and return it.
     fn take(self) -> Self::Element;
   }
-  impl<T> Take for Cons<T, Nil<T>> {
-    type Element = T;
+  impl<E> Take for Cons<E, Nil<E>> {
+    type Element = E;
     #[inline]
     fn take(self) -> Self::Element {
       self.0
@@ -630,36 +604,40 @@ mod internal {
   }
 
   /// Internal trait for algebraic list operations.
-  trait List<T>: Sized {
-    /// Return a new list with `value` added to it.
+  trait List: Sized {
+    /// Type of elements in the list.
+    type E;
+    /// The length of this list.
+    const LEN: usize;
+    /// Return a new list with `element` added to it.
     #[inline]
-    fn add(self, value: T) -> Cons<T, Self> {
-      Cons(value, self)
+    fn add(self, element: Self::E) -> Cons<Self::E, Self> {
+      Cons(element, self)
     }
     /// Collect the values from this list into a [`Vec`].
     #[inline]
-    fn into_vec(self) -> Vec<T> {
+    fn into_vec(self) -> Vec<Self::E> {
       let mut vec = Vec::with_capacity(Self::LEN);
       self.add_to_vec(&mut vec);
       vec
     }
-    /// The length of this list.
-    const LEN: usize;
     /// Add the elements of this list into `vec`.
-    fn add_to_vec(self, vec: &mut Vec<T>);
+    fn add_to_vec(self, vec: &mut Vec<Self::E>);
   }
-  impl<T, Rest: List<T>> List<T> for Cons<T, Rest> {
+  impl<E, Rest: List<E=E>> List for Cons<E, Rest> {
+    type E = E;
     const LEN: usize = 1 + Rest::LEN;
     #[inline]
-    fn add_to_vec(self, vec: &mut Vec<T>) {
+    fn add_to_vec(self, vec: &mut Vec<Self::E>) {
       // Note: visiting in reverse order to get Vec that is correctly ordered w.r.t. `add`.
       self.1.add_to_vec(vec);
       vec.push(self.0);
     }
   }
-  impl<T> List<T> for Nil<T> {
+  impl<E> List for Nil<E> {
+    type E = E;
     const LEN: usize = 0;
     #[inline]
-    fn add_to_vec(self, _vec: &mut Vec<T>) {}
+    fn add_to_vec(self, _vec: &mut Vec<E>) {}
   }
 }
