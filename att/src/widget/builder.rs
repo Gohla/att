@@ -14,21 +14,51 @@ pub use iced::widget::scrollable::{Id as ScrollableId, StyleSheet as ScrollableS
 use iced::widget::scrollable::{Direction, Viewport};
 use iced::widget::text::{LineHeight, Shaping};
 
-use internal::{AnyState, Nil, OneState, Heap};
+use internal::{AnyState, Heap, Nil, OneState};
 
 #[repr(transparent)]
 #[must_use]
 pub struct WidgetBuilder<S>(S);
+
 impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
+  /// Create a new stack-based widget builder.
+  ///
+  /// The advantages of a stack-based widget builder are:
+  /// - It has full compile-time safety: incorrect state is a compilation error.
+  /// - It has low overhead: all elements are stored on the stack and are only converted into a [`Vec`] of exactly the
+  ///   right size when needed, for example when creating a [`Column`] or [`Row`]. This is equivalent to hand-optimized
+  ///   code using `column!` and `row!`, but without needing macros which can break IDE editor services.
+  ///   TODO: check to see if it is zero-cost?
+  ///
+  /// The disadvantage is that every operation changes the type of the builder, and this makes it impossible to use in
+  /// some cases. For example, using it in a while loop to continually add elements is not possible. In that case, a
+  /// [heap-based](Self::new_heap) builder can be used. TODO: workarounds
   pub fn new_stack() -> Self { Self(Nil::default()) }
 }
 impl<'a, M, R> WidgetBuilder<Heap<Element<'a, M, R>>> {
+  /// Create a new heap-based widget builder.
+  ///
+  /// The advantage of a heap-based widget builder is that its type never changes. Therefore, it can be used in the
+  /// cases where a [heap-based](Self::new_heap) builder cannot be used.
+  ///
+  /// The disadvantages of a heap-based widget builder are:
+  /// - It does not have full compile-time safety: some incorrect state must be handled at run-time
+  ///   - Attempting to build a [`Scrollable`] or a [`Container`] when there are 0 or more than 1 elements in the builder is an error.
+  ///   - Attempting to to take the element out of the builder when there are 0 or more than 1 elements is an error.
+  /// - It has some overhead: elements are stored on the heap, and some run-time checks are needed. Overhead can be
+  ///   minimized by creating the builder with [enough capacity](Self::new_heap_with_capacity), and by
+  ///   [reserving](Self::reserve) additional capacity if needed.
+  ///
+  /// Prefer a [stack-based](Self::new_stack) builder if possible.
   pub fn new_heap() -> Self { Self(Heap::new()) }
+  /// Create a new heap-based widget builder and reserve `capacity` for elements.
   pub fn new_heap_with_capacity(capacity: usize) -> Self { Self(Heap::with_capacity(capacity)) }
 }
 impl<'a, M, R> Default for WidgetBuilder<Nil<Element<'a, M, R>>> {
+  /// Create a new stack-based widget builder.
   fn default() -> Self { Self::new_stack() }
 }
+
 impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   /// Build a [`Space`] widget.
   pub fn space(self) -> SpaceBuilder<S> {
