@@ -74,12 +74,8 @@ impl AddCrate {
   }
 
   pub fn view(&self) -> Element<'_, Message> {
-    // let builder = WidgetBuilder::default()
-    let search_term_input = text_input::TextInput::new("Crate search term", &self.search_term)
-      .id(self.search_id.clone())
-      .on_input(|s| s)
-      .map_into_element(Message::SetSearchTerm);
-
+    let builder = WidgetBuilder::default()
+      .text_input("Crate search term", &self.search_term).id(self.search_id.clone()).on_input(Message::SetSearchTerm).add();
     let crates = match &self.crates {
       Some(Ok(crates)) => {
         let mut builder = WidgetBuilder::new_heap_with_capacity(crates.crates.len());
@@ -102,12 +98,10 @@ impl AddCrate {
       Some(Err(e)) => Text::new(format!("{:?}", e)).into_element(),
       _ => col![].into_element()
     };
-
-    col![search_term_input, crates]
-      .spacing(20)
-      .width(800)
-      .height(600)
-      .into()
+    builder
+      .add_element(crates)
+      .into_column().spacing(20).width(800).height(600).add()
+      .take()
   }
 
   pub fn subscription(&self, crates_io_api: &AsyncClient) -> Subscription<Message> {

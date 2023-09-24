@@ -2,17 +2,18 @@ use std::borrow::Cow;
 
 use iced::{Alignment, Color, Element, Length, Padding, Pixels};
 use iced::advanced::text::Renderer as TextRenderer;
-pub use iced::advanced::widget::text::StyleSheet as TextStyleSheet;
 use iced::alignment::{Horizontal, Vertical};
 pub use iced::theme::Button as ButtonStyle;
 pub use iced::theme::Theme as BuiltinTheme;
-use iced::widget::{Button, Column, Container, Row, Rule, Scrollable, Space, Text};
+use iced::widget::{Button, Column, Container, Row, Rule, Scrollable, Space, Text, TextInput};
 pub use iced::widget::button::StyleSheet as ButtonStyleSheet;
 pub use iced::widget::container::{Id as ContainerId, StyleSheet as ContainerStyleSheet};
 pub use iced::widget::rule::StyleSheet as RuleStyleSheet;
 pub use iced::widget::scrollable::{Id as ScrollableId, StyleSheet as ScrollableStyleSheet};
 use iced::widget::scrollable::{Direction, Viewport};
 use iced::widget::text::{LineHeight, Shaping};
+pub use iced::widget::text::StyleSheet as TextStyleSheet;
+pub use iced::widget::text_input::{Icon as TextInputIcon, Id as TextInputId, StyleSheet as TextInputStyleSheet};
 
 use internal::{AnyState, Heap, Nil, OneState};
 
@@ -98,6 +99,13 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
     S::Theme: TextStyleSheet
   {
     TextBuilder::new(self.0, content.into())
+  }
+  /// Build a [`TextInput`] widget from `content`.
+  pub fn text_input(self, placeholder: impl AsRef<str>, value: impl AsRef<str>) -> TextInputBuilder<'a, S, ()> where
+    S::Renderer: TextRenderer,
+    S::Theme: TextInputStyleSheet
+  {
+    TextInputBuilder::new(self.0, placeholder.as_ref(), value.as_ref())
   }
   /// Build a [`Button`] widget from `content`.
   pub fn button(self, content: impl Into<Element<'a, (), S::Renderer>>) -> ButtonBuilder<'a, S> where
@@ -316,6 +324,118 @@ impl<'a, S: AnyState<'a>> TextBuilder<'a, S> where
   }
 }
 
+// pub enum TextInputInteraction {
+//   OnInput(String),
+//   OnPaste(String),
+//   OnSubmit,
+// }
+
+/// Builder for a [`TextInput`] widget.
+#[must_use]
+pub struct TextInputBuilder<'a, S: AnyState<'a>, OnInput> where
+  S::Renderer: TextRenderer,
+  S::Theme: TextInputStyleSheet
+{
+  state: S,
+  text_input: TextInput<'a, String, S::Renderer>,
+  on_input: OnInput,
+}
+impl<'a, S: AnyState<'a>> TextInputBuilder<'a, S, ()> where
+  S::Renderer: TextRenderer,
+  S::Theme: TextInputStyleSheet
+{
+  fn new(state: S, placeholder: &str, value: &str) -> Self {
+    Self {
+      state,
+      text_input: TextInput::new(placeholder, value),
+      on_input: (),
+    }
+  }
+}
+impl<'a, S: AnyState<'a>, OnInput> TextInputBuilder<'a, S, OnInput> where
+  S::Renderer: TextRenderer,
+  S::Theme: TextInputStyleSheet
+{
+  /// Sets the [`TextInputId`] of the [`TextInput`].
+  pub fn id(mut self, id: TextInputId) -> Self {
+    self.text_input = self.text_input.id(id);
+    self
+  }
+  /// Converts the [`TextInput`] into a password input.
+  pub fn password(mut self) -> Self {
+    self.text_input = self.text_input.password();
+    self
+  }
+  /// Sets the message that should be produced when some text is typed into the [`TextInput`].
+  ///
+  /// If this method is not called, the [`TextInput`] will be disabled.
+  pub fn on_input<F: Fn(String) -> S::Message + 'a>(self, on_input: F) -> TextInputBuilder<'a, S, F> {
+    let Self { state, text_input, .. } = self;
+    let text_input = text_input.on_input(|s|s);
+    TextInputBuilder { state, text_input, on_input }
+  }
+  // /// Sets the message that should be produced when some text is pasted into the [`TextInput`].
+  // pub fn on_paste(mut self, on_paste: impl Fn(String) -> S::Message + 'a) -> Self {
+  //   self.text_input = self.text_input.on_paste(on_paste);
+  //   self
+  // }
+  // /// Sets the message that should be produced when the [`TextInput`] is focused and the enter key is pressed.
+  // pub fn on_submit(mut self, message: impl Fn() -> S::Message + 'a) -> Self {
+  //   self.text_input = self.text_input.on_submit(message);
+  //   self
+  // }
+  /// Sets the [`Font`] of the [`TextInput`].
+  ///
+  /// [`Font`]: S::Renderer::Font
+  pub fn font(mut self, font: <S::Renderer as TextRenderer>::Font) -> Self {
+    self.text_input = self.text_input.font(font);
+    self
+  }
+  /// Sets the [`TextInputIcon`] of the [`TextInput`].
+  pub fn icon(mut self, icon: TextInputIcon<<S::Renderer as TextRenderer>::Font>) -> Self {
+    self.text_input = self.text_input.icon(icon);
+    self
+  }
+  /// Sets the width of the [`TextInput`].
+  pub fn width(mut self, width: impl Into<Length>) -> Self {
+    self.text_input = self.text_input.width(width);
+    self
+  }
+  /// Sets the [`Padding`] of the [`TextInput`].
+  pub fn padding<P: Into<Padding>>(mut self, padding: P) -> Self {
+    self.text_input = self.text_input.padding(padding);
+    self
+  }
+  /// Sets the text size of the [`TextInput`].
+  pub fn size(mut self, size: impl Into<Pixels>) -> Self {
+    self.text_input = self.text_input.size(size);
+    self
+  }
+  /// Sets the [`LineHeight`] of the [`TextInput`].
+  pub fn line_height(mut self, line_height: impl Into<LineHeight>) -> Self {
+    self.text_input = self.text_input.line_height(line_height);
+    self
+  }
+  /// Sets the style of the [`TextInput`].
+  pub fn style(mut self, style: impl Into<<S::Theme as TextInputStyleSheet>::Style>) -> Self {
+    self.text_input = self.text_input.style(style);
+    self
+  }
+}
+
+impl<'a, S: AnyState<'a>, OnInput> TextInputBuilder<'a, S, OnInput> where
+  S::Renderer: TextRenderer,
+  S::Theme: TextInputStyleSheet,
+  OnInput: Fn(String) -> S::Message + 'a,
+{
+  pub fn add(self) -> S::AddBuilder {
+    let element = Element::new(self.text_input)
+      .map(move |input| (self.on_input)(input));
+    self.state.add(element)
+  }
+}
+
+
 /// Builder for a [`Button`] widget.
 #[must_use]
 pub struct ButtonBuilder<'a, S: AnyState<'a>> where
@@ -404,10 +524,9 @@ impl<'a, S: AnyState<'a>> ButtonBuilder<'a, S> where
 
   /// Sets the function that will be called when the [`Button`] is pressed to `on_press`, then adds the [`Button`] to
   /// the builder and returns the builder.
-  ///
-  /// Implementation note: the reason for this convoluted way to set the `on_press` function is to avoid a [`Clone`]
-  /// requirement for the application message type.
   pub fn add(self, on_press: impl Fn() -> S::Message + 'a) -> S::AddBuilder {
+    // The reason for this convoluted way to set the `on_press` function is to avoid a `Clone` requirement for the
+    // application message type.
     let mut button = self.button;
     if !self.disabled {
       button = button.on_press(());
