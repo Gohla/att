@@ -108,7 +108,7 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
     self.text(content).add()
   }
   /// Build a [`TextInput`] widget from `content`.
-  pub fn text_input(self, placeholder: impl AsRef<str>, value: impl AsRef<str>) -> TextInputBuilder<'a, S, ()> where
+  pub fn text_input(self, placeholder: impl AsRef<str>, value: impl AsRef<str>) -> TextInputBuilder<'a, S, Passthrough> where
     S::Renderer: TextRenderer,
     S::Theme: TextInputStyleSheet
   {
@@ -131,8 +131,8 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   }
 
   /// Build a [`Column`] widget that will consume all elements in this builder.
-  pub fn into_column(self) -> ColBuilder<S> {
-    ColBuilder::new(self.0)
+  pub fn into_column(self) -> ColumnBuilder<S> {
+    ColumnBuilder::new(self.0)
   }
   /// Build a [`Row`] widget that will consume all elements in this builder.
   pub fn into_row(self) -> RowBuilder<S> {
@@ -331,115 +331,237 @@ impl<'a, S: AnyState<'a>> TextBuilder<'a, S> where
   }
 }
 
-// pub enum TextInputInteraction {
-//   OnInput(String),
-//   OnPaste(String),
-//   OnSubmit,
-// }
-
 /// Builder for a [`TextInput`] widget.
 #[must_use]
-pub struct TextInputBuilder<'a, S: AnyState<'a>, OnInput> where
+pub struct TextInputBuilder<'a, S: AnyState<'a>, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
   state: S,
-  text_input: TextInput<'a, String, S::Renderer>,
-  on_input: OnInput,
+  id: Option<TextInputId>,
+  placeholder: String,
+  value: String,
+  is_secure: bool,
+  font: Option<<S::Renderer as TextRenderer>::Font>,
+  width: Length,
+  padding: Padding,
+  size: Option<Pixels>,
+  line_height: LineHeight,
+  actions: A,
+  icon: Option<TextInputIcon<<S::Renderer as TextRenderer>::Font>>,
+  style: <S::Theme as TextInputStyleSheet>::Style,
 }
-impl<'a, S: AnyState<'a>> TextInputBuilder<'a, S, ()> where
+impl<'a, S: AnyState<'a>> TextInputBuilder<'a, S, Passthrough> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
   fn new(state: S, placeholder: &str, value: &str) -> Self {
     Self {
       state,
-      text_input: TextInput::new(placeholder, value),
-      on_input: (),
+      id: None,
+      placeholder: String::from(placeholder),
+      value: String::from(value),
+      is_secure: false,
+      font: None,
+      width: Length::Fill,
+      padding: Padding::new(5.0),
+      size: None,
+      line_height: LineHeight::default(),
+      actions: Passthrough,
+      icon: None,
+      style: Default::default(),
     }
   }
 }
-impl<'a, S: AnyState<'a>, OnInput> TextInputBuilder<'a, S, OnInput> where
+impl<'a, S: AnyState<'a>, A> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
   /// Sets the [`TextInputId`] of the [`TextInput`].
   pub fn id(mut self, id: TextInputId) -> Self {
-    self.text_input = self.text_input.id(id);
+    self.id = Some(id);
     self
   }
-  /// Converts the [`TextInput`] into a password input.
+  /// Converts the [`TextInput`] into a secure password input.
   pub fn password(mut self) -> Self {
-    self.text_input = self.text_input.password();
+    self.is_secure = true;
     self
   }
-  /// Sets the message that should be produced when some text is typed into the [`TextInput`].
-  ///
-  /// If this method is not called, the [`TextInput`] will be disabled.
-  pub fn on_input<F: Fn(String) -> S::Message + 'a>(self, on_input: F) -> TextInputBuilder<'a, S, F> {
-    let Self { state, text_input, .. } = self;
-    let text_input = text_input.on_input(|s| s);
-    TextInputBuilder { state, text_input, on_input }
-  }
-  // /// Sets the message that should be produced when some text is pasted into the [`TextInput`].
-  // pub fn on_paste(mut self, on_paste: impl Fn(String) -> S::Message + 'a) -> Self {
-  //   self.text_input = self.text_input.on_paste(on_paste);
-  //   self
-  // }
-  // /// Sets the message that should be produced when the [`TextInput`] is focused and the enter key is pressed.
-  // pub fn on_submit(mut self, message: impl Fn() -> S::Message + 'a) -> Self {
-  //   self.text_input = self.text_input.on_submit(message);
-  //   self
-  // }
   /// Sets the [`Font`] of the [`TextInput`].
   ///
   /// [`Font`]: S::Renderer::Font
   pub fn font(mut self, font: <S::Renderer as TextRenderer>::Font) -> Self {
-    self.text_input = self.text_input.font(font);
+    self.font = Some(font);
     self
   }
   /// Sets the [`TextInputIcon`] of the [`TextInput`].
   pub fn icon(mut self, icon: TextInputIcon<<S::Renderer as TextRenderer>::Font>) -> Self {
-    self.text_input = self.text_input.icon(icon);
+    self.icon = Some(icon);
     self
   }
   /// Sets the width of the [`TextInput`].
   pub fn width(mut self, width: impl Into<Length>) -> Self {
-    self.text_input = self.text_input.width(width);
+    self.width = width.into();
     self
   }
   /// Sets the [`Padding`] of the [`TextInput`].
   pub fn padding<P: Into<Padding>>(mut self, padding: P) -> Self {
-    self.text_input = self.text_input.padding(padding);
+    self.padding = padding.into();
     self
   }
   /// Sets the text size of the [`TextInput`].
   pub fn size(mut self, size: impl Into<Pixels>) -> Self {
-    self.text_input = self.text_input.size(size);
+    self.size = Some(size.into());
     self
   }
   /// Sets the [`LineHeight`] of the [`TextInput`].
-  pub fn line_height(mut self, line_height: impl Into<LineHeight>) -> Self {
-    self.text_input = self.text_input.line_height(line_height);
+  pub fn line_height(
+    mut self,
+    line_height: impl Into<LineHeight>,
+  ) -> Self {
+    self.line_height = line_height.into();
     self
   }
   /// Sets the style of the [`TextInput`].
-  pub fn style(mut self, style: impl Into<<S::Theme as TextInputStyleSheet>::Style>) -> Self {
-    self.text_input = self.text_input.style(style);
+  pub fn style(
+    mut self,
+    style: impl Into<<S::Theme as TextInputStyleSheet>::Style>,
+  ) -> Self {
+    self.style = style.into();
     self
+  }
+
+  fn replace_actions<AA>(self, actions: AA) -> TextInputBuilder<'a, S, AA> {
+    let TextInputBuilder {
+      state,
+      id,
+      placeholder,
+      value,
+      is_secure,
+      font,
+      width,
+      padding,
+      size,
+      line_height,
+      icon,
+      style,
+      ..
+    } = self;
+    TextInputBuilder {
+      state,
+      id,
+      placeholder,
+      value,
+      is_secure,
+      font,
+      width,
+      padding,
+      size,
+      line_height,
+      actions,
+      icon,
+      style
+    }
+  }
+}
+impl<'a, S: AnyState<'a>> TextInputBuilder<'a, S, Passthrough> where
+  S::Renderer: TextRenderer,
+  S::Theme: TextInputStyleSheet
+{
+  /// Sets the message that should be produced when some text is typed into
+  /// the [`TextInput`].
+  ///
+  /// If this method is not called, the [`TextInput`] will be disabled.
+  pub fn on_input<F: Fn(String) -> S::Message + 'a>(self, on_input: F) -> TextInputBuilder<'a, S, Handle<'a, S::Message>> {
+    let actions = Handle {
+      on_input: Some(Box::new(on_input)),
+      on_paste: None,
+      on_submit: None,
+    };
+    self.replace_actions(actions)
+  }
+  /// Sets the message that should be produced when some text is pasted into
+  /// the [`TextInput`].
+  pub fn on_paste<F: Fn(String) -> S::Message + 'a>(self, on_paste: F) -> TextInputBuilder<'a, S, Handle<'a, S::Message>> {
+    let actions = Handle {
+      on_input: None,
+      on_paste: Some(Box::new(on_paste)),
+      on_submit: None,
+    };
+    self.replace_actions(actions)
+  }
+  /// Sets the message that should be produced when the [`TextInput`] is
+  /// focused and the enter key is pressed.
+  pub fn on_submit<F: Fn() -> S::Message + 'a>(self, on_submit: F) -> TextInputBuilder<'a, S, Handle<'a, S::Message>> {
+    let actions = Handle {
+      on_input: None,
+      on_paste: None,
+      on_submit: Some(Box::new(on_submit)),
+    };
+    self.replace_actions(actions)
+  }
+}
+impl<'a, S: AnyState<'a>, A> TextInputBuilder<'a, S, A> where
+  S::Renderer: TextRenderer,
+  S::Theme: TextInputStyleSheet,
+  A: TextInputActions<'a, S::Message, S::Renderer, Output=Element<'a, S::Message, S::Renderer>>,
+{
+  pub fn add(self) -> S::AddBuilder {
+    let element = self.actions.create(self.placeholder, self.value);
+    self.state.add(element)
   }
 }
 
-impl<'a, S: AnyState<'a>, OnInput> TextInputBuilder<'a, S, OnInput> where
-  S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet,
-  OnInput: Fn(String) -> S::Message + 'a,
+pub trait TextInputActions<'a, M, R> {
+  type Output;
+  fn create(self, placeholder: String, value: String) -> Self::Output;
+}
+
+pub struct Passthrough;
+impl<'a, M: 'a + Clone, R: TextRenderer + 'a> TextInputActions<'a, M, R> for Passthrough where
+  R::Theme: TextInputStyleSheet,
 {
-  pub fn add(self) -> S::AddBuilder {
-    let element = Element::new(self.text_input)
-      .map(move |input| (self.on_input)(input));
-    self.state.add(element)
+  type Output = Element<'a, M, R>;
+  fn create(self, placeholder: String, value: String) -> Self::Output {
+    let text_input = TextInput::new(&placeholder, &value);
+    Element::new(text_input)
   }
+}
+
+pub struct Handle<'a, M> {
+  on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
+  on_paste: Option<Box<dyn Fn(String) -> M + 'a>>,
+  on_submit: Option<Box<dyn Fn() -> M + 'a>>,
+}
+impl<'a, M: 'a, R: TextRenderer + 'a> TextInputActions<'a, M, R> for Handle<'a, M> where
+  R::Theme: TextInputStyleSheet,
+{
+  type Output = Element<'a, M, R>;
+  fn create(self, placeholder: String, value: String) -> Self::Output {
+    let mut text_input = TextInput::new(&placeholder, &value);
+    if self.on_input.is_some() {
+      text_input = text_input.on_input(TextInputAction::Input);
+    }
+    if self.on_paste.is_some() {
+      text_input = text_input.on_paste(TextInputAction::Paste);
+    }
+    if self.on_submit.is_some() {
+      text_input = text_input.on_submit(TextInputAction::Submit);
+    }
+    Element::new(text_input)
+      .map(move |m| match m {
+        TextInputAction::Input(input) => (self.on_input.as_ref().unwrap())(input),
+        TextInputAction::Paste(input) => (self.on_paste.as_ref().unwrap())(input),
+        TextInputAction::Submit => (self.on_submit.as_ref().unwrap())(),
+      })
+  }
+}
+
+#[derive(Clone)]
+pub enum TextInputAction {
+  Input(String),
+  Paste(String),
+  Submit,
 }
 
 
@@ -567,7 +689,7 @@ impl<'a, S: AnyState<'a>> ElementBuilder<'a, S, S::Message> {
 
 /// Builder for a [`Column`] widget.
 #[must_use]
-pub struct ColBuilder<S> {
+pub struct ColumnBuilder<S> {
   state: S,
   spacing: f32,
   padding: Padding,
@@ -576,7 +698,7 @@ pub struct ColBuilder<S> {
   max_width: f32,
   align_items: Alignment,
 }
-impl<'a, S> ColBuilder<S> {
+impl<'a, S> ColumnBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -643,7 +765,7 @@ impl<'a, S> ColBuilder<S> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, S: AnyState<'a>> ColBuilder<S> {
+impl<'a, S: AnyState<'a>> ColumnBuilder<S> {
   pub fn add(self) -> S::ConsumeBuilder {
     self.state.consume(|vec| {
       Column::with_children(vec)
