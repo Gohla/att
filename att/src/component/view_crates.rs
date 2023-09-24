@@ -40,7 +40,7 @@ impl ViewCrates {
       builder = builder.add_element(row_builder.take());
     }
     builder
-      .into_col().fill_width().add()
+      .into_column().fill_width().add()
       .into_scrollable().add()
       .take()
   }

@@ -126,7 +126,7 @@ impl Application for App {
       .into_row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)
       .element(self.view_crates.view(&self.model, &self.cache)).map(Message::ToViewCrates).add()
-      .into_col().spacing(10.0).padding(10).fill().add()
+      .into_column().spacing(10.0).padding(10).fill().add()
       .take();
 
     if self.adding_crate {

@@ -1,11 +1,12 @@
 use std::time::{Duration, Instant};
 
 use crates_io_api::{AsyncClient, Crate, CratesPage, CratesQuery, Sort};
-use iced::{Command, Element, futures, Length, Subscription, theme};
-use iced::widget::{Button, Column, row, Scrollable, Text, text_input};
+use iced::{Command, Element, futures, Subscription};
+use iced::widget::{Text, text_input};
 
 use crate::component::Update;
-use crate::widget::{ButtonEx, col, WidgetExt};
+use crate::widget::{col, WidgetExt};
+use crate::widget::builder::WidgetBuilder;
 
 /// Search for a crate on crates.io and add it.
 #[derive(Debug)]
@@ -73,6 +74,7 @@ impl AddCrate {
   }
 
   pub fn view(&self) -> Element<'_, Message> {
+    // let builder = WidgetBuilder::default()
     let search_term_input = text_input::TextInput::new("Crate search term", &self.search_term)
       .id(self.search_id.clone())
       .on_input(|s| s)
@@ -80,28 +82,22 @@ impl AddCrate {
 
     let crates = match &self.crates {
       Some(Ok(crates)) => {
-        // TODO: make a "column" builder, reserve `crates.crates.len()` elements.
-        let mut crate_rows = Vec::new();
+        let mut builder = WidgetBuilder::new_heap_with_capacity(crates.crates.len());
         for krate in &crates.crates {
-          // TODO: nest or make a "row" builder, reserve `5` elements.
-          let add_button = Button::new(Text::new("Add"))
-            .style(theme::Button::Positive)
-            .padding([0.0, 5.0, 0.0, 5.0])
-            .on_press_into_element(|| Message::AddCrate(krate.clone()));
-          let row = row![
-            Text::new(&krate.id).width(300),
-            Text::new(&krate.max_version).width(150),
-            Text::new(krate.updated_at.format("%Y-%m-%d").to_string()).width(150),
-            Text::new(format!("{}", krate.downloads)).width(100),
-            add_button,
-          ];
-          crate_rows.push(row.into())
+          let row = WidgetBuilder::default()
+            .text(&krate.id).width(300).add()
+            .text(&krate.max_version).width(150).add()
+            .text(krate.updated_at.format("%Y-%m-%d").to_string()).width(150).add()
+            .text(format!("{}", krate.downloads)).width(100).add()
+            .button("Add").positive_style().padding([0.0, 5.0]).add(|| Message::AddCrate(krate.clone()))
+            .into_row().add()
+            .take();
+          builder = builder.add_element(row);
         }
-        let column = Column::with_children(crate_rows)
-          .spacing(2.0)
-          .width(Length::Fill);
-        Scrollable::new(column)
-          .into_element()
+        builder
+          .into_column().spacing(2.0).fill_width().add()
+          .into_scrollable().add()
+          .take()
       }
       Some(Err(e)) => Text::new(format!("{:?}", e)).into_element(),
       _ => col![].into_element()

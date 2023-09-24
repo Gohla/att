@@ -116,7 +116,7 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   }
 
   /// Build a [`Column`] widget that will consume all elements in this builder.
-  pub fn into_col(self) -> ColBuilder<S> {
+  pub fn into_column(self) -> ColBuilder<S> {
     ColBuilder::new(self.0)
   }
   /// Build a [`Row`] widget that will consume all elements in this builder.
