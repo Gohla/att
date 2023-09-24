@@ -49,9 +49,12 @@ pub trait OneState<'a>: Types<'a> {
 // Stack implementation: full compile-time safety and zero-cost, but every operation changes the type of the state.
 // Inspirations:
 // - https://github.com/lloydmeta/frunk/blob/master/core/src/hlist.rs
-// - https://beachape.com/blog/2017/03/12/gentle-intro-to-type-level-recursion-in-Rust-from-zero-to-frunk-hlist-sculpting/
+//   - https://beachape.com/blog/2017/03/12/gentle-intro-to-type-level-recursion-in-Rust-from-zero-to-frunk-hlist-sculpting/
 // - https://github.com/grego/slist/blob/master/src/lib.rs
 // - https://rust-unofficial.github.io/too-many-lists/infinity-stack-allocated.html
+// - https://willcrichton.net/notes/type-level-programming/
+//   - https://willcrichton.net/notes/gats-are-hofs/
+//   - https://github.com/willcrichton/tyrade
 
 /// Algebraic stack list constructor.
 pub struct Cons<E, Rest>(E, Rest);
