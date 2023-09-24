@@ -100,6 +100,13 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   {
     TextBuilder::new(self.0, content.into())
   }
+  /// Adds a [`Text`] widget with `content` to this builder.
+  pub fn add_text(self, content: impl Into<Cow<'a, str>>) -> S::AddBuilder where
+    S::Renderer: TextRenderer,
+    S::Theme: TextStyleSheet
+  {
+    self.text(content).add()
+  }
   /// Build a [`TextInput`] widget from `content`.
   pub fn text_input(self, placeholder: impl AsRef<str>, value: impl AsRef<str>) -> TextInputBuilder<'a, S, ()> where
     S::Renderer: TextRenderer,
@@ -371,7 +378,7 @@ impl<'a, S: AnyState<'a>, OnInput> TextInputBuilder<'a, S, OnInput> where
   /// If this method is not called, the [`TextInput`] will be disabled.
   pub fn on_input<F: Fn(String) -> S::Message + 'a>(self, on_input: F) -> TextInputBuilder<'a, S, F> {
     let Self { state, text_input, .. } = self;
-    let text_input = text_input.on_input(|s|s);
+    let text_input = text_input.on_input(|s| s);
     TextInputBuilder { state, text_input, on_input }
   }
   // /// Sets the message that should be produced when some text is pasted into the [`TextInput`].

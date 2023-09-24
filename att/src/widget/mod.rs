@@ -36,17 +36,6 @@ impl<'a, R> ButtonEx<'a, R> for Button<'a, (), R> where
   }
 }
 
-/// Copy of column! macro, which the Rust plugin does not like due to the built-in column! macro.
-macro_rules! col {
-  () => (
-    iced::widget::Column::new()
-  );
-  ($($x:expr),+ $(,)?) => (
-    iced::widget::Column::with_children(vec![$(iced::Element::from($x)),+])
-  );
-}
-pub(crate) use col;
-
 /// [Bootstrap icon](https://icons.getbootstrap.com/) font. Only available after [`load_icon_font_command`] completes.
 pub const ICON_FONT: Font = Font::with_name("bootstrap-icons");
 

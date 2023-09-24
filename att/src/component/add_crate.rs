@@ -2,10 +2,9 @@ use std::time::{Duration, Instant};
 
 use crates_io_api::{AsyncClient, Crate, CratesPage, CratesQuery, Sort};
 use iced::{Command, Element, futures, Subscription};
-use iced::widget::{Text, text_input};
+use iced::widget::text_input;
 
 use crate::component::Update;
-use crate::widget::{col, WidgetExt};
 use crate::widget::builder::WidgetBuilder;
 
 /// Search for a crate on crates.io and add it.
@@ -95,8 +94,8 @@ impl AddCrate {
           .into_scrollable().add()
           .take()
       }
-      Some(Err(e)) => Text::new(format!("{:?}", e)).into_element(),
-      _ => col![].into_element()
+      Some(Err(e)) => WidgetBuilder::default().add_text(format!("{:?}", e)).take(),
+      _ => WidgetBuilder::default().add_space_fill_width().take()
     };
     builder
       .add_element(crates)
