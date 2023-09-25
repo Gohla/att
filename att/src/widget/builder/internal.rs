@@ -292,14 +292,14 @@ impl<'a, M> TextInputActions<'a, M> for TextInputPassthrough {
   type OnInput<F: Fn(String) -> M + 'a> = TextInputFunctions<'a, M, Yes<F>>;
   #[inline]
   fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::OnInput<F> {
-    TextInputFunctions { on_input: Yes(on_input), on_paste: None, on_submit: None }
+    TextInputFunctions::default().on_input(on_input)
   }
-  type OnPaste<F: Fn(String) -> M + 'a> = TextInputFunctions<'a, M, No<()>>;
+  type OnPaste<F: Fn(String) -> M + 'a> = TextInputFunctions<'a, M, ()>;
   #[inline]
   fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::OnPaste<F> {
     TextInputFunctions { on_paste: Some(Box::new(on_paste)), ..Default::default() }
   }
-  type OnSubmit<F: Fn() -> M + 'a> = TextInputFunctions<'a, M, No<()>>;
+  type OnSubmit<F: Fn() -> M + 'a> = TextInputFunctions<'a, M, ()>;
   #[inline]
   fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::OnSubmit<F> {
     TextInputFunctions { on_submit: Some(Box::new(on_submit)), ..Default::default() }
@@ -329,12 +329,10 @@ pub struct TextInputFunctions<'a, M, OnInput> {
   on_paste: Option<Box<dyn Fn(String) -> M + 'a>>,
   on_submit: Option<Box<dyn Fn() -> M + 'a>>,
 }
-impl<'a, M, OnInputF> Default for TextInputFunctions<'a, M, No<OnInputF>> {
-  fn default() -> Self { Self { on_input: No::default(), on_paste: None, on_submit: None } }
+impl<'a, M> Default for TextInputFunctions<'a, M, ()> {
+  fn default() -> Self { Self { on_input: (), on_paste: None, on_submit: None } }
 }
-impl<'a, M, OnInput: Maybe> TextInputActions<'a, M> for TextInputFunctions<'a, M, OnInput> where
-  OnInput::E: Fn(String) -> M + 'a,
-{
+impl<'a, M, OnInput: Maybe> TextInputActions<'a, M> for TextInputFunctions<'a, M, OnInput> {
   type OnInput<F: Fn(String) -> M + 'a> = TextInputFunctions<'a, M, Yes<F>>;
   #[inline]
   fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::OnInput<F> {
@@ -357,7 +355,6 @@ impl<'a, M, OnInput: Maybe> TextInputActions<'a, M> for TextInputFunctions<'a, M
 impl<'a, S: Types<'a>, OnInput: Maybe> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message, OnInput> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
-  OnInput::E: Fn(String) -> S::Message + 'a,
 {
   type Message = TextInputAction;
   #[inline]
@@ -392,26 +389,21 @@ pub enum TextInputAction {
 }
 
 pub struct Yes<E>(E);
-pub struct No<E>(PhantomData<E>);
-impl<E> Default for No<E> {
-  fn default() -> Self { Self(PhantomData::default()) }
-}
 trait Maybe: Sized {
   const IS_YES: bool;
   type E;
   fn into_option(self) -> Option<Self::E>;
+  fn unwrap(self) -> Self::E;
 }
 impl<E> Maybe for Yes<E> {
   const IS_YES: bool = true;
   type E = E;
-  fn into_option(self) -> Option<E> {
-    Some(self.0)
-  }
+  fn into_option(self) -> Option<Self::E> { Some(self.0) }
+  fn unwrap(self) -> Self::E { self.0 }
 }
-impl<E> Maybe for No<E> {
+impl Maybe for () {
   const IS_YES: bool = false;
-  type E = E;
-  fn into_option(self) -> Option<E> {
-    None
-  }
+  type E = ();
+  fn into_option(self) -> Option<Self::E> { None }
+  fn unwrap(self) -> Self::E { () }
 }

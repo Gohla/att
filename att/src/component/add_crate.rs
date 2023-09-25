@@ -74,7 +74,7 @@ impl AddCrate {
 
   pub fn view(&self) -> Element<'_, Message> {
     let builder = WidgetBuilder::default()
-      .text_input("Crate search term", &self.search_term).id(self.search_id.clone()).on_input(Message::SetSearchTerm).add();
+      .text_input("Crate search term", &self.search_term).id(self.search_id.clone()).on_paste(Message::SetSearchTerm).add();
     let crates = match &self.crates {
       Some(Ok(crates)) => {
         let mut builder = WidgetBuilder::new_heap_with_capacity(crates.crates.len());
