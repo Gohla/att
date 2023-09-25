@@ -314,7 +314,6 @@ impl<'a, S: Types<'a>> CreateTextInput<'a, S> for TextInputPassthrough where
 }
 
 pub struct TextInputFunctions<'a, M> {
-  // TODO: don't use boxed functions here, since iced will box them again?
   on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
   on_paste: Option<Box<dyn Fn(String) -> M + 'a>>,
   on_submit: Option<Box<dyn Fn() -> M + 'a>>,
