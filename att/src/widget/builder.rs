@@ -436,17 +436,17 @@ impl<'a, S: AnyState<'a>, A: TextInputActions<'a, S::Message>> TextInputBuilder<
   /// the [`TextInput`].
   ///
   /// If this method is not called, the [`TextInput`] will be disabled.
-  pub fn on_input<F: Fn(String) -> S::Message + 'a>(self, on_input: F) -> TextInputBuilder<'a, S, A::OnInput<F>> {
+  pub fn on_input<F: Fn(String) -> S::Message + 'a>(self, on_input: F) -> TextInputBuilder<'a, S, A::Change> {
     self.replace_actions(|actions| actions.on_input(on_input))
   }
   /// Sets the message that should be produced when some text is pasted into
   /// the [`TextInput`].
-  pub fn on_paste<F: Fn(String) -> S::Message + 'a>(self, on_paste: F) -> TextInputBuilder<'a, S, A::OnPaste<F>> {
+  pub fn on_paste<F: Fn(String) -> S::Message + 'a>(self, on_paste: F) -> TextInputBuilder<'a, S, A::Change> {
     self.replace_actions(|actions| actions.on_paste(on_paste))
   }
   /// Sets the message that should be produced when the [`TextInput`] is
   /// focused and the enter key is pressed.
-  pub fn on_submit<F: Fn() -> S::Message + 'a>(self, on_submit: F) -> TextInputBuilder<'a, S, A::OnSubmit<F>> {
+  pub fn on_submit<F: Fn() -> S::Message + 'a>(self, on_submit: F) -> TextInputBuilder<'a, S, A::Change> {
     self.replace_actions(|actions| actions.on_submit(on_submit))
   }
 
