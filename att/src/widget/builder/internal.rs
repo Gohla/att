@@ -266,12 +266,17 @@ impl<'a, M, R> OneState<'a> for Heap<Element<'a, M, R>> where
 
 // Text input internals
 
+/// Internal trait for type-safe updates of [`TextInput`] actions.
 pub trait TextInputActions<'a, M> {
-  type Change;
-  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::Change;
-  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::Change;
-  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::Change;
+  type OnInput<F: Fn(String) -> M + 'a>;
+  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::OnInput<F>;
+  type OnPaste<F: Fn(String) -> M + 'a>;
+  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::OnPaste<F>;
+  type OnSubmit<F: Fn() -> M + 'a>;
+  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::OnSubmit<F>;
 }
+
+/// Internal trait for type-safe construction of [`TextInput`] widgets.
 pub trait CreateTextInput<'a, S: Types<'a>> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
@@ -281,19 +286,22 @@ pub trait CreateTextInput<'a, S: Types<'a>> where
     F: FnOnce(TextInput<'a, Self::Message, S::Renderer>) -> TextInput<'a, Self::Message, S::Renderer>;
 }
 
+/// Do not set any [`TextInput`] actions, passing through the [`Clone`] requirement onto the application message type.
 pub struct TextInputPassthrough;
 impl<'a, M> TextInputActions<'a, M> for TextInputPassthrough {
-  type Change = TextInputFunctions<'a, M>;
+  type OnInput<F: Fn(String) -> M + 'a> = TextInputFunctions<'a, M, Yes<F>>;
   #[inline]
-  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::Change {
-    TextInputFunctions { on_input: Some(Box::new(on_input)), ..Default::default() }
+  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::OnInput<F> {
+    TextInputFunctions { on_input: Yes(on_input), on_paste: None, on_submit: None }
   }
+  type OnPaste<F: Fn(String) -> M + 'a> = TextInputFunctions<'a, M, No<()>>;
   #[inline]
-  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::Change {
+  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::OnPaste<F> {
     TextInputFunctions { on_paste: Some(Box::new(on_paste)), ..Default::default() }
   }
+  type OnSubmit<F: Fn() -> M + 'a> = TextInputFunctions<'a, M, No<()>>;
   #[inline]
-  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::Change {
+  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::OnSubmit<F> {
     TextInputFunctions { on_submit: Some(Box::new(on_submit)), ..Default::default() }
   }
 }
@@ -313,36 +321,43 @@ impl<'a, S: Types<'a>> CreateTextInput<'a, S> for TextInputPassthrough where
   }
 }
 
-pub struct TextInputFunctions<'a, M> {
-  // TODO: don't use boxed functions here, since iced will box them again?
-  on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
+/// Set one or more [`TextInput`] actions. Uses [`TextInputAction`] as the message type for the [`TextInput`]. After
+/// converting the [`TextInput`] into an [`Element`], maps [`TextInputAction`] to the application message type with
+/// given message producing functions.
+pub struct TextInputFunctions<'a, M, OnInput> {
+  on_input: OnInput,
   on_paste: Option<Box<dyn Fn(String) -> M + 'a>>,
   on_submit: Option<Box<dyn Fn() -> M + 'a>>,
 }
-impl<'a, M> Default for TextInputFunctions<'a, M> {
-  fn default() -> Self { Self { on_input: None, on_paste: None, on_submit: None } }
+impl<'a, M, OnInputF> Default for TextInputFunctions<'a, M, No<OnInputF>> {
+  fn default() -> Self { Self { on_input: No::default(), on_paste: None, on_submit: None } }
 }
-impl<'a, M> TextInputActions<'a, M> for TextInputFunctions<'a, M> {
-  type Change = Self;
+impl<'a, M, OnInput: Maybe> TextInputActions<'a, M> for TextInputFunctions<'a, M, OnInput> where
+  OnInput::E: Fn(String) -> M + 'a,
+{
+  type OnInput<F: Fn(String) -> M + 'a> = TextInputFunctions<'a, M, Yes<F>>;
   #[inline]
-  fn on_input<F: Fn(String) -> M + 'a>(mut self, on_input: F) -> Self::Change {
-    self.on_input = Some(Box::new(on_input));
-    self
+  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::OnInput<F> {
+    let Self { on_paste, on_submit, .. } = self;
+    TextInputFunctions { on_input: Yes(on_input), on_paste, on_submit }
   }
+  type OnPaste<F: Fn(String) -> M + 'a> = Self;
   #[inline]
-  fn on_paste<F: Fn(String) -> M + 'a>(mut self, on_paste: F) -> Self::Change {
+  fn on_paste<F: Fn(String) -> M + 'a>(mut self, on_paste: F) -> Self::OnPaste<F> {
     self.on_paste = Some(Box::new(on_paste));
     self
   }
+  type OnSubmit<F: Fn() -> M + 'a> = Self;
   #[inline]
-  fn on_submit<F: Fn() -> M + 'a>(mut self, on_submit: F) -> Self::Change {
+  fn on_submit<F: Fn() -> M + 'a>(mut self, on_submit: F) -> Self::OnSubmit<F> {
     self.on_submit = Some(Box::new(on_submit));
     self
   }
 }
-impl<'a, S: Types<'a>> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message> where
+impl<'a, S: Types<'a>, OnInput: Maybe> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message, OnInput> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
+  OnInput::E: Fn(String) -> S::Message + 'a,
 {
   type Message = TextInputAction;
   #[inline]
@@ -351,7 +366,7 @@ impl<'a, S: Types<'a>> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Mess
   {
     let mut text_input = TextInput::new(placeholder, value);
     text_input = modify(text_input);
-    if self.on_input.is_some() {
+    if OnInput::IS_YES {
       text_input = text_input.on_input(TextInputAction::Input);
     }
     if self.on_paste.is_some() {
@@ -360,9 +375,10 @@ impl<'a, S: Types<'a>> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Mess
     if self.on_submit.is_some() {
       text_input = text_input.on_submit(TextInputAction::Submit);
     }
+    let on_input = self.on_input.into_option();
     Element::new(text_input)
       .map(move |m| match m {
-        TextInputAction::Input(input) => (self.on_input.as_ref().unwrap())(input),
+        TextInputAction::Input(input) => (on_input.as_ref().unwrap())(input),
         TextInputAction::Paste(input) => (self.on_paste.as_ref().unwrap())(input),
         TextInputAction::Submit => (self.on_submit.as_ref().unwrap())(),
       })
@@ -373,4 +389,29 @@ pub enum TextInputAction {
   Input(String),
   Paste(String),
   Submit,
+}
+
+pub struct Yes<E>(E);
+pub struct No<E>(PhantomData<E>);
+impl<E> Default for No<E> {
+  fn default() -> Self { Self(PhantomData::default()) }
+}
+trait Maybe: Sized {
+  const IS_YES: bool;
+  type E;
+  fn into_option(self) -> Option<Self::E>;
+}
+impl<E> Maybe for Yes<E> {
+  const IS_YES: bool = true;
+  type E = E;
+  fn into_option(self) -> Option<E> {
+    Some(self.0)
+  }
+}
+impl<E> Maybe for No<E> {
+  const IS_YES: bool = false;
+  type E = E;
+  fn into_option(self) -> Option<E> {
+    None
+  }
 }
