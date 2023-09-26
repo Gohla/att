@@ -1,7 +1,5 @@
 #![allow(dead_code)]
 
-use std::rc::Rc;
-
 use iced::{Element, Event, Length, Point, Rectangle, Size, touch};
 use iced::advanced::{Clipboard, Layout, overlay, Renderer, renderer, Shell, Widget};
 use iced::advanced::layout::{Limits, Node};
@@ -32,7 +30,7 @@ pub struct TableBuilder<'a, T: 'a, M, R> {
 }
 
 impl<'a, T: 'a, M, R> TableBuilder<'a, T, M, R> {
-  pub fn new(rows: Rc<Vec<T>>) -> Self {
+  pub fn new(rows: &'a [T]) -> Self {
     let spacing = 0.0;
     let row_height = 16.0;
     Self {
@@ -338,7 +336,7 @@ struct TableRows<'a, T: 'a, M, R> where {
   //
   //       Ideally, we want to take something like `T: 'a, I: 'a + IntoIterator, I::Item=&'a mut T,
   //       I::IntoIter='a + ExactSizeIterator`.
-  rows: Rc<Vec<T>>,
+  rows: &'a [T],
 }
 
 impl<'a, T: 'a, M, R: Renderer> Widget<M, R> for TableRows<'a, T, M, R> {
