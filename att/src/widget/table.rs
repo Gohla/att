@@ -1,10 +1,9 @@
 #![allow(dead_code)]
 
-use std::cell::RefCell;
 use std::rc::Rc;
 
-use iced::{Element, Event, Length, overlay, Point, Rectangle, Size, touch};
-use iced::advanced::{Clipboard, Layout, Renderer, renderer, Shell, Widget};
+use iced::{Element, Event, Length, Point, Rectangle, Size, touch};
+use iced::advanced::{Clipboard, Layout, overlay, Renderer, renderer, Shell, Widget};
 use iced::advanced::layout::{Limits, Node};
 use iced::advanced::widget::{Operation, Tree};
 use iced::advanced::widget::tree;
@@ -33,7 +32,7 @@ pub struct TableBuilder<'a, T: 'a, M, R> {
 }
 
 impl<'a, T: 'a, M, R> TableBuilder<'a, T, M, R> {
-  pub fn new(rows: Rc<RefCell<Vec<T>>>) -> Self {
+  pub fn new(rows: Rc<Vec<T>>) -> Self {
     let spacing = 0.0;
     let row_height = 16.0;
     Self {
@@ -79,7 +78,7 @@ impl<'a, T: 'a, M, R> TableBuilder<'a, T, M, R> {
     self
   }
 
-  pub fn push_column<E>(mut self, width_fill_portion: u32, header: E, mapper: Box<dyn 'a + Fn(&mut T) -> Element<'_, M, R>>) -> Self where
+  pub fn push_column<E>(mut self, width_fill_portion: u32, header: E, mapper: Box<dyn Fn(&T) -> Element<'a, M, R> + 'a>) -> Self where
     E: Into<Element<'a, M, R>>
   {
     self.header.column_fill_portions.push(width_fill_portion);
@@ -91,8 +90,6 @@ impl<'a, T: 'a, M, R> TableBuilder<'a, T, M, R> {
 
   pub fn build(
     self,
-    // TODO: state is now in the Tree
-    rows_scrollable_state: &'a mut scrollable::State,
   ) -> Table<'a, M, R> where
     M: 'a,
     R: Renderer + 'a,
@@ -129,7 +126,15 @@ pub struct Table<'a, M, R: Renderer> where
   rows: Scrollable<'a, M, R>,
 }
 
-impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
+impl<'a, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Table<'a, M, R> where
+  R::Theme: scrollable::StyleSheet
+{
+  fn into(self) -> Element<'a, M, R> {
+    Element::new(self)
+  }
+}
+
+impl<'a, M: 'a, R: Renderer + 'a> Widget<M, R> for Table<'a, M, R> where
   R::Theme: scrollable::StyleSheet
 {
   fn state(&self) -> tree::State { tree::State::None }
@@ -143,12 +148,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
 
   fn width(&self) -> Length { self.width }
   fn height(&self) -> Length { self.height }
-  fn layout(
-    &self,
-    tree: &mut Tree,
-    renderer: &R,
-    limits: &Limits,
-  ) -> Node {
+  fn layout(&self, tree: &mut Tree, renderer: &R, limits: &Limits) -> Node {
     let limits = limits
       .max_width(self.max_width)
       .max_height(self.max_height)
@@ -167,12 +167,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
     let size = Size::new(rows_size.width.max(rows_size.width), header_size.height + self.spacing + rows_size.height);
     Node::with_children(size, vec![header_layout, rows_layout])
   }
-  fn overlay<'o>(
-    &'o mut self,
-    tree: &'o mut Tree,
-    layout: Layout<'_>,
-    renderer: &R,
-  ) -> Option<overlay::Element<'o, M, R>> {
+  fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout<'_>, renderer: &R) -> Option<overlay::Element<'o, M, R>> {
     let (header_tree, header_layout, rows_tree, rows_layout) = Self::unfold_tree_layout_mut(tree, layout);
     if let Some(header_overlay) = self.header.overlay(header_tree, header_layout, renderer) {
       return Some(header_overlay)
@@ -184,7 +179,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
     &mut self,
     tree: &mut Tree,
     event: Event,
-    layout: Layout<'_>,
+    layout: Layout,
     cursor: Cursor,
     renderer: &R,
     clipboard: &mut dyn Clipboard,
@@ -197,25 +192,12 @@ impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
     }
     self.rows.on_event(rows_tree, event, rows_layout, cursor, renderer, clipboard, shell, viewport)
   }
-  fn operate(
-    &self,
-    tree: &mut Tree,
-    layout: Layout<'_>,
-    renderer: &R,
-    operation: &mut dyn Operation<M>
-  ) {
+  fn operate(&self, tree: &mut Tree, layout: Layout, renderer: &R, operation: &mut dyn Operation<M>) {
     let (header_tree, header_layout, rows_tree, rows_layout) = Self::unfold_tree_layout_mut(tree, layout);
     self.header.operate(header_tree, header_layout, renderer, operation);
     self.rows.operate(rows_tree, rows_layout, renderer, operation);
   }
-  fn mouse_interaction(
-    &self,
-    tree: &Tree,
-    layout: Layout<'_>,
-    cursor: Cursor,
-    viewport: &Rectangle,
-    renderer: &R
-  ) -> Interaction {
+  fn mouse_interaction(&self, tree: &Tree, layout: Layout, cursor: Cursor, viewport: &Rectangle, renderer: &R) -> Interaction {
     let (header_tree, header_layout, rows_tree, rows_layout) = Self::unfold_tree_layout(tree, layout);
     let header_interaction = self.header.mouse_interaction(header_tree, header_layout, cursor, viewport, renderer);
     let rows_interaction = self.rows.mouse_interaction(rows_tree, rows_layout, cursor, viewport, renderer);
@@ -228,7 +210,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
     renderer: &mut R,
     theme: &R::Theme,
     style: &renderer::Style,
-    layout: Layout<'_>,
+    layout: Layout,
     cursor: Cursor,
     viewport: &Rectangle,
   ) {
@@ -238,7 +220,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
   }
 }
 
-impl<'a, M, R: Renderer> Table<'a, M, R> where
+impl<'a, M: 'a, R: Renderer + 'a> Table<'a, M, R> where
   R::Theme: scrollable::StyleSheet
 {
   fn header_widget(&self) -> &(dyn Widget<M, R> + 'a) {
@@ -252,18 +234,10 @@ impl<'a, M, R: Renderer> Table<'a, M, R> where
     let mut layout_iter = layout.children();
     (&tree.children[0], layout_iter.next().unwrap(), &tree.children[1], layout_iter.next().unwrap())
   }
-  fn unfold_tree_layout_mut<'t>(tree: &'t mut Tree, layout: Layout<'t>) -> (&'t mut Tree, Layout<'t>, &'t mut Tree, Layout<'t>) {
+  fn unfold_tree_layout_mut<'t, 'l>(tree: &'t mut Tree, layout: Layout<'l>) -> (&'t mut Tree, Layout<'l>, &'t mut Tree, Layout<'l>) {
+    let mut tree_iter = tree.children.iter_mut();
     let mut layout_iter = layout.children();
-    (&mut tree.children[0], layout_iter.next().unwrap(), &mut tree.children[1], layout_iter.next().unwrap())
-  }
-}
-
-
-impl<'a, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Table<'a, M, R> where
-  R::Theme: scrollable::StyleSheet
-{
-  fn into(self) -> Element<'a, M, R> {
-    Element::new(self)
+    (tree_iter.next().unwrap(), layout_iter.next().unwrap(), tree_iter.next().unwrap(), layout_iter.next().unwrap())
   }
 }
 
@@ -271,6 +245,12 @@ impl<'a, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Table<'a, M, R> wh
 //
 // Table header
 //
+
+impl<'a, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for TableHeader<'a, M, R> {
+  fn into(self) -> Element<'a, M, R> {
+    Element::new(self)
+  }
+}
 
 pub struct TableHeader<'a, M, R> {
   spacing: f32,
@@ -280,19 +260,45 @@ pub struct TableHeader<'a, M, R> {
 }
 
 impl<'a, M, R: Renderer> Widget<M, R> for TableHeader<'a, M, R> {
+  fn state(&self) -> tree::State { tree::State::None }
+  fn tag(&self) -> tree::Tag { tree::Tag::stateless() }
+  fn children(&self) -> Vec<Tree> {
+    self.headers.iter().map(Tree::new).collect()
+  }
+  fn diff(&self, tree: &mut Tree) {
+    tree.diff_children(&self.headers);
+  }
+
   fn width(&self) -> Length { Length::Fill }
   fn height(&self) -> Length { Length::Fill }
-
-  fn layout(
-    &self,
-    _tree: &mut Tree,
-    _renderer: &R,
-    limits: &Limits,
-  ) -> Node {
+  fn layout(&self, _tree: &mut Tree, _renderer: &R, limits: &Limits) -> Node {
     let total_width = limits.max().width;
-    let total_height = self.row_height as f32;
+    let total_height = self.row_height;
     let layouts = layout_columns(total_width, total_height, &self.column_fill_portions, self.spacing);
     Node::with_children(Size::new(total_width, total_height), layouts)
+  }
+  fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout, renderer: &R) -> Option<overlay::Element<'o, M, R>> {
+    overlay::from_children(&mut self.headers, tree, layout, renderer)
+  }
+
+  fn on_event(
+    &mut self,
+    tree: &mut Tree,
+    event: Event,
+    layout: Layout,
+    cursor: Cursor,
+    renderer: &R,
+    clipboard: &mut dyn Clipboard,
+    shell: &mut Shell<'_, M>,
+    viewport: &Rectangle,
+  ) -> Status {
+    on_event_to_children(&mut self.headers, tree, event, layout, cursor, renderer, clipboard, shell, viewport)
+  }
+  fn mouse_interaction(&self, tree: &Tree, layout: Layout, cursor: Cursor, viewport: &Rectangle, renderer: &R) -> Interaction {
+    mouse_interaction_to_children(&self.headers, tree, layout, cursor, viewport, renderer)
+  }
+  fn operate(&self, tree: &mut Tree, layout: Layout, renderer: &R, operation: &mut dyn Operation<M>) {
+    operate_to_children(&self.headers, tree, layout, renderer, operation)
   }
 
   fn draw(
@@ -301,7 +307,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for TableHeader<'a, M, R> {
     renderer: &mut R,
     theme: &R::Theme,
     style: &renderer::Style,
-    layout: Layout<'_>,
+    layout: Layout,
     cursor: Cursor,
     viewport: &Rectangle,
   ) {
@@ -312,75 +318,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for TableHeader<'a, M, R> {
       header.as_widget().draw(tree, renderer, theme, style, layout, cursor, viewport);
     }
   }
-
-  fn on_event(
-    &mut self,
-    tree: &mut Tree,
-    event: Event,
-    layout: Layout<'_>,
-    cursor: Cursor,
-    renderer: &R,
-    clipboard: &mut dyn Clipboard,
-    shell: &mut Shell<'_, M>,
-    viewport: &Rectangle,
-  ) -> Status {
-    self.headers
-      .iter_mut()
-      .zip(layout.children())
-      .map(|(header, layout)| {
-        header.as_widget().on_event(
-          tree,
-          event.clone(),
-          layout,
-          cursor,
-          renderer,
-          clipboard,
-          shell,
-          viewport
-        )
-      })
-      .fold(Status::Ignored, Status::merge)
-  }
-
-  fn overlay<'o>(
-    &'o mut self,
-    tree: &'o mut Tree,
-    layout: Layout<'_>,
-    renderer: &R,
-  ) -> Option<overlay::Element<'o, M, R>> {
-    self.headers
-      .iter_mut()
-      .zip(layout.children())
-      .filter_map(|(header, layout)| header.as_widget().overlay(tree, layout, renderer))
-      .next()
-  }
-
-  fn children(&self) -> Vec<Tree> {
-    todo!()
-  }
-  fn diff(&self, _tree: &mut Tree) {
-    todo!()
-  }
-  fn mouse_interaction(&self, _state: &Tree, _layout: Layout<'_>, _cursor: Cursor, _viewport: &Rectangle, _renderer: &R) -> Interaction {
-    todo!()
-  }
-  fn operate(&self, _state: &mut Tree, _layout: Layout<'_>, _renderer: &R, _operation: &mut dyn Operation<M>) {
-    todo!()
-  }
-  fn state(&self) -> tree::State {
-    todo!()
-  }
-  fn tag(&self) -> tree::Tag {
-    todo!()
-  }
 }
-
-impl<'a, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for TableHeader<'a, M, R> {
-  fn into(self) -> Element<'a, M, R> {
-    Element::new(self)
-  }
-}
-
 
 //
 // Table rows
@@ -390,7 +328,7 @@ struct TableRows<'a, T: 'a, M, R> where {
   spacing: f32,
   row_height: f32,
   column_fill_portions: Vec<u32>,
-  mappers: Vec<Box<dyn 'a + Fn(&mut T) -> Element<'_, M, R>>>,
+  mappers: Vec<Box<dyn Fn(&T) -> Element<'a, M, R> + 'a>>,
   // HACK: Store row data as `Rc<RefCell<Vec<T>>>` because I bashed my head in for hours trying to get the lifetimes
   //       and mutability right with a more general type. The `RefCell` is needed because the `mappers` want a `&mut` to
   //       row data, so that they can return mutable state such as button states, but we do not have `&mut self` in the
@@ -400,86 +338,48 @@ struct TableRows<'a, T: 'a, M, R> where {
   //
   //       Ideally, we want to take something like `T: 'a, I: 'a + IntoIterator, I::Item=&'a mut T,
   //       I::IntoIter='a + ExactSizeIterator`.
-  rows: Rc<RefCell<Vec<T>>>,
+  rows: Rc<Vec<T>>,
 }
 
 impl<'a, T: 'a, M, R: Renderer> Widget<M, R> for TableRows<'a, T, M, R> {
+  fn state(&self) -> tree::State { tree::State::None }
+  fn tag(&self) -> tree::Tag { tree::Tag::stateless() }
+  fn children(&self) -> Vec<Tree> { Vec::new() }
+  fn diff(&self, _tree: &mut Tree) {}
+
   fn width(&self) -> Length { Length::Fill }
   fn height(&self) -> Length { Length::Fill }
-
-  fn layout(
-    &self,
-    tree: &mut Tree,
-    renderer: &R,
-    limits: &Limits,
-  ) -> Node {
+  fn layout(&self, _tree: &mut Tree, _renderer: &R, limits: &Limits) -> Node {
     let max = limits.max();
     let total_width = max.width;
     // HACK: only lay out first row, because laying out the entire table becomes slow for larger tables. Reconstruct
     //       the layout of elements on-demand with `reconstruct_layout_node`.
-    let layouts = layout_columns(total_width, self.row_height as f32, &self.column_fill_portions, self.spacing);
-    let num_rows = self.rows.borrow().len();
+    let layouts = layout_columns(total_width, self.row_height, &self.column_fill_portions, self.spacing);
+    let num_rows = self.rows.len();
     let total_height = num_rows * self.row_height as usize + num_rows.saturating_sub(1) * self.spacing as usize;
     Node::with_children(Size::new(total_width, total_height as f32), layouts)
   }
 
-  fn draw(
-    &self,
-    tree: &Tree,
-    renderer: &mut R,
-    theme: &R::Theme,
-    style: &renderer::Style,
-    layout: Layout<'_>,
-    cursor: Cursor,
-    viewport: &Rectangle,
-  ) {
-    let absolute_position = layout.position();
-    let mut rows = self.rows.borrow_mut();
-    let num_rows = rows.len();
-    if num_rows == 0 {
-      return;
-    }
-    let last_row_index = num_rows.saturating_sub(1);
-    let row_height_plus_spacing = self.row_height + self.spacing;
-    let start_offset = (((viewport.y - absolute_position.y) / row_height_plus_spacing).floor() as usize).min(last_row_index);
-    // NOTE: + 1 on next line to ensure that last partially visible row is not culled.
-    let num_rows_to_render = ((viewport.height / row_height_plus_spacing).ceil() as usize + 1).min(num_rows);
-    let mut y_offset = absolute_position.y + start_offset as f32 * row_height_plus_spacing;
-    for (i, row) in rows.iter_mut().skip(start_offset).take(num_rows_to_render).enumerate() {
-      for (mapper, base_layout) in self.mappers.iter().zip(layout.children()) {
-        let element: Element<'_, M, R> = mapper(row);
-        // HACK: reconstruct layout of element to fix its y position based on `y_offset`.
-        // TODO: change this so that we don't have to call layout on the widget, or pass in the correct tree!
-        let node = reconstruct_layout_node(base_layout, y_offset, &element, tree, renderer);
-        let layout = Layout::new(&node);
-        element.as_widget().draw(tree, renderer, theme, style, layout, cursor, viewport);
-      }
-      y_offset += self.row_height;
-      if i < last_row_index { // Don't add spacing after last row.
-        y_offset += self.spacing;
-      }
-    }
-  }
-
   fn on_event(
     &mut self,
-    tree: &mut Tree,
+    _tree: &mut Tree,
     event: Event,
-    layout: Layout<'_>,
+    layout: Layout,
     cursor: Cursor,
     renderer: &R,
     clipboard: &mut dyn Clipboard,
     shell: &mut Shell<'_, M>,
     viewport: &Rectangle,
   ) -> Status {
+    // TODO: will event propagation actually do anything because currently "virtual" widgets have no state?
+
     let absolute_position = layout.position();
     let cursor_position = cursor.position();
     match &event {
       Event::Mouse(_) => {
         if let Some(cursor_position) = cursor_position {
           let mouse_position_relative = Point::new(cursor_position.x - absolute_position.x, cursor_position.y - absolute_position.y);
-          // TODO: pass in correct tree?
-          if self.propagate_event_to_element_at(tree, &event, mouse_position_relative, layout, cursor, renderer, clipboard, shell, viewport) == Status::Captured {
+          if self.propagate_event_to_element_at(&event, mouse_position_relative, layout, cursor, renderer, clipboard, shell, viewport) == Status::Captured {
             return Status::Captured;
           }
         }
@@ -492,8 +392,7 @@ impl<'a, T: 'a, M, R: Renderer> Widget<M, R> for TableRows<'a, T, M, R> {
           touch::Event::FingerLost { position, .. } => position,
         };
         let touch_position_relative = Point::new(touch_position_absolute.x - absolute_position.x, touch_position_absolute.y - absolute_position.y);
-        // TODO: pass in correct tree?
-        if self.propagate_event_to_element_at(tree, &event, touch_position_relative, layout, cursor, renderer, clipboard, shell, viewport) == Status::Captured {
+        if self.propagate_event_to_element_at(&event, touch_position_relative, layout, cursor, renderer, clipboard, shell, viewport) == Status::Captured {
           return Status::Captured;
         }
       }
@@ -502,32 +401,60 @@ impl<'a, T: 'a, M, R: Renderer> Widget<M, R> for TableRows<'a, T, M, R> {
     }
     Status::Ignored
   }
+  fn mouse_interaction(&self, _tree: &Tree, _layout: Layout, _cursor: Cursor, _viewport: &Rectangle, _renderer: &R) -> Interaction {
+    Interaction::default()
+    // TODO: implement
+  }
+  fn operate(&self, _tree: &mut Tree, _layout: Layout, _renderer: &R, _operation: &mut dyn Operation<M>) {
+    // TODO: will operation propagation actually do anything because currently "virtual" widgets have no state?
+    // TODO: implement
+  }
 
-  fn children(&self) -> Vec<Tree> {
-    todo!()
-  }
-  fn diff(&self, _tree: &mut Tree) {
-    todo!()
-  }
-  fn mouse_interaction(&self, _state: &Tree, _layout: Layout<'_>, _cursor: Cursor, _viewport: &Rectangle, _renderer: &R) -> Interaction {
-    todo!()
-  }
-  fn operate(&self, _state: &mut Tree, _layout: Layout<'_>, _renderer: &R, _operation: &mut dyn Operation<M>) {
-    todo!()
-  }
-  fn state(&self) -> tree::State {
-    todo!()
-  }
-  fn tag(&self) -> tree::Tag {
-    todo!()
+  fn draw(
+    &self,
+    _tree: &Tree,
+    renderer: &mut R,
+    theme: &R::Theme,
+    style: &renderer::Style,
+    layout: Layout,
+    cursor: Cursor,
+    viewport: &Rectangle,
+  ) {
+    let absolute_position = layout.position();
+    let num_rows = self.rows.len();
+    if num_rows == 0 {
+      return;
+    }
+    let last_row_index = num_rows.saturating_sub(1);
+    let row_height_plus_spacing = self.row_height + self.spacing;
+    let start_offset = (((viewport.y - absolute_position.y) / row_height_plus_spacing).floor() as usize).min(last_row_index);
+    // NOTE: + 1 on next line to ensure that last partially visible row is not culled.
+    let num_rows_to_render = ((viewport.height / row_height_plus_spacing).ceil() as usize + 1).min(num_rows);
+    let mut y_offset = absolute_position.y + start_offset as f32 * row_height_plus_spacing;
+    for (i, row) in self.rows.iter().skip(start_offset).take(num_rows_to_render).enumerate() {
+      for (mapper, base_layout) in self.mappers.iter().zip(layout.children()) {
+        let element: Element<'_, M, R> = mapper(row);
+        // HACK: reconstruct layout of element to fix its y position based on `y_offset`.
+        // HACK: construct new tree from widget and pass it down.
+        // TODO: passing in a new Tree every time causes widgets inside the table to not keep any state!
+        let mut tree = Tree::new(&element);
+        let node = reconstruct_layout_node(base_layout, y_offset, &element, &mut tree, renderer);
+        let layout = Layout::new(&node);
+        element.as_widget().draw(&tree, renderer, theme, style, layout, cursor, viewport);
+      }
+      y_offset += self.row_height;
+      if i < last_row_index { // Don't add spacing after last row.
+        y_offset += self.spacing;
+      }
+    }
   }
 }
 
 impl<'a, T: 'a, M, R: Renderer> TableRows<'a, T, M, R> {
   fn get_row_index_at(&self, y: f32) -> Option<usize> {
     if y < 0f32 { return None; } // Out of bounds
-    let spacing = self.spacing as f32;
-    let row_height = self.row_height as f32;
+    let spacing = self.spacing;
+    let row_height = self.row_height;
     let row_height_plus_spacing = row_height + spacing;
     let row_offset = (y / row_height_plus_spacing).ceil() as usize;
     let row_offset_without_spacing = (row_offset as f32 * row_height_plus_spacing) - spacing;
@@ -539,7 +466,7 @@ impl<'a, T: 'a, M, R: Renderer> TableRows<'a, T, M, R> {
   }
 
   fn get_column_index_and_layout_at<'l>(&self, x: f32, layout: &Layout<'l>) -> Option<(usize, Layout<'l>)> {
-    let spacing = self.spacing as f32;
+    let spacing = self.spacing;
     let mut offset = 0f32;
     for (column_index, column_layout) in layout.children().enumerate() {
       if x < offset { return None; } // On column spacing or out of bounds
@@ -552,10 +479,9 @@ impl<'a, T: 'a, M, R: Renderer> TableRows<'a, T, M, R> {
 
   fn propagate_event_to_element_at(
     &mut self,
-    tree: &mut Tree,
     event: &Event,
     point: Point,
-    layout: Layout<'_>,
+    layout: Layout,
     cursor: Cursor,
     renderer: &R,
     clipboard: &mut dyn Clipboard,
@@ -563,20 +489,22 @@ impl<'a, T: 'a, M, R: Renderer> TableRows<'a, T, M, R> {
     viewport: &Rectangle,
   ) -> Status {
     let absolute_position = layout.position();
-    let row_height_plus_spacing = self.row_height as f32 + self.spacing as f32;
+    let row_height_plus_spacing = self.row_height + self.spacing;
     let column_index_and_layout = self.get_column_index_and_layout_at(point.x, &layout);
     let row_index = self.get_row_index_at(point.y);
     if let (Some((column_index, base_layout)), Some(row_index)) = (column_index_and_layout, row_index) {
       let mapper = self.mappers.get(column_index);
-      let mut rows_borrow = self.rows.borrow_mut();
-      let row = rows_borrow.get_mut(row_index);
+      let row = self.rows.get(row_index);
       if let (Some(mapper), Some(row)) = (mapper, row) {
         let mut element = mapper(row);
         let y_offset = absolute_position.y + row_index as f32 * row_height_plus_spacing;
         // HACK: reconstruct layout of element to fix its y position based on `y_offset`.
-        let node = reconstruct_layout_node(base_layout, y_offset, &element, tree, renderer);
+        // HACK: construct new tree from widget and pass it down.
+        // TODO: passing in a new Tree every time causes widgets inside the table to not keep any state!
+        let mut tree = Tree::new(&element);
+        let node = reconstruct_layout_node(base_layout, y_offset, &element, &mut tree, renderer);
         let layout = Layout::new(&node);
-        element.as_widget().on_event(tree, event.clone(), layout, cursor, renderer, clipboard, shell, viewport)
+        element.as_widget_mut().on_event(&mut tree, event.clone(), layout, cursor, renderer, clipboard, shell, viewport)
       } else {
         Status::Ignored
       }
@@ -613,14 +541,14 @@ fn layout_columns(total_width: f32, row_height: f32, width_fill_portions: &Vec<u
     layouts.push(layout);
     x_offset += width;
     if i < last_column_index { // Don't add spacing after last column.
-      x_offset += spacing as f32;
+      x_offset += spacing;
     }
   }
   layouts
 }
 
 fn reconstruct_layout_node<M, R: Renderer>(
-  base_layout: Layout<'_>,
+  base_layout: Layout,
   y_offset: f32,
   element: &Element<'_, M, R>,
   tree: &mut Tree,
@@ -635,4 +563,71 @@ fn reconstruct_layout_node<M, R: Renderer>(
   let mut node = element.as_widget().layout(tree, renderer, &limits);
   node.move_to(Point::new(bounds.x, y_offset));
   node
+}
+
+
+//
+// Common child widget handling
+//
+
+fn on_event_to_children<'a, M, R: Renderer>(
+  children: &mut [Element<'a, M, R>],
+  tree: &mut Tree,
+  event: Event,
+  layout: Layout,
+  cursor: Cursor,
+  renderer: &R,
+  clipboard: &mut dyn Clipboard,
+  shell: &mut Shell<'_, M>,
+  viewport: &Rectangle,
+) -> Status {
+  children.iter_mut()
+    .zip(&mut tree.children)
+    .zip(layout.children())
+    .map(|((child, tree), layout)| {
+      child.as_widget_mut().on_event(
+        tree,
+        event.clone(),
+        layout,
+        cursor,
+        renderer,
+        clipboard,
+        shell,
+        viewport
+      )
+    })
+    .fold(Status::Ignored, Status::merge)
+}
+fn mouse_interaction_to_children<'a, M, R: Renderer>(
+  children: &[Element<'a, M, R>],
+  tree: &Tree,
+  layout: Layout,
+  cursor: Cursor,
+  viewport: &Rectangle,
+  renderer: &R
+) -> Interaction {
+  children.iter()
+    .zip(&tree.children)
+    .zip(layout.children())
+    .map(|((child, tree), layout)| {
+      child.as_widget().mouse_interaction(tree, layout, cursor, viewport, renderer)
+    })
+    .max()
+    .unwrap_or_default()
+}
+fn operate_to_children<'a, M, R: Renderer>(
+  children: &[Element<'a, M, R>],
+  tree: &mut Tree,
+  layout: Layout,
+  renderer: &R,
+  operation: &mut dyn Operation<M>
+) {
+  operation.container(None, layout.bounds(), &mut |operation| {
+    children.iter()
+      .zip(&mut tree.children)
+      .zip(layout.children())
+      .for_each(|((child, state), layout)| {
+        child.as_widget().operate(state, layout, renderer, operation);
+      });
+  });
 }
