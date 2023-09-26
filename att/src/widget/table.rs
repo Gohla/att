@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
-use std::cell::RefCell;
+use std::cell::{RefCell, RefMut};
+use std::collections::HashMap;
+use std::ops::Range;
+
 use iced::{Element, Event, Length, Point, Rectangle, Size, touch};
 use iced::advanced::{Clipboard, Layout, overlay, Renderer, renderer, Shell, Widget};
 use iced::advanced::layout::{Limits, Node};
@@ -8,7 +11,7 @@ use iced::advanced::widget::{Operation, Tree};
 use iced::advanced::widget::tree;
 use iced::event::Status;
 use iced::mouse::{Cursor, Interaction};
-use iced::widget::scrollable;
+use iced::widget::{scrollable, Scrollable};
 
 //
 // Table builder
@@ -20,17 +23,17 @@ use iced::widget::scrollable;
 //       rows multiple times though, but this is possible because it is `Clone`. It might be a little bit slow because
 //       `skip` on `Iterator` could be slow.
 
-pub struct TableBuilder<'a, F, M, R> {
+pub struct TableBuilder<'a, M, R, F> {
   width: Length,
   height: Length,
   max_width: f32,
   max_height: f32,
   spacing: f32,
   header: TableHeader<'a, M, R>,
-  rows: TableRows<F>,
+  rows: TableRows<'a, M, R, F>,
 }
 
-impl<'a, F, M, R> TableBuilder<'a, F, M, R> where
+impl<'a, M, R, F> TableBuilder<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
   pub fn new(num_rows: usize, mapper: F) -> Self {
@@ -43,7 +46,7 @@ impl<'a, F, M, R> TableBuilder<'a, F, M, R> where
       max_height: f32::INFINITY,
       spacing,
       header: TableHeader { spacing, row_height, width_fill_portions: Vec::new(), headers: Vec::new() },
-      rows: TableRows { spacing, row_height, width_fill_portions: Vec::new(), num_rows, mapper, tree_cache: RefCell::new(Vec::new()) },
+      rows: TableRows { spacing, row_height, width_fill_portions: Vec::new(), num_rows, mapper, element_cache: ElementCache::default() },
     }
   }
 
@@ -93,9 +96,7 @@ impl<'a, F, M, R> TableBuilder<'a, F, M, R> where
     R: Renderer + 'a,
     R::Theme: scrollable::StyleSheet
   {
-    // TODO: enable scrollable again.
-    // let rows = Scrollable::new(self.rows);
-    let rows = self.rows;
+    let rows = Scrollable::new(self.rows);
     Table {
       width: self.width,
       height: self.height,
@@ -315,28 +316,39 @@ impl<'a, M, R: Renderer> Widget<M, R> for TableHeader<'a, M, R> {
 // Table rows
 //
 
-struct TableRows<F> {
+struct TableRows<'a, M, R, F> {
   spacing: f32,
   row_height: f32,
   width_fill_portions: Vec<u32>,
   num_rows: usize,
   mapper: F,
-  tree_cache: RefCell<Vec<Tree>>,
+  element_cache: ElementCache<'a, M, R>,
 }
 
-impl<'a, F, M, R: Renderer> Into<Element<'a, M, R>> for TableRows<F> where
-  F: Fn(usize, usize) -> Element<'a, M, R> + 'a
-{
-  fn into(self) -> Element<'a, M, R> {
-    Element::new(self)
+struct ElementCache<'a, M, R>(RefCell<HashMap<(usize, usize), Element<'a, M, R>>>);
+impl<'a, M, R> Default for ElementCache<'a, M, R> {
+  fn default() -> Self { Self(RefCell::default()) }
+}
+
+#[derive(Default)]
+struct State(RefCell<InnerState>);
+impl State {
+  pub fn borrow_mut(&self) -> RefMut<'_, InnerState> {
+    self.0.borrow_mut()
   }
 }
 
-impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<F> where
+#[derive(Default)]
+struct InnerState {
+  trees: HashMap<(usize, usize), Tree>,
+  previous_visible_rows: Range<usize>,
+}
+
+impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
-  fn state(&self) -> tree::State { tree::State::None }
-  fn tag(&self) -> tree::Tag { tree::Tag::stateless() }
+  fn tag(&self) -> tree::Tag { tree::Tag::of::<State>() }
+  fn state(&self) -> tree::State { tree::State::Some(Box::new(State::default())) }
   fn children(&self) -> Vec<Tree> { Vec::new() }
   fn diff(&self, _tree: &mut Tree) {}
 
@@ -404,7 +416,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<F> where
 
   fn draw(
     &self,
-    _tree: &Tree,
+    tree: &Tree,
     renderer: &mut R,
     theme: &R::Theme,
     style: &renderer::Style,
@@ -412,10 +424,8 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<F> where
     cursor: Cursor,
     viewport: &Rectangle,
   ) {
-    // TODO: cache trees in (hash)map with (row_index, column_index) as index. Update this every time we draw based on viewport!
-
-    let mut tree_cache = self.tree_cache.borrow_mut();
-    tree_cache.clear();
+    let mut state = tree.state.downcast_ref::<State>().borrow_mut();
+    state.trees.clear();
 
     let absolute_position = layout.position();
     if self.num_rows == 0 {
@@ -442,7 +452,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<F> where
         let node = reconstruct_layout_node(base_layout.bounds(), y_offset, &element, &mut tree, renderer);
         let layout = Layout::new(&node);
         element.as_widget().draw(&tree, renderer, theme, style, layout, cursor, viewport);
-        tree_cache.push(tree);
+        state.trees.insert((row_index, column_index), tree);
       }
       y_offset += self.row_height;
       if row_index < last_row_index { // Don't add spacing after last row.
@@ -452,7 +462,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<F> where
   }
 }
 
-impl<'a, F, M, R: Renderer> TableRows<F> where
+impl<'a, F, M, R: Renderer> TableRows<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
   fn get_row_index_at(&self, y: f32) -> Option<usize> {
@@ -510,6 +520,14 @@ impl<'a, F, M, R: Renderer> TableRows<F> where
     } else {
       Status::Ignored
     }
+  }
+}
+
+impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for TableRows<'a, M, R, F> where
+  F: Fn(usize, usize) -> Element<'a, M, R> + 'a
+{
+  fn into(self) -> Element<'a, M, R> {
+    Element::new(self)
   }
 }
 

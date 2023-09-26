@@ -1,4 +1,4 @@
-use iced::{Color, Element};
+use iced::Element;
 
 use crate::app::{Cache, Model};
 use crate::widget::builder::WidgetBuilder;
@@ -46,27 +46,5 @@ impl ViewCrates {
       .push_column(1, "")
       .build();
     Element::new(table)
-      .explain(Color::BLACK)
-    // let mut builder = WidgetBuilder::new_heap_with_capacity(model.blessed_crate_ids.len());
-    // for id in &model.blessed_crate_ids {
-    //   let mut row_builder = WidgetBuilder::default()
-    //     .text(id).width(300).add();
-    //   if let Some(data) = cache.crate_data.get(id) {
-    //     row_builder = row_builder
-    //       .text(&data.max_version).width(150).add()
-    //       .text(data.updated_at.format("%Y-%m-%d").to_string()).width(150).add()
-    //       .text(format!("{}", data.downloads)).width(100).add()
-    //       .button("Remove").destructive_style().padding([1.0, 5.0]).add(|| Message::RemoveCrate(id.clone()))
-    //       .into_row().add()
-    //   } else {
-    //     row_builder = row_builder
-    //       .into_row().add()
-    //   }
-    //   builder = builder.add_element(row_builder.take());
-    // }
-    // builder
-    //   .into_column().fill_width().add()
-    //   .into_scrollable().add()
-    //   .take()
   }
 }
