@@ -7,7 +7,7 @@ use iced::{Element, Event, Length, overlay, Point, Rectangle, Size, touch};
 use iced::advanced::{Clipboard, Layout, Renderer, renderer, Shell, Widget};
 use iced::advanced::layout::{Limits, Node};
 use iced::advanced::widget::{Operation, Tree};
-use iced::advanced::widget::tree::{State, Tag};
+use iced::advanced::widget::tree;
 use iced::event::Status;
 use iced::mouse::{Cursor, Interaction};
 use iced::widget::{scrollable, Scrollable};
@@ -91,6 +91,7 @@ impl<'a, T: 'a, M, R> TableBuilder<'a, T, M, R> {
 
   pub fn build(
     self,
+    // TODO: state is now in the Tree
     rows_scrollable_state: &'a mut scrollable::State,
   ) -> Table<'a, M, R> where
     M: 'a,
@@ -114,8 +115,9 @@ impl<'a, T: 'a, M, R> TableBuilder<'a, T, M, R> {
 // Table widget
 //
 
+/// TODO: could this entire table widget just be replaced by a column with header and rows?
+
 pub struct Table<'a, M, R: Renderer> where
-  R: Renderer,
   R::Theme: scrollable::StyleSheet,
 {
   width: Length,
@@ -130,10 +132,17 @@ pub struct Table<'a, M, R: Renderer> where
 impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
   R::Theme: scrollable::StyleSheet
 {
+  fn state(&self) -> tree::State { tree::State::None }
+  fn tag(&self) -> tree::Tag { tree::Tag::stateless() }
+  fn children(&self) -> Vec<Tree> {
+    vec![Tree::new(self.header_widget()), Tree::new(self.row_widget())]
+  }
+  fn diff(&self, tree: &mut Tree) {
+    tree.diff_children(&[self.header_widget(), self.row_widget()])
+  }
+
   fn width(&self) -> Length { self.width }
-
   fn height(&self) -> Length { self.height }
-
   fn layout(
     &self,
     tree: &mut Tree,
@@ -158,21 +167,17 @@ impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
     let size = Size::new(rows_size.width.max(rows_size.width), header_size.height + self.spacing + rows_size.height);
     Node::with_children(size, vec![header_layout, rows_layout])
   }
-
-  fn draw(
-    &self,
-    tree: &Tree,
-    renderer: &mut R,
-    theme: &R::Theme,
-    style: &renderer::Style,
+  fn overlay<'o>(
+    &'o mut self,
+    tree: &'o mut Tree,
     layout: Layout<'_>,
-    cursor: Cursor,
-    viewport: &Rectangle,
-  ) {
-    if let (Some(header_layout), Some(rows_layout)) = unfold_table_layout(layout) {
-      self.header.draw(tree, renderer, theme, style, header_layout, cursor, viewport);
-      self.rows.draw(tree, renderer, theme, style, rows_layout, cursor, viewport);
+    renderer: &R,
+  ) -> Option<overlay::Element<'o, M, R>> {
+    let (header_tree, header_layout, rows_tree, rows_layout) = Self::unfold_tree_layout_mut(tree, layout);
+    if let Some(header_overlay) = self.header.overlay(header_tree, header_layout, renderer) {
+      return Some(header_overlay)
     }
+    self.rows.overlay(rows_tree, rows_layout, renderer)
   }
 
   fn on_event(
@@ -186,56 +191,73 @@ impl<'a, M, R: Renderer> Widget<M, R> for Table<'a, M, R> where
     shell: &mut Shell<'_, M>,
     viewport: &Rectangle,
   ) -> Status {
-    if let (Some(header_layout), Some(rows_layout)) = unfold_table_layout(layout) {
-      let header_status = self.header.on_event(tree, event.clone(), header_layout, cursor, renderer, clipboard, shell, viewport);
-      if header_status == Status::Captured { return Status::Captured; }
-      self.rows.on_event(tree, event, rows_layout, cursor, renderer, clipboard, shell, viewport)
-    } else {
-      Status::Ignored
+    let (header_tree, header_layout, rows_tree, rows_layout) = Self::unfold_tree_layout_mut(tree, layout);
+    if let Status::Captured = self.header.on_event(header_tree, event.clone(), header_layout, cursor, renderer, clipboard, shell, viewport) {
+      return Status::Captured;
     }
+    self.rows.on_event(rows_tree, event, rows_layout, cursor, renderer, clipboard, shell, viewport)
   }
-
-  fn overlay<'o>(
-    &'o mut self,
-    tree: &'o mut Tree,
+  fn operate(
+    &self,
+    tree: &mut Tree,
     layout: Layout<'_>,
     renderer: &R,
-  ) -> Option<overlay::Element<'o, M, R>> {
-    if let (Some(header_layout), Some(rows_layout)) = unfold_table_layout(layout) {
-      let header_overlay = self.header.overlay(tree, header_layout, renderer);
-      if header_overlay.is_some() {
-        return header_overlay;
-      }
-      self.rows.overlay(tree, rows_layout, renderer)
-    } else {
-      None
-    }
+    operation: &mut dyn Operation<M>
+  ) {
+    let (header_tree, header_layout, rows_tree, rows_layout) = Self::unfold_tree_layout_mut(tree, layout);
+    self.header.operate(header_tree, header_layout, renderer, operation);
+    self.rows.operate(rows_tree, rows_layout, renderer, operation);
+  }
+  fn mouse_interaction(
+    &self,
+    tree: &Tree,
+    layout: Layout<'_>,
+    cursor: Cursor,
+    viewport: &Rectangle,
+    renderer: &R
+  ) -> Interaction {
+    let (header_tree, header_layout, rows_tree, rows_layout) = Self::unfold_tree_layout(tree, layout);
+    let header_interaction = self.header.mouse_interaction(header_tree, header_layout, cursor, viewport, renderer);
+    let rows_interaction = self.rows.mouse_interaction(rows_tree, rows_layout, cursor, viewport, renderer);
+    header_interaction.max(rows_interaction)
   }
 
-  fn children(&self) -> Vec<Tree> {
-    todo!()
-  }
-  fn diff(&self, _tree: &mut Tree) {
-    todo!()
-  }
-  fn mouse_interaction(&self, _state: &Tree, _layout: Layout<'_>, _cursor: Cursor, _viewport: &Rectangle, _renderer: &R) -> Interaction {
-    todo!()
-  }
-  fn operate(&self, _state: &mut Tree, _layout: Layout<'_>, _renderer: &R, _operation: &mut dyn Operation<M>) {
-    todo!()
-  }
-  fn state(&self) -> State {
-    todo!()
-  }
-  fn tag(&self) -> Tag {
-    todo!()
+  fn draw(
+    &self,
+    tree: &Tree,
+    renderer: &mut R,
+    theme: &R::Theme,
+    style: &renderer::Style,
+    layout: Layout<'_>,
+    cursor: Cursor,
+    viewport: &Rectangle,
+  ) {
+    let (header_tree, header_layout, rows_tree, rows_layout) = Self::unfold_tree_layout(tree, layout);
+    self.header.draw(header_tree, renderer, theme, style, header_layout, cursor, viewport);
+    self.rows.draw(rows_tree, renderer, theme, style, rows_layout, cursor, viewport);
   }
 }
 
-fn unfold_table_layout(layout: Layout<'_>) -> (Option<Layout<'_>>, Option<Layout<'_>>) {
-  let mut layout_iter = layout.children();
-  (layout_iter.next(), layout_iter.next())
+impl<'a, M, R: Renderer> Table<'a, M, R> where
+  R::Theme: scrollable::StyleSheet
+{
+  fn header_widget(&self) -> &(dyn Widget<M, R> + 'a) {
+    &self.header as &(dyn Widget<M, R> + 'a)
+  }
+  fn row_widget(&self) -> &(dyn Widget<M, R> + 'a) {
+    &self.rows as &(dyn Widget<M, R> + 'a)
+  }
+
+  fn unfold_tree_layout<'t>(tree: &'t Tree, layout: Layout<'t>) -> (&'t Tree, Layout<'t>, &'t Tree, Layout<'t>) {
+    let mut layout_iter = layout.children();
+    (&tree.children[0], layout_iter.next().unwrap(), &tree.children[1], layout_iter.next().unwrap())
+  }
+  fn unfold_tree_layout_mut<'t>(tree: &'t mut Tree, layout: Layout<'t>) -> (&'t mut Tree, Layout<'t>, &'t mut Tree, Layout<'t>) {
+    let mut layout_iter = layout.children();
+    (&mut tree.children[0], layout_iter.next().unwrap(), &mut tree.children[1], layout_iter.next().unwrap())
+  }
 }
+
 
 impl<'a, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Table<'a, M, R> where
   R::Theme: scrollable::StyleSheet
@@ -345,10 +367,10 @@ impl<'a, M, R: Renderer> Widget<M, R> for TableHeader<'a, M, R> {
   fn operate(&self, _state: &mut Tree, _layout: Layout<'_>, _renderer: &R, _operation: &mut dyn Operation<M>) {
     todo!()
   }
-  fn state(&self) -> State {
+  fn state(&self) -> tree::State {
     todo!()
   }
-  fn tag(&self) -> Tag {
+  fn tag(&self) -> tree::Tag {
     todo!()
   }
 }
@@ -493,10 +515,10 @@ impl<'a, T: 'a, M, R: Renderer> Widget<M, R> for TableRows<'a, T, M, R> {
   fn operate(&self, _state: &mut Tree, _layout: Layout<'_>, _renderer: &R, _operation: &mut dyn Operation<M>) {
     todo!()
   }
-  fn state(&self) -> State {
+  fn state(&self) -> tree::State {
     todo!()
   }
-  fn tag(&self) -> Tag {
+  fn tag(&self) -> tree::Tag {
     todo!()
   }
 }
