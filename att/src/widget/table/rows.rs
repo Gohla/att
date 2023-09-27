@@ -13,21 +13,48 @@ use iced::mouse::{Cursor, Interaction};
 use crate::widget::table::layout_columns;
 
 pub struct TableRows<'a, M, R, F> {
-  pub spacing: f32,
-  pub row_height: f32,
+  spacing: f32,
+
+  row_height: f32,
+  row_height_plus_spacing: f32,
   num_rows: usize,
+  last_row_index: usize,
+
+  column_fill_portions: Vec<u32>,
   num_columns: usize,
+
   cell_to_element: F,
-  width_fill_portions: Vec<u32>,
   element_state: RefCell<ElementState<'a, M, R>>,
 }
 impl<'a, M, R, F> TableRows<'a, M, R, F> {
   pub fn new(spacing: f32, row_height: f32, num_rows: usize, cell_to_element: F) -> Self {
-    Self { spacing, row_height, num_rows, num_columns: 0, cell_to_element, width_fill_portions: Vec::new(), element_state: Default::default() }
+    Self {
+      spacing,
+
+      row_height,
+      row_height_plus_spacing: row_height + spacing,
+      num_rows,
+      last_row_index: num_rows.saturating_sub(1),
+
+      num_columns: 0,
+      column_fill_portions: Vec::new(),
+
+      cell_to_element,
+      element_state: Default::default()
+    }
   }
 
-  pub fn push_column(&mut self, width_fill_portion: u32) {
-    self.width_fill_portions.push(width_fill_portion);
+  pub fn spacing(&mut self, spacing: f32) {
+    self.spacing = spacing;
+    self.row_height_plus_spacing = self.row_height + spacing;
+  }
+  pub fn row_height(&mut self, row_height: f32) {
+    self.row_height = row_height;
+    self.row_height_plus_spacing = row_height + self.spacing;
+  }
+
+  pub fn push_column(&mut self, column_fill_portion: u32) {
+    self.column_fill_portions.push(column_fill_portion);
     self.num_columns += 1;
   }
 }
@@ -81,13 +108,12 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
   fn width(&self) -> Length { Length::Fill }
   fn height(&self) -> Length { Length::Fill }
   fn layout(&self, _tree: &mut Tree, _renderer: &R, limits: &Limits) -> Node {
-    let limit_max = limits.max();
-    let total_width = limit_max.width;
+    let available_width = limits.max().width;
     // HACK: only lay out first row, because laying out the entire table becomes slow for larger tables. Reconstruct
     //       the layout of elements on-demand with `reconstruct_layout_node`.
-    let layouts = layout_columns::<M, R>(total_width, self.row_height, self.spacing, &self.width_fill_portions, None);
+    let layouts = layout_columns::<M, R>(available_width, self.row_height, self.spacing, &self.column_fill_portions, None);
     let total_height = self.num_rows * self.row_height as usize + self.num_rows.saturating_sub(1) * self.spacing as usize;
-    Node::with_children(Size::new(total_width, total_height as f32), layouts)
+    Node::with_children(Size::new(available_width, total_height as f32), layouts)
   }
 
   fn draw(
@@ -106,19 +132,24 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
 
     let mut element_state = self.element_state.borrow_mut();
     let mut tree_state = tree.state.downcast_ref::<RefCell<TreeState>>().borrow_mut();
-    let absolute_position = layout.position();
+
+    let absolute_y = layout.position().y;
+    let relative_y = viewport.y - absolute_y;
 
     // Row indices: calculate visible rows.
-    let last_row_index = self.num_rows.saturating_sub(1);
-    let row_height_plus_spacing = self.row_height + self.spacing;
-    let start_row_index = (((viewport.y - absolute_position.y) / row_height_plus_spacing).floor() as usize).min(last_row_index);
-    // NOTE: + 1 on next line to ensure that last partially visible row is not culled.
-    let num_rows_to_render = ((viewport.height / row_height_plus_spacing).ceil() as usize + 1).min(self.num_rows);
-    let row_indices = start_row_index..start_row_index + num_rows_to_render;
+    let row_indices = {
+      let start = relative_y / self.row_height_plus_spacing;
+      let start = start.floor() as usize; // Use floor so partial rows are visible.
+      let start = start.min(self.last_row_index); // Can't start past last row.
+      let length = viewport.height / self.row_height_plus_spacing;
+      let length = length.ceil() as usize; // Use ceil so partial rows are visible.
+      let end = start + length;
+      let end = end.min(self.num_rows); // Can't be longer than number of rows.
+      start..end
+    };
 
-    // Remove cached trees and elements from rows that are no longer visible.
+    // Remove trees and elements from rows that are no longer visible.
     let prev_row_indices = tree_state.previous_row_indices.clone();
-    println!("Previous row indices: {:?}, current: {:?}", prev_row_indices, row_indices);
     if prev_row_indices.start < row_indices.start {
       let row_indices_to_delete = prev_row_indices.start..row_indices.start.min(prev_row_indices.end);
       for row_index in row_indices_to_delete {
@@ -137,7 +168,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
     }
 
     // Draw all table cells.
-    let mut y_offset = absolute_position.y + start_row_index as f32 * row_height_plus_spacing;
+    let mut y_offset = absolute_y + row_indices.start as f32 * self.row_height_plus_spacing;
     for row_index in row_indices.clone() {
       for (column_index, base_layout) in (0..self.num_columns).into_iter().zip(layout.children()) {
         let element = element_state.entry(row_index, column_index)
@@ -151,7 +182,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
       }
 
       y_offset += self.row_height;
-      if row_index < last_row_index { // Don't add spacing after last row.
+      if row_index < self.last_row_index { // Don't add spacing after last row.
         y_offset += self.spacing;
       }
     }

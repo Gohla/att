@@ -72,7 +72,7 @@ impl<'a, M, R, F> TableBuilder<'a, M, R, F> where
   pub fn spacing(mut self, spacing: f32) -> Self {
     self.spacing = spacing;
     self.header.spacing = spacing;
-    self.rows.spacing = spacing;
+    self.rows.spacing(spacing);
     self
   }
   pub fn header_row_height(mut self, height: f32) -> Self {
@@ -80,7 +80,7 @@ impl<'a, M, R, F> TableBuilder<'a, M, R, F> where
     self
   }
   pub fn row_height(mut self, height: f32) -> Self {
-    self.rows.row_height = height;
+    self.rows.row_height(height);
     self
   }
 
@@ -124,15 +124,14 @@ fn layout_columns<M, R: Renderer>(
 ) -> Vec<Node> {
   let num_columns = width_fill_portions.len();
   let last_column_index = num_columns.saturating_sub(1);
-  let num_spacers = last_column_index as f32;
-  let total_spacing = spacing * num_spacers;
-  let available_width = max_width - total_spacing;
+  let total_spacing_width = spacing * last_column_index as f32;
+  let available_non_spacing_width = max_width - total_spacing_width;
   let total_fill_portion = width_fill_portions.iter().sum::<u32>() as f32; // TODO: cache
-  let mut layouts = Vec::new();
+  let mut layouts = Vec::with_capacity(num_columns);
   let mut x_offset = 0f32;
   if let Some((elements, trees, renderer)) = layout_elements {
     for (i, ((width_fill_portion, element), tree)) in width_fill_portions.iter().zip(elements).zip(trees).enumerate() {
-      let width = (*width_fill_portion as f32 / total_fill_portion) * available_width;
+      let width = (*width_fill_portion as f32 / total_fill_portion) * available_non_spacing_width;
       let limits = Limits::new(Size::ZERO, Size::new(width, row_height));
       let mut layout = element.as_widget().layout(tree, renderer, &limits);
       layout.move_to(Point::new(x_offset, 0f32));
@@ -144,7 +143,7 @@ fn layout_columns<M, R: Renderer>(
     }
   } else { // TODO: reduce code duplication with if branch?
     for (i, width_fill_portion) in width_fill_portions.iter().enumerate() {
-      let width = (*width_fill_portion as f32 / total_fill_portion) * available_width;
+      let width = (*width_fill_portion as f32 / total_fill_portion) * available_non_spacing_width;
       let mut layout = Node::new(Size::new(width, row_height));
       layout.move_to(Point::new(x_offset, 0f32));
       layouts.push(layout);

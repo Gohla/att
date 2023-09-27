@@ -1,4 +1,4 @@
-use iced::Element;
+use iced::{Color, Element};
 
 use crate::app::{Cache, Model};
 use crate::widget::builder::WidgetBuilder;
@@ -46,5 +46,6 @@ impl ViewCrates {
       .push_column(1, "")
       .build();
     Element::new(table)
+      .explain(Color::WHITE)
   }
 }
