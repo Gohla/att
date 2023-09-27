@@ -1,4 +1,4 @@
-use iced::{Color, Element};
+use iced::Element;
 
 use crate::app::{Cache, Model};
 use crate::widget::builder::WidgetBuilder;
@@ -23,14 +23,14 @@ impl ViewCrates {
   }
 
   pub fn view<'a>(&'a self, model: &'a Model, cache: &'a Cache) -> Element<'a, Message> {
-    let table = TableBuilder::new(model.blessed_crate_ids.len(), |row_index, column_index| -> Element<'a, Message>{
-      let Some(id) = model.blessed_crate_ids.iter().nth(row_index) else {
+    let table = TableBuilder::new(model.blessed_crate_ids.len(), |row, col| -> Element<'a, Message>{
+      let Some(id) = model.blessed_crate_ids.iter().nth(row) else {
         return WidgetBuilder::default().add_space_fill_width().take()
       };
       let Some(data) = cache.crate_data.get(id) else {
         return WidgetBuilder::default().add_space_fill_width().take()
       };
-      match column_index {
+      match col {
         0 => WidgetBuilder::default().add_text(id).take(),
         1 => WidgetBuilder::default().add_text(&data.max_version).take(),
         2 => WidgetBuilder::default().add_text(data.updated_at.format("%Y-%m-%d").to_string()).take(),
@@ -46,6 +46,5 @@ impl ViewCrates {
       .push_column(1, "")
       .build();
     Element::new(table)
-      .explain(Color::WHITE)
   }
 }
