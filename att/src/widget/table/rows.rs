@@ -1,4 +1,5 @@
 use std::cell::RefCell;
+use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::ops::Range;
 
@@ -14,18 +15,20 @@ use crate::widget::table::layout_columns;
 pub struct TableRows<'a, M, R, F> {
   pub spacing: f32,
   pub row_height: f32,
-  pub num_rows: usize,
+  num_rows: usize,
+  num_columns: usize,
   cell_to_element: F,
   width_fill_portions: Vec<u32>,
   element_state: RefCell<ElementState<'a, M, R>>,
 }
 impl<'a, M, R, F> TableRows<'a, M, R, F> {
   pub fn new(spacing: f32, row_height: f32, num_rows: usize, cell_to_element: F) -> Self {
-    Self { spacing, row_height, num_rows, cell_to_element, width_fill_portions: Vec::new(), element_state: Default::default() }
+    Self { spacing, row_height, num_rows, num_columns: 0, cell_to_element, width_fill_portions: Vec::new(), element_state: Default::default() }
   }
 
   pub fn push_column(&mut self, width_fill_portion: u32) {
     self.width_fill_portions.push(width_fill_portion);
+    self.num_columns += 1;
   }
 }
 
@@ -37,19 +40,33 @@ impl<'a, M, R> Default for ElementState<'a, M, R> {
     Self { elements: Default::default(), }
   }
 }
+impl<'a, M, R> ElementState<'a, M, R> {
+  pub fn entry(&mut self, row_index: usize, column_index: usize) -> Entry<'_, (usize, usize), Element<'a, M, R>> {
+    self.elements.entry((row_index, column_index))
+  }
+  pub fn remove_row(&mut self, row_index: usize, num_columns: usize) {
+    for column_index in 0..num_columns {
+      self.elements.remove(&(row_index, column_index));
+    }
+  }
+}
 
+#[derive(Default)]
 struct TreeState {
   trees: HashMap<(usize, usize), Tree>,
   previous_row_indices: Range<usize>,
 }
-impl Default for TreeState {
-  fn default() -> Self {
-    Self {
-      trees: Default::default(),
-      previous_row_indices: 0..usize::MAX,
+impl TreeState {
+  pub fn entry(&mut self, row_index: usize, column_index: usize) -> Entry<'_, (usize, usize), Tree> {
+    self.trees.entry((row_index, column_index))
+  }
+  pub fn remove_row(&mut self, row_index: usize, num_columns: usize) {
+    for column_index in 0..num_columns {
+      self.trees.remove(&(row_index, column_index));
     }
   }
 }
+
 
 impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
@@ -57,7 +74,9 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
   fn tag(&self) -> tree::Tag { tree::Tag::of::<RefCell<TreeState>>() }
   fn state(&self) -> tree::State { tree::State::Some(Box::new(RefCell::new(TreeState::default()))) }
   fn children(&self) -> Vec<Tree> { Vec::new() }
-  fn diff(&self, _tree: &mut Tree) {}
+  fn diff(&self, _tree: &mut Tree) {
+    // TODO: implement
+  }
 
   fn width(&self) -> Length { Length::Fill }
   fn height(&self) -> Length { Length::Fill }
@@ -69,6 +88,76 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
     let layouts = layout_columns::<M, R>(total_width, self.row_height, self.spacing, &self.width_fill_portions, None);
     let total_height = self.num_rows * self.row_height as usize + self.num_rows.saturating_sub(1) * self.spacing as usize;
     Node::with_children(Size::new(total_width, total_height as f32), layouts)
+  }
+
+  fn draw(
+    &self,
+    tree: &Tree,
+    renderer: &mut R,
+    theme: &R::Theme,
+    style: &renderer::Style,
+    layout: Layout,
+    cursor: Cursor,
+    viewport: &Rectangle,
+  ) {
+    if self.num_rows == 0 {
+      return;
+    }
+
+    let mut element_state = self.element_state.borrow_mut();
+    let mut tree_state = tree.state.downcast_ref::<RefCell<TreeState>>().borrow_mut();
+    let absolute_position = layout.position();
+
+    // Row indices: calculate visible rows.
+    let last_row_index = self.num_rows.saturating_sub(1);
+    let row_height_plus_spacing = self.row_height + self.spacing;
+    let start_row_index = (((viewport.y - absolute_position.y) / row_height_plus_spacing).floor() as usize).min(last_row_index);
+    // NOTE: + 1 on next line to ensure that last partially visible row is not culled.
+    let num_rows_to_render = ((viewport.height / row_height_plus_spacing).ceil() as usize + 1).min(self.num_rows);
+    let row_indices = start_row_index..start_row_index + num_rows_to_render;
+
+    // Remove cached trees and elements from rows that are no longer visible.
+    let prev_row_indices = tree_state.previous_row_indices.clone();
+    println!("Previous row indices: {:?}, current: {:?}", prev_row_indices, row_indices);
+    if prev_row_indices.start < row_indices.start {
+      let row_indices_to_delete = prev_row_indices.start..row_indices.start.min(prev_row_indices.end);
+      for row_index in row_indices_to_delete {
+        println!("Removing row {}", row_index);
+        element_state.remove_row(row_index, self.num_columns);
+        tree_state.remove_row(row_index, self.num_columns);
+      }
+    }
+    if prev_row_indices.end > row_indices.end {
+      let row_indices_to_delete = row_indices.end.max(prev_row_indices.start)..prev_row_indices.end;
+      for row_index in row_indices_to_delete {
+        println!("Removing row {}", row_index);
+        element_state.remove_row(row_index, self.num_columns);
+        tree_state.remove_row(row_index, self.num_columns);
+      }
+    }
+
+    // Draw all table cells.
+    let mut y_offset = absolute_position.y + start_row_index as f32 * row_height_plus_spacing;
+    for row_index in row_indices.clone() {
+      for (column_index, base_layout) in (0..self.num_columns).into_iter().zip(layout.children()) {
+        let element = element_state.entry(row_index, column_index)
+          .or_insert_with(|| (self.cell_to_element)(row_index, column_index));
+        let tree = tree_state.entry(row_index, column_index)
+          .or_insert_with(|| Tree::new(element.as_widget()));
+        // HACK: reconstruct layout of element to fix its y position based on `y_offset`.
+        let node = reconstruct_layout_node(base_layout.bounds(), y_offset, element, tree, renderer);
+        let layout = Layout::new(&node);
+        element.as_widget().draw(&tree, renderer, theme, style, layout, cursor, viewport);
+      }
+
+      y_offset += self.row_height;
+      if row_index < last_row_index { // Don't add spacing after last row.
+        y_offset += self.spacing;
+      }
+    }
+
+    // Store current row indices.
+    tree_state.previous_row_indices = row_indices;
   }
 
   fn on_event(
@@ -121,53 +210,9 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
     // TODO: implement
   }
 
-  fn draw(
-    &self,
-    tree: &Tree,
-    renderer: &mut R,
-    theme: &R::Theme,
-    style: &renderer::Style,
-    layout: Layout,
-    cursor: Cursor,
-    viewport: &Rectangle,
-  ) {
-    if self.num_rows == 0 {
-      return;
-    }
-
-    let mut element_state = self.element_state.borrow_mut();
-    let mut tree_state = tree.state.downcast_ref::<RefCell<TreeState>>().borrow_mut();
-    let absolute_position = layout.position();
-
-    // Row indices: calculate visible rows.
-    let last_row_index = self.num_rows.saturating_sub(1);
-    let row_height_plus_spacing = self.row_height + self.spacing;
-    let start_row_index = (((viewport.y - absolute_position.y) / row_height_plus_spacing).floor() as usize).min(last_row_index);
-    // NOTE: + 1 on next line to ensure that last partially visible row is not culled.
-    let num_rows_to_render = ((viewport.height / row_height_plus_spacing).ceil() as usize + 1).min(self.num_rows);
-    let row_indices = start_row_index..start_row_index + num_rows_to_render;
-
-    // TODO: Remove cached trees and elements from rows that are no longer visible.
-
-    // Draw all table cells.
-    let mut y_offset = absolute_position.y + start_row_index as f32 * row_height_plus_spacing;
-    for row_index in row_indices {
-      for (column_index, base_layout) in (0..self.width_fill_portions.len()).into_iter().zip(layout.children()) {
-        let element = (self.cell_to_element)(row_index, column_index);
-        // HACK: reconstruct layout of element to fix its y position based on `y_offset`.
-        // HACK: construct new tree from widget and pass it down.
-        // TODO: passing in a new Tree every time causes widgets inside the table to not keep any state!
-        let mut tree = Tree::new(&element);
-        let node = reconstruct_layout_node(base_layout.bounds(), y_offset, &element, &mut tree, renderer);
-        let layout = Layout::new(&node);
-        element.as_widget().draw(&tree, renderer, theme, style, layout, cursor, viewport);
-        tree_state.trees.insert((row_index, column_index), tree);
-      }
-      y_offset += self.row_height;
-      if row_index < last_row_index { // Don't add spacing after last row.
-        y_offset += self.spacing;
-      }
-    }
+  fn overlay<'o>(&'o mut self, _state: &'o mut Tree, _layout: Layout, _renderer: &R) -> Option<iced::advanced::overlay::Element<'a, M, R>> {
+    // TODO: implement
+    None
   }
 }
 

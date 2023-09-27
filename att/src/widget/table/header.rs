@@ -41,9 +41,6 @@ impl<'a, M, R: Renderer> Widget<M, R> for TableHeader<'a, M, R> {
     let layouts = layout_columns(total_width, self.row_height, self.spacing, &self.width_fill_portions, Some((&self.headers, &mut tree.children, renderer)));
     Node::with_children(Size::new(total_width, self.row_height), layouts)
   }
-  fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout, renderer: &R) -> Option<overlay::Element<'o, M, R>> {
-    crate::widget::child::overlay(&mut self.headers, tree, layout, renderer)
-  }
 
   fn draw(
     &self,
@@ -79,6 +76,10 @@ impl<'a, M, R: Renderer> Widget<M, R> for TableHeader<'a, M, R> {
   }
   fn operate(&self, tree: &mut Tree, layout: Layout, renderer: &R, operation: &mut dyn Operation<M>) {
     crate::widget::child::operate(&self.headers, tree, layout, renderer, operation)
+  }
+
+  fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout, renderer: &R) -> Option<overlay::Element<'o, M, R>> {
+    crate::widget::child::overlay(&mut self.headers, tree, layout, renderer)
   }
 }
 
