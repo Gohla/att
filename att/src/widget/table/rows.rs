@@ -1,5 +1,4 @@
 use std::cell::RefCell;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::ops::Range;
 
@@ -68,8 +67,16 @@ impl<'a, M, R> Default for ElementState<'a, M, R> {
   }
 }
 impl<'a, M, R> ElementState<'a, M, R> {
-  pub fn entry(&mut self, row_index: usize, column_index: usize) -> Entry<'_, (usize, usize), Element<'a, M, R>> {
+  pub fn get_or_insert<F>(
+    &mut self,
+    row_index: usize,
+    column_index: usize,
+    cell_to_element: &F
+  ) -> &mut Element<'a, M, R> where
+    F: Fn(usize, usize) -> Element<'a, M, R> + 'a
+  {
     self.elements.entry((row_index, column_index))
+      .or_insert_with(|| cell_to_element(row_index, column_index))
   }
   pub fn remove_row(&mut self, row_index: usize, num_columns: usize) {
     for column_index in 0..num_columns {
@@ -84,8 +91,14 @@ struct TreeState {
   previous_row_indices: Range<usize>,
 }
 impl TreeState {
-  pub fn entry(&mut self, row_index: usize, column_index: usize) -> Entry<'_, (usize, usize), Tree> {
+  pub fn get_or_insert<'a, M, R: Renderer>(
+    &mut self,
+    row_index: usize,
+    column_index: usize,
+    element: &Element<'a, M, R>
+  ) -> &mut Tree {
     self.trees.entry((row_index, column_index))
+      .or_insert_with(|| Tree::new(element))
   }
   pub fn remove_row(&mut self, row_index: usize, num_columns: usize) {
     for column_index in 0..num_columns {
@@ -168,22 +181,21 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
     }
 
     // Draw all table cells.
-    let mut y_offset = absolute_y + row_indices.start as f32 * self.row_height_plus_spacing;
+    let mut y = absolute_y + row_indices.start as f32 * self.row_height_plus_spacing;
     for row_index in row_indices.clone() {
-      for (column_index, base_layout) in (0..self.num_columns).into_iter().zip(layout.children()) {
-        let element = element_state.entry(row_index, column_index)
-          .or_insert_with(|| (self.cell_to_element)(row_index, column_index));
-        let tree = tree_state.entry(row_index, column_index)
-          .or_insert_with(|| Tree::new(element.as_widget()));
-        // HACK: reconstruct layout of element to fix its y position based on `y_offset`.
-        let node = reconstruct_layout_node(base_layout.bounds(), y_offset, element, tree, renderer);
+      for (column_index, cell_layout) in (0..self.num_columns).into_iter().zip(layout.children()) {
+        let element = element_state.get_or_insert(row_index, column_index, &self.cell_to_element);
+        let tree = tree_state.get_or_insert(row_index, column_index, element);
+        let bounds = cell_layout.bounds();
+        let limits = Limits::new(Size::ZERO, bounds.size());
+        let node = reconstruct_node(element, tree, renderer, &limits, Point::new(bounds.x, y));
         let layout = Layout::new(&node);
         element.as_widget().draw(&tree, renderer, theme, style, layout, cursor, viewport);
       }
 
-      y_offset += self.row_height;
+      y += self.row_height;
       if row_index < self.last_row_index { // Don't add spacing after last row.
-        y_offset += self.spacing;
+        y += self.spacing;
       }
     }
 
@@ -193,7 +205,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
 
   fn on_event(
     &mut self,
-    _tree: &mut Tree,
+    tree: &mut Tree,
     event: Event,
     layout: Layout,
     cursor: Cursor,
@@ -202,34 +214,56 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
     shell: &mut Shell<'_, M>,
     viewport: &Rectangle,
   ) -> Status {
-    // TODO: will event propagation actually do anything because currently "virtual" widgets have no state?
-
     let absolute_position = layout.position();
+    let absolute_y = absolute_position.y;
     let cursor_position = cursor.position();
-    match &event {
+
+    let result = match &event {
       Event::Mouse(_) => {
         if let Some(cursor_position) = cursor_position {
-          let mouse_position_relative = Point::new(cursor_position.x - absolute_position.x, cursor_position.y - absolute_position.y);
-          if self.propagate_event_to_element_at(&event, mouse_position_relative, layout, cursor, renderer, clipboard, shell, viewport) == Status::Captured {
-            return Status::Captured;
-          }
+          let position = relative_to(cursor_position, absolute_position);
+          self.row_column_index_layout_at(position, &layout)
+        } else {
+          None
         }
       }
       Event::Touch(touch_event) => {
-        let touch_position_absolute = match touch_event {
+        let element_position = match touch_event {
           touch::Event::FingerPressed { position, .. } => position,
           touch::Event::FingerMoved { position, .. } => position,
           touch::Event::FingerLifted { position, .. } => position,
           touch::Event::FingerLost { position, .. } => position,
         };
-        let touch_position_relative = Point::new(touch_position_absolute.x - absolute_position.x, touch_position_absolute.y - absolute_position.y);
-        if self.propagate_event_to_element_at(&event, touch_position_relative, layout, cursor, renderer, clipboard, shell, viewport) == Status::Captured {
-          return Status::Captured;
-        }
+        let position = relative_to(*element_position, absolute_position);
+        self.row_column_index_layout_at(position, &layout)
       }
       // TODO: propagate other events?
-      _ => {},
+      _ => None,
+    };
+
+    if let Some((row_index, column_index, cell_layout)) = result {
+      let mut element_state = self.element_state.borrow_mut();
+      let mut tree_state = tree.state.downcast_ref::<RefCell<TreeState>>().borrow_mut();
+
+      let element = element_state.get_or_insert(row_index, column_index, &self.cell_to_element);
+      let tree = tree_state.get_or_insert(row_index, column_index, element);
+      let bounds = cell_layout.bounds();
+      let limits = Limits::new(Size::ZERO, bounds.size());
+      let y = absolute_y + row_index as f32 * self.row_height_plus_spacing;
+      let node = reconstruct_node(element, tree, renderer, &limits, Point::new(bounds.x, y));
+      let layout = Layout::new(&node);
+      return element.as_widget_mut().on_event(
+        tree,
+        event,
+        layout,
+        cursor,
+        renderer,
+        clipboard,
+        shell,
+        viewport
+      )
     }
+
     Status::Ignored
   }
   fn mouse_interaction(&self, _tree: &Tree, _layout: Layout, _cursor: Cursor, _viewport: &Rectangle, _renderer: &R) -> Interaction {
@@ -250,61 +284,36 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
 impl<'a, F, M, R: Renderer> TableRows<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
-  fn get_row_index_at(&self, y: f32) -> Option<usize> {
+  fn row_index_at(&self, y: f32) -> Option<usize> {
     // TODO: return None when row index > num_rows!
-    if y < 0f32 { return None; } // Out of bounds
-    let spacing = self.spacing;
-    let row_height = self.row_height;
-    let row_height_plus_spacing = row_height + spacing;
-    let row_offset = (y / row_height_plus_spacing).ceil() as usize;
-    let row_offset_without_spacing = (row_offset as f32 * row_height_plus_spacing) - spacing;
+    if y < 0.0 { return None; } // Out of bounds
+    let row_offset = (y / self.row_height_plus_spacing).ceil() as usize;
+    let row_offset_without_spacing = (row_offset as f32 * self.row_height_plus_spacing) - self.spacing;
     if y > row_offset_without_spacing {
       None // On row spacing
     } else {
-      Some(row_offset.saturating_sub(1)) // NOTE: + 1 because row_offset is 1-based. Why is this the case?
+      Some(row_offset.saturating_sub(1)) // NOTE: + 1 because row_offset is 1-based. Why is this the case? // TODO: investigate this
     }
   }
-
-  fn get_column_index_and_layout_at<'l>(&self, x: f32, layout: &Layout<'l>) -> Option<(usize, Layout<'l>)> {
-    let spacing = self.spacing;
+  fn column_index_and_layout_at<'l>(&self, x: f32, layout: &Layout<'l>) -> Option<(usize, Layout<'l>)> {
+    // TODO: more efficient way to implement this, not a for loop!
+    if x < 0.0 { return None; } // Out of bounds
     let mut offset = 0f32;
-    for (column_index, column_layout) in layout.children().enumerate() {
+    for (column_index, cell_layout) in layout.children().enumerate() {
       if x < offset { return None; } // On column spacing or out of bounds
-      offset += column_layout.bounds().width;
-      if x <= offset { return Some((column_index, column_layout)); }
-      offset += spacing;
+      offset += cell_layout.bounds().width;
+      if x <= offset { return Some((column_index, cell_layout)); }
+      offset += self.spacing;
     }
     None
   }
-
-  fn propagate_event_to_element_at(
-    &mut self,
-    event: &Event,
-    point: Point,
-    layout: Layout,
-    cursor: Cursor,
-    renderer: &R,
-    clipboard: &mut dyn Clipboard,
-    shell: &mut Shell<'_, M>,
-    viewport: &Rectangle,
-  ) -> Status {
-    let absolute_position = layout.position();
-    let row_height_plus_spacing = self.row_height + self.spacing;
-    let column_index_and_layout = self.get_column_index_and_layout_at(point.x, &layout);
-    let row_index = self.get_row_index_at(point.y);
-    if let (Some((column_index, base_layout)), Some(row_index)) = (column_index_and_layout, row_index) {
-      let mut element = (self.cell_to_element)(row_index, column_index);
-      let y_offset = absolute_position.y + row_index as f32 * row_height_plus_spacing;
-      // HACK: reconstruct layout of element to fix its y position based on `y_offset`.
-      // HACK: construct new tree from widget and pass it down.
-      // TODO: passing in a new Tree every time causes widgets inside the table to not keep any state!
-      let mut tree = Tree::new(&element);
-      let node = reconstruct_layout_node(base_layout.bounds(), y_offset, &element, &mut tree, renderer);
-      let layout = Layout::new(&node);
-      element.as_widget_mut().on_event(&mut tree, event.clone(), layout, cursor, renderer, clipboard, shell, viewport)
-    } else {
-      Status::Ignored
+  fn row_column_index_layout_at<'l>(&self, position: Point, layout: &Layout<'l>) -> Option<(usize, usize, Layout<'l>)> {
+    if let Some(row_index) = self.row_index_at(position.x) {
+      if let Some((column_index, cell_layout)) = self.column_index_and_layout_at(position.x, layout) {
+        return Some((row_index, column_index, cell_layout));
+      }
     }
+    None
   }
 }
 
@@ -316,18 +325,23 @@ impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for TableRows<'a, M
   }
 }
 
-fn reconstruct_layout_node<M, R: Renderer>(
-  bounds: Rectangle,
-  y_offset: f32,
+/// Reconstruct layout node of `element`, offsetting its position by `translation`.
+fn reconstruct_node<M, R: Renderer>(
   element: &Element<'_, M, R>,
   tree: &mut Tree,
   renderer: &R,
+  limits: &Limits,
+  position: Point,
 ) -> Node {
-  // HACK: Reconstruct the layout from `base_layout` which has a correct x position, but an incorrect y position
-  //       which always points to the first row. This is needed so that we do not have to lay out all the cells of
-  //       the table each time the layout changes, because that is slow for larger tables.
-  let limits = Limits::new(Size::ZERO, Size::new(bounds.width, bounds.height));
+  // HACK: Reconstruct the layout from `limits` which has a correct x position, but an incorrect y position which always
+  //       points to the first row. This is needed so that we do not have to lay out all the cells of the table each
+  //       time the layout changes, because that is slow for larger tables.
   let mut node = element.as_widget().layout(tree, renderer, &limits);
-  node.move_to(Point::new(bounds.x, y_offset));
+  // Translate to fix the y position.
+  node.move_to(position);
   node
+}
+
+fn relative_to(point: Point, absolute: Point) -> Point {
+  Point::new(point.x - absolute.x, point.y - absolute.y)
 }
