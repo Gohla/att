@@ -6,6 +6,7 @@ pub mod modal;
 pub mod dark_light_toggle;
 pub mod builder;
 pub mod table;
+pub mod child;
 
 /// Widget extensions
 pub trait WidgetExt<'a, M, R> {
