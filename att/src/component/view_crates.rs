@@ -2,7 +2,7 @@ use iced::Element;
 
 use crate::app::{Cache, Model};
 use crate::widget::builder::WidgetBuilder;
-use crate::widget::table::TableBuilder;
+use crate::widget::table::Table;
 
 #[derive(Default, Debug)]
 pub struct ViewCrates;
@@ -23,7 +23,7 @@ impl ViewCrates {
   }
 
   pub fn view<'a>(&'a self, model: &'a Model, cache: &'a Cache) -> Element<'a, Message> {
-    let table = TableBuilder::new(model.blessed_crate_ids.len(), |row, col| -> Element<'a, Message>{
+    Table::new(model.blessed_crate_ids.len(), |row, col| -> Element<'a, Message>{
       let Some(id) = model.blessed_crate_ids.iter().nth(row) else {
         return WidgetBuilder::default().add_space_fill_width().take()
       };
@@ -44,7 +44,6 @@ impl ViewCrates {
       .push_column(1, "Updated at")
       .push_column(1, "Downloads")
       .push_column(1, "")
-      .build();
-    Element::new(table)
+      .build()
   }
 }

@@ -1,12 +1,16 @@
 use iced::{Command, Element, Font};
 use iced::advanced::{Renderer, Widget};
-use iced_futures::MaybeSend;
+use crate::widget::maybe_send::MaybeSend;
 
-pub mod modal;
-pub mod dark_light_toggle;
 pub mod builder;
-pub mod table;
+
 pub mod child;
+
+pub mod constrained_row;
+pub mod modal;
+pub mod table;
+pub mod dark_light_toggle;
+pub mod maybe_send;
 
 /// Widget extensions
 pub trait WidgetExt<'a, M, R> {

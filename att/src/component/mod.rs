@@ -1,5 +1,5 @@
 use iced::Command;
-use iced_futures::MaybeSend;
+use crate::widget::maybe_send::MaybeSend;
 
 pub mod add_crate;
 pub mod view_crates;

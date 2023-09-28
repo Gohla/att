@@ -5,28 +5,24 @@ use iced::{Element, Length, Point, Size};
 use iced::advanced::layout::{Limits, Node};
 use iced::advanced::Renderer;
 use iced::advanced::widget::Tree;
-use iced::widget::{scrollable, Scrollable};
+use iced::widget::{Column, scrollable, Scrollable};
 
 use crate::widget::table::header::TableHeader;
 use crate::widget::table::rows::TableRows;
-use crate::widget::table::widget::Table;
 
 mod header;
 mod rows;
-mod widget;
 
-/// Builder for
-pub struct TableBuilder<'a, M, R, F> {
+pub struct Table<'a, M, R, F> {
   width: Length,
   height: Length,
   max_width: f32,
-  max_height: f32,
   spacing: f32,
   header: TableHeader<'a, M, R>,
   rows: TableRows<'a, M, R, F>,
 }
 
-impl<'a, M, R, F> TableBuilder<'a, M, R, F> where
+impl<'a, M, R, F> Table<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
   pub fn new(num_rows: usize, cell_to_element: F) -> Self {
@@ -36,7 +32,6 @@ impl<'a, M, R, F> TableBuilder<'a, M, R, F> where
       width: Length::Fill,
       height: Length::Fill,
       max_width: f32::INFINITY,
-      max_height: f32::INFINITY,
       spacing,
       header: TableHeader::new(spacing, row_height),
       rows: TableRows::new(spacing, row_height, num_rows, cell_to_element),
@@ -54,10 +49,6 @@ impl<'a, M, R, F> TableBuilder<'a, M, R, F> where
   }
   pub fn max_width(mut self, max_width: f32) -> Self {
     self.max_width = max_width;
-    self
-  }
-  pub fn max_height(mut self, max_height: f32) -> Self {
-    self.max_height = max_height;
     self
   }
   pub fn spacing(mut self, spacing: f32) -> Self {
@@ -83,24 +74,21 @@ impl<'a, M, R, F> TableBuilder<'a, M, R, F> where
 
   pub fn build(
     self,
-  ) -> Table<'a, M, R> where
+  ) -> Element<'a, M, R> where
     M: 'a,
     R: Renderer + 'a,
     R::Theme: scrollable::StyleSheet
   {
-    let rows = Scrollable::new(self.rows);
-    Table::new(
-      self.width,
-      self.height,
-      self.max_width,
-      self.max_height,
-      self.spacing,
-      self.header.into(),
-      rows.into(),
-    )
+    let header = self.header.into();
+    let rows = Scrollable::new(self.rows).into();
+    Column::with_children(vec![header, rows])
+      .spacing(self.spacing)
+      .width(self.width)
+      .height(self.height)
+      .max_width(self.max_width)
+      .into()
   }
 }
-
 
 //
 // Column layout calculation and reconstruction.

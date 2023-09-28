@@ -282,7 +282,6 @@ dependencies = [
  "dark-light",
  "directories",
  "iced",
- "iced_futures",
  "serde",
  "serde_json",
  "tokio",
