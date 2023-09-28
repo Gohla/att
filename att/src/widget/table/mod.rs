@@ -15,16 +15,7 @@ mod header;
 mod rows;
 mod widget;
 
-//
-// Table builder
-//
-
-// OPTO: Instead of rendering rows, render columns. Right now the mapper functions are dynamic dispatch because they
-//       have different types, and we call the mapper on each cell. If we render columns instead, we only need one
-//       dynamic dispatch per column. We can then also turn `&T` into `T` on the mapper. We do have to iterate over the
-//       rows multiple times though, but this is possible because it is `Clone`. It might be a little bit slow because
-//       `skip` on `Iterator` could be slow.
-
+/// Builder for
 pub struct TableBuilder<'a, M, R, F> {
   width: Length,
   height: Length,
@@ -39,7 +30,7 @@ impl<'a, M, R, F> TableBuilder<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
   pub fn new(num_rows: usize, cell_to_element: F) -> Self {
-    let spacing = 0.0;
+    let spacing = 1.0;
     let row_height = 26.0;
     Self {
       width: Length::Fill,

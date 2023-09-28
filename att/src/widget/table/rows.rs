@@ -137,15 +137,22 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
     let mut tree_state = tree.state.downcast_ref::<RefCell<TreeState>>().borrow_mut();
 
     let absolute_y = layout.position().y;
-    let relative_y = viewport.y - absolute_y;
+    let y = viewport.y - absolute_y;
 
     // Calculate visible rows.
     let rows = {
-      let start = relative_y / self.row_height_plus_spacing;
-      let start = start.floor() as usize; // Use floor so partial rows are visible.
+      let start = y / self.row_height_plus_spacing;
+      let start = start.max(0.0); // Can't start on negative row.
+      let start_floored = start.floor(); // Use floor so partial rows are visible.
+      let floored_amount = start - start_floored; // Store how much we floored off for length calculation.
+      let start = start_floored as usize;
       let start = start.min(self.last_row_index); // Can't start past last row.
-      let length = viewport.height / self.row_height_plus_spacing;
+
+      // Use floored amount to account for extra space at the bottom in which an additional row can be visible.
+      let additional_height = floored_amount * self.row_height_plus_spacing;
+      let length = (viewport.height + additional_height) / self.row_height_plus_spacing;
       let length = length.ceil() as usize; // Use ceil so partial rows are visible.
+
       let end = start + length;
       let end = end.min(self.num_rows); // Can't be longer than number of rows.
       start..end
