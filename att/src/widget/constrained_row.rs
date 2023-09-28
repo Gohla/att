@@ -9,17 +9,28 @@ pub struct ConstrainedRow<'a, M, R> {
   pub spacing: f32,
   pub height: f32,
   elements: Vec<Element<'a, M, R>>,
-  constraints: Vec<Constraint>,
+  constraints: Vec<RowConstraint>,
 }
 
-pub struct Constraint {
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct RowConstraint {
   width_fill_portion: f32,
   horizontal_alignment: Alignment,
   vertical_alignment: Alignment,
 }
-impl Default for Constraint {
+impl Default for RowConstraint {
   fn default() -> Self {
     Self { width_fill_portion: 1.0, horizontal_alignment: Alignment::Start, vertical_alignment: Alignment::Start }
+  }
+}
+impl From<f32> for RowConstraint {
+  fn from(width_fill_portion: f32) -> Self {
+    Self { width_fill_portion, ..Self::default() }
+  }
+}
+impl From<u32> for RowConstraint {
+  fn from(width_fill_portion: u32) -> Self {
+    Self::from(width_fill_portion as f32)
   }
 }
 
@@ -29,7 +40,7 @@ impl<'a, M, R> ConstrainedRow<'a, M, R> {
   }
   pub fn with_elements_and_constraints(
     elements: Vec<Element<'a, M, R>>,
-    mut constraints: Vec<Constraint>,
+    mut constraints: Vec<RowConstraint>,
   ) -> Self {
     constraints.resize_with(elements.len(), Default::default);
     Self {
@@ -43,9 +54,9 @@ impl<'a, M, R> ConstrainedRow<'a, M, R> {
     Self::with_elements_and_constraints(Vec::with_capacity(capacity), Vec::with_capacity(capacity))
   }
 
-  pub fn push(mut self, element: impl Into<Element<'a, M, R>>, constraint: Constraint) -> Self {
+  pub fn push(mut self, element: impl Into<Element<'a, M, R>>, constraint: impl Into<RowConstraint>) -> Self {
     self.elements.push(element.into());
-    self.constraints.push(constraint);
+    self.constraints.push(constraint.into());
     self
   }
 }

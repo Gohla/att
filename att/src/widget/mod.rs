@@ -1,5 +1,6 @@
 use iced::{Command, Element, Font};
-use iced::advanced::{Renderer, Widget};
+use iced::advanced::Renderer;
+
 use crate::widget::maybe_send::MaybeSend;
 
 pub mod builder;
@@ -16,10 +17,10 @@ pub mod maybe_send;
 pub trait WidgetExt<'a, M, R> {
   fn into_element(self) -> Element<'a, M, R>;
 }
-impl<'a, M: 'a, R: Renderer + 'a, W: Widget<M, R> + 'a> WidgetExt<'a, M, R> for W {
+impl<'a, M: 'a, R: Renderer + 'a, W: Into<Element<'a, M, R>>> WidgetExt<'a, M, R> for W {
   #[inline]
   fn into_element(self) -> Element<'a, M, R> {
-    Element::new(self)
+    self.into()
   }
 }
 

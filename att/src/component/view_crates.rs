@@ -23,7 +23,7 @@ impl ViewCrates {
   }
 
   pub fn view<'a>(&'a self, model: &'a Model, cache: &'a Cache) -> Element<'a, Message> {
-    Table::new(model.blessed_crate_ids.len(), |row, col| -> Element<'a, Message>{
+    let cell_to_element = |row, col| -> Element<'a, Message>{
       let Some(id) = model.blessed_crate_ids.iter().nth(row) else {
         return WidgetBuilder::default().add_space_fill_width().take()
       };
@@ -38,12 +38,14 @@ impl ViewCrates {
         4 => WidgetBuilder::default().button("Remove").destructive_style().padding([1.0, 5.0]).add(|| Message::RemoveCrate(id.clone())).take(),
         _ => WidgetBuilder::default().add_space_fill_width().take()
       }
-    })
-      .push_column(2, "Name")
-      .push_column(1, "Latest Version")
-      .push_column(1, "Updated at")
-      .push_column(1, "Downloads")
-      .push_column(1, "")
-      .build()
+    };
+    Table::with_capacity(5, cell_to_element)
+      .push(2, "Name")
+      .push(1, "Latest Version")
+      .push(1, "Updated at")
+      .push(1, "Downloads")
+      .push(1, "")
+      .body_row_count(model.blessed_crate_ids.len())
+      .into()
   }
 }

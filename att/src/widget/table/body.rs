@@ -9,52 +9,30 @@ use iced::advanced::widget::{Operation, tree, Tree};
 use iced::event::Status;
 use iced::mouse::{Cursor, Interaction};
 
-use crate::widget::table::layout_columns;
-
-pub struct TableRows<'a, M, R, F> {
+pub struct Body<'a, M, R, F> {
   spacing: f32,
-
+  column_count: usize,
   row_height: f32,
   row_height_plus_spacing: f32,
-  num_rows: usize,
+  row_count: usize,
   last_row_index: usize,
-
-  column_fill_portions: Vec<u32>,
-  num_columns: usize,
-
   cell_to_element: F,
+  fake_row: Element<'a, M, R>,
   element_state: RefCell<ElementState<'a, M, R>>,
 }
-impl<'a, M, R, F> TableRows<'a, M, R, F> {
-  pub fn new(spacing: f32, row_height: f32, num_rows: usize, cell_to_element: F) -> Self {
+impl<'a, M, R, F> Body<'a, M, R, F> {
+  pub fn new(spacing: f32, column_count: usize, row_height: f32, row_count: usize, cell_to_element: F, fake_row: Element<'a, M, R>) -> Self {
     Self {
       spacing,
-
+      column_count,
       row_height,
       row_height_plus_spacing: row_height + spacing,
-      num_rows,
-      last_row_index: num_rows.saturating_sub(1),
-
-      num_columns: 0,
-      column_fill_portions: Vec::new(),
-
+      row_count,
+      last_row_index: row_count.saturating_sub(1),
       cell_to_element,
+      fake_row,
       element_state: Default::default()
     }
-  }
-
-  pub fn spacing(&mut self, spacing: f32) {
-    self.spacing = spacing;
-    self.row_height_plus_spacing = self.row_height + spacing;
-  }
-  pub fn row_height(&mut self, row_height: f32) {
-    self.row_height = row_height;
-    self.row_height_plus_spacing = row_height + self.spacing;
-  }
-
-  pub fn push_column(&mut self, column_fill_portion: u32) {
-    self.column_fill_portions.push(column_fill_portion);
-    self.num_columns += 1;
   }
 }
 
@@ -97,26 +75,31 @@ impl TreeState {
   }
 }
 
-
-impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
+impl<'a, F, M, R: Renderer> Widget<M, R> for Body<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
-  fn tag(&self) -> tree::Tag { tree::Tag::of::<RefCell<TreeState>>() }
-  fn state(&self) -> tree::State { tree::State::Some(Box::new(RefCell::new(TreeState::default()))) }
-  fn children(&self) -> Vec<Tree> { Vec::new() }
-  fn diff(&self, _tree: &mut Tree) {
-    // TODO: implement
+  fn tag(&self) -> tree::Tag {
+    tree::Tag::of::<RefCell<TreeState>>()
+  }
+  fn state(&self) -> tree::State {
+    tree::State::Some(Box::new(RefCell::new(TreeState::default())))
+  }
+  fn children(&self) -> Vec<Tree> {
+    vec![Tree::new(&self.fake_row)]
+  }
+  fn diff(&self, tree: &mut Tree) {
+    tree.diff_children(std::slice::from_ref(&self.fake_row))
   }
 
   fn width(&self) -> Length { Length::Fill }
   fn height(&self) -> Length { Length::Fill }
-  fn layout(&self, _tree: &mut Tree, _renderer: &R, limits: &Limits) -> Node {
-    let available_width = limits.max().width;
-    // HACK: only lay out first row, because laying out the entire table becomes slow for larger tables. Reconstruct
-    //       the layout of elements on-demand with `reconstruct_layout_node`.
-    let layouts = layout_columns::<M, R>(available_width, self.row_height, self.spacing, &self.column_fill_portions, None);
-    let total_height = self.num_rows * self.row_height as usize + self.num_rows.saturating_sub(1) * self.spacing as usize;
-    Node::with_children(Size::new(available_width, total_height as f32), layouts)
+  fn layout(&self, tree: &mut Tree, renderer: &R, limits: &Limits) -> Node {
+    let max_height = self.row_count as f32 * self.row_height + self.row_count.saturating_sub(1) as f32 * self.spacing;
+    let limits = limits.max_height(max_height);
+    // The fake row lays out the cells of a single row. We will re-use that layout for every row in the table body, but
+    // corrects its y-position to correspond to the actual row.
+    let node = self.fake_row.as_widget().layout(&mut tree.children[0], renderer, &limits.height(self.row_height));
+    Node::with_children(limits.max(), vec![node])
   }
 
   fn draw(
@@ -129,7 +112,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
     cursor: Cursor,
     viewport: &Rectangle,
   ) {
-    if self.num_rows == 0 {
+    if self.row_count == 0 {
       return;
     }
 
@@ -154,7 +137,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
       let length = length.ceil() as usize; // Use ceil so partial rows are visible.
 
       let end = start + length;
-      let end = end.min(self.num_rows); // Can't be longer than number of rows.
+      let end = end.min(self.row_count); // Can't be longer than number of rows.
       start..end
     };
 
@@ -162,24 +145,24 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
     let previous_rows = tree_state.previous_rows.clone();
     if previous_rows.start < rows.start {
       for row in previous_rows.start..rows.start.min(previous_rows.end) {
-        element_state.remove_row(row, self.num_columns);
-        tree_state.remove_row(row, self.num_columns);
+        element_state.remove_row(row, self.column_count);
+        tree_state.remove_row(row, self.column_count);
       }
     }
     if previous_rows.end > rows.end {
       for row in rows.end.max(previous_rows.start)..previous_rows.end {
-        element_state.remove_row(row, self.num_columns);
-        tree_state.remove_row(row, self.num_columns);
+        element_state.remove_row(row, self.column_count);
+        tree_state.remove_row(row, self.column_count);
       }
     }
 
     // Draw all table cells.
     for row in rows.clone() {
-      for (col, cell_layout) in (0..self.num_columns).into_iter().zip(layout.children()) {
+      for (col, cell_bounds) in (0..self.column_count).zip(Self::get_cell_bounds(layout)) {
         let cell = self.cell_at(
           row,
           col,
-          cell_layout.bounds(),
+          cell_bounds,
           absolute_y,
           renderer,
           &mut element_state,
@@ -235,7 +218,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
       let mut tree_state = tree.state.downcast_ref::<RefCell<TreeState>>().borrow_mut();
       if let Some(cell) = self.cell_at_position(
         position,
-        &layout,
+        layout,
         absolute_position.y,
         renderer,
         &mut element_state,
@@ -264,7 +247,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for TableRows<'a, M, R, F> where
       let mut tree_state = tree.state.downcast_ref::<RefCell<TreeState>>().borrow_mut();
       if let Some(cell) = self.cell_at_position(
         position,
-        &layout,
+        layout,
         absolute_position.y,
         renderer,
         &mut element_state,
@@ -292,15 +275,15 @@ struct Cell<'c, 'e, M, R> {
   node: Node,
 }
 
-impl<'a, F, M, R: Renderer> TableRows<'a, M, R, F> where
+impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
-  /// Gets the cell at (`row`, `col`).
+  /// Gets the cell at (`row`, `col`), with `cell_bounds` (retrieved from the layout of the fake row).
   fn cell_at<'c>(
     &'c self,
     row: usize,
     col: usize,
-    bounds: Rectangle,
+    cell_bounds: Rectangle,
     absolute_y: f32,
     renderer: &R,
     element_state: &'c mut ElementState<'a, M, R>,
@@ -308,17 +291,19 @@ impl<'a, F, M, R: Renderer> TableRows<'a, M, R, F> where
   ) -> Cell<'c, 'a, M, R> {
     let element = element_state.get_or_insert(row, col, &self.cell_to_element);
     let tree = tree_state.get_or_insert(row, col, element);
-    let limits = Limits::new(Size::ZERO, bounds.size());
-    let y = absolute_y + row as f32 * self.row_height_plus_spacing;
+    let limits = Limits::new(Size::ZERO, cell_bounds.size());
     let mut node = element.as_widget().layout(tree, renderer, &limits);
-    node.move_to(Point::new(bounds.x, y));
+    // Since `cell_bounds` is from the layout of the fake row, it always has a y-position of 0.0. We move the node to
+    // its correct y-position here.
+    let y = absolute_y + row as f32 * self.row_height_plus_spacing;
+    node.move_to(Point::new(cell_bounds.x, y));
     Cell { element, tree, node }
   }
   /// Gets the cell at `position` relative to this table, or `None` if there is no cell at `position`.
   fn cell_at_position<'c>(
     &'c self,
     position: Point,
-    layout: &Layout,
+    layout: Layout,
     absolute_y: f32,
     renderer: &R,
     element_state: &'c mut ElementState<'a, M, R>,
@@ -346,22 +331,27 @@ impl<'a, F, M, R: Renderer> TableRows<'a, M, R, F> where
       }
     }
   }
-  /// Gets the column and bounds for `x` position relative to this table, or `None` if there is now column at `y`.
-  fn col_and_bounds_at(&self, x: f32, layout: &Layout) -> Option<(usize, Rectangle)> {
+  /// Gets the column and bounds (retrieved from the layout of the fake row) for `x` position relative to this table, or
+  /// `None` if there is no column at `x`.
+  fn col_and_bounds_at(&self, x: f32, layout: Layout) -> Option<(usize, Rectangle)> {
     // TODO: more efficient way to implement this, not a for loop!
     if x < 0.0 { return None; } // Out of bounds
     let mut offset = 0f32;
-    for (col, cell_layout) in layout.children().enumerate() {
+    for (col, bounds) in Self::get_cell_bounds(layout).enumerate() {
       if x < offset { return None; } // On column spacing or out of bounds
-      offset += cell_layout.bounds().width;
-      if x <= offset { return Some((col, cell_layout.bounds())); }
+      offset += bounds.width;
+      if x <= offset { return Some((col, bounds)); }
       offset += self.spacing;
     }
     None
   }
+  /// Gets cell bounds (retrieved from the layout of the fake row) from the `layout` of this table.
+  fn get_cell_bounds(layout: Layout) -> impl Iterator<Item=Rectangle> + '_ {
+    layout.children().next().unwrap().children().map(|l| l.bounds())
+  }
 }
 
-impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for TableRows<'a, M, R, F> where
+impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Body<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
   fn into(self) -> Element<'a, M, R> {
