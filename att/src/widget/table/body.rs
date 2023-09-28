@@ -17,11 +17,11 @@ pub struct Body<'a, M, R, F> {
   row_count: usize,
   last_row_index: usize,
   cell_to_element: F,
-  fake_row: Element<'a, M, R>,
+  phantom_row: Element<'a, M, R>,
   element_state: RefCell<ElementState<'a, M, R>>,
 }
 impl<'a, M, R, F> Body<'a, M, R, F> {
-  pub fn new(spacing: f32, column_count: usize, row_height: f32, row_count: usize, cell_to_element: F, fake_row: Element<'a, M, R>) -> Self {
+  pub fn new(spacing: f32, column_count: usize, row_height: f32, row_count: usize, cell_to_element: F, phantom_row: Element<'a, M, R>) -> Self {
     Self {
       spacing,
       column_count,
@@ -30,7 +30,7 @@ impl<'a, M, R, F> Body<'a, M, R, F> {
       row_count,
       last_row_index: row_count.saturating_sub(1),
       cell_to_element,
-      fake_row,
+      phantom_row,
       element_state: Default::default()
     }
   }
@@ -85,10 +85,10 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for Body<'a, M, R, F> where
     tree::State::Some(Box::new(RefCell::new(TreeState::default())))
   }
   fn children(&self) -> Vec<Tree> {
-    vec![Tree::new(&self.fake_row)]
+    vec![Tree::new(&self.phantom_row)]
   }
   fn diff(&self, tree: &mut Tree) {
-    tree.diff_children(std::slice::from_ref(&self.fake_row))
+    tree.diff_children(std::slice::from_ref(&self.phantom_row))
   }
 
   fn width(&self) -> Length { Length::Fill }
@@ -96,9 +96,9 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for Body<'a, M, R, F> where
   fn layout(&self, tree: &mut Tree, renderer: &R, limits: &Limits) -> Node {
     let max_height = self.row_count as f32 * self.row_height + self.row_count.saturating_sub(1) as f32 * self.spacing;
     let limits = limits.max_height(max_height);
-    // The fake row lays out the cells of a single row. We will re-use that layout for every row in the table body, but
-    // corrects its y-position to correspond to the actual row.
-    let node = self.fake_row.as_widget().layout(&mut tree.children[0], renderer, &limits.height(self.row_height));
+    // The phantom row lays out the cells of a single row. We will re-use that layout for every row in the table body,
+    // but corrects its y-position to correspond to the actual row.
+    let node = self.phantom_row.as_widget().layout(&mut tree.children[0], renderer, &limits.height(self.row_height));
     Node::with_children(limits.max(), vec![node])
   }
 
@@ -278,7 +278,7 @@ struct Cell<'c, 'e, M, R> {
 impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
-  /// Gets the cell at (`row`, `col`), with `cell_bounds` (retrieved from the layout of the fake row).
+  /// Gets the cell at (`row`, `col`), with `cell_bounds` (retrieved from the layout of the phantom row).
   fn cell_at<'c>(
     &'c self,
     row: usize,
@@ -293,7 +293,7 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
     let tree = tree_state.get_or_insert(row, col, element);
     let limits = Limits::new(Size::ZERO, cell_bounds.size());
     let mut node = element.as_widget().layout(tree, renderer, &limits);
-    // Since `cell_bounds` is from the layout of the fake row, it always has a y-position of 0.0. We move the node to
+    // Since `cell_bounds` is from the layout of the phantom row, it always has a y-position of 0.0. We move the node to
     // its correct y-position here.
     let y = absolute_y + row as f32 * self.row_height_plus_spacing;
     node.move_to(Point::new(cell_bounds.x, y));
@@ -331,7 +331,7 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
       }
     }
   }
-  /// Gets the column and bounds (retrieved from the layout of the fake row) for `x` position relative to this table, or
+  /// Gets the column and bounds (retrieved from the layout of the phantom row) for `x` position relative to this table, or
   /// `None` if there is no column at `x`.
   fn col_and_bounds_at(&self, x: f32, layout: Layout) -> Option<(usize, Rectangle)> {
     // TODO: more efficient way to implement this, not a for loop!
@@ -345,7 +345,7 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
     }
     None
   }
-  /// Gets cell bounds (retrieved from the layout of the fake row) from the `layout` of this table.
+  /// Gets cell bounds (retrieved from the layout of the phantom row) from the `layout` of this table.
   fn get_cell_bounds(layout: Layout) -> impl Iterator<Item=Rectangle> + '_ {
     layout.children().next().unwrap().children().map(|l| l.bounds())
   }

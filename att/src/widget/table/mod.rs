@@ -102,12 +102,12 @@ impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Table<'a, M, R,
     header.height = self.header_row_height;
 
     let column_count = self.column_constraints.len();
-    // Create a fake row with space elements which the TableBody widget will use as a base to lay out rows.
-    let mut fake_row_elements = Vec::with_capacity(column_count);
-    fake_row_elements.resize_with(column_count, || Space::new(Length::Fill, Length::Fill).into());
-    let fake_row = ConstrainedRow::with_elements_and_constraints(fake_row_elements, self.column_constraints);
+    // Create a phantom row with space elements which the table body widget will use as a base to lay out rows.
+    let mut space_elements = Vec::with_capacity(column_count);
+    space_elements.resize_with(column_count, || Space::new(Length::Fill, Length::Fill).into());
+    let phantom_row = ConstrainedRow::with_elements_and_constraints(space_elements, self.column_constraints);
 
-    let body = Body::new(self.spacing, column_count, self.body_row_height, self.body_row_count, self.cell_to_element, fake_row.into());
+    let body = Body::new(self.spacing, column_count, self.body_row_height, self.body_row_count, self.cell_to_element, phantom_row.into());
     let body = Scrollable::new(body);
 
     Column::with_children(vec![header.into(), body.into()])
