@@ -2,6 +2,8 @@ use iced::{Element, Length};
 use iced::advanced::Renderer;
 use iced::widget::{Column, scrollable, Scrollable, Space};
 
+use constrained_row::Constraint;
+
 use crate::widget::constrained_row;
 use crate::widget::constrained_row::ConstrainedRow;
 use crate::widget::table::body::Body;
@@ -14,7 +16,7 @@ pub struct Table<'a, M, R, F> {
   height: Length,
   max_width: f32,
 
-  column_constraints: Vec<constrained_row::RowConstraint>,
+  column_constraints: Vec<Constraint>,
 
   header_elements: Vec<Element<'a, M, R>>,
   header_row_height: f32,
@@ -27,23 +29,33 @@ pub struct Table<'a, M, R, F> {
 impl<'a, M, R, F> Table<'a, M, R, F> where
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
+  /// Creates a new table with a `cell_to_element` function to lazily create widget elements for cells.
   pub fn new(cell_to_element: F) -> Self {
     Self::with_constraints_and_header_elements(Vec::new(), Vec::new(), cell_to_element)
   }
+
+  /// Creates a new table with:
+  ///
+  /// - `column_constraints`: constraints for column widths and alignments of elements in a cell.
+  /// - `header_elements`: widget elements to use in the header of the table.
+  /// - `cell_to_element`: function to lazily create widget elements for cells.
+  ///
+  /// If `column_constraints` is smaller or larger than `header_elements`, `column_constraints` will be resized to be
+  /// the same size as `header_elements`, adding default constraints if needed.
   pub fn with_constraints_and_header_elements(
-    mut constraints: Vec<constrained_row::RowConstraint>,
+    mut column_constraints: Vec<Constraint>,
     header_elements: Vec<Element<'a, M, R>>,
     cell_to_element: F,
   ) -> Self {
-    constraints.resize_with(header_elements.len(), Default::default);
-    let row_height = 26.0;
+    column_constraints.resize_with(header_elements.len(), Default::default);
+    let row_height = 24.0;
     Self {
       spacing: 1.0,
       width: Length::Fill,
       height: Length::Fill,
       max_width: f32::INFINITY,
-      column_constraints: Vec::new(),
-      header_elements: Vec::new(),
+      column_constraints,
+      header_elements,
       header_row_height: row_height,
       body_row_count: 0,
       body_row_height: row_height,
@@ -85,7 +97,7 @@ impl<'a, M, R, F> Table<'a, M, R, F> where
     self
   }
 
-  pub fn push(mut self, column_constraint: impl Into<constrained_row::RowConstraint>, header_element: impl Into<Element<'a, M, R>>) -> Self {
+  pub fn push(mut self, column_constraint: impl Into<Constraint>, header_element: impl Into<Element<'a, M, R>>) -> Self {
     self.column_constraints.push(column_constraint.into());
     self.header_elements.push(header_element.into());
     self
@@ -97,15 +109,15 @@ impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Table<'a, M, R,
   F: Fn(usize, usize) -> Element<'a, M, R> + 'a
 {
   fn into(self) -> Element<'a, M, R> {
-    let mut header = ConstrainedRow::with_elements_and_constraints(self.header_elements, self.column_constraints.clone());
-    header.spacing = self.spacing;
-    header.height = self.header_row_height;
+    let header = ConstrainedRow::with_constraints_and_elements(self.column_constraints.clone(), self.header_elements)
+      .spacing(self.spacing)
+      .height(self.header_row_height);
 
     let column_count = self.column_constraints.len();
     // Create a phantom row with space elements which the table body widget will use as a base to lay out rows.
     let mut space_elements = Vec::with_capacity(column_count);
     space_elements.resize_with(column_count, || Space::new(Length::Fill, Length::Fill).into());
-    let phantom_row = ConstrainedRow::with_elements_and_constraints(space_elements, self.column_constraints);
+    let phantom_row = ConstrainedRow::with_constraints_and_elements(self.column_constraints, space_elements);
 
     let body = Body::new(self.spacing, column_count, self.body_row_height, self.body_row_count, self.cell_to_element, phantom_row.into());
     let body = Scrollable::new(body);

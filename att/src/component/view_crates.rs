@@ -1,8 +1,9 @@
-use iced::Element;
+use iced::{Color, Element};
 
 use crate::app::{Cache, Model};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
+use crate::widget::WidgetExt;
 
 #[derive(Default, Debug)]
 pub struct ViewCrates;
@@ -46,6 +47,7 @@ impl ViewCrates {
       .push(1, "Downloads")
       .push(1, "")
       .body_row_count(model.blessed_crate_ids.len())
-      .into()
+      .into_element()
+      .explain(Color::WHITE)
   }
 }

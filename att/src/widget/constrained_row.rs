@@ -1,69 +1,100 @@
 use iced::{Alignment, Element, Event, Length, Point, Rectangle};
 use iced::advanced::{Clipboard, Layout, overlay, Renderer, renderer, Shell, Widget};
 use iced::advanced::layout::{Limits, Node};
-use iced::advanced::widget::{Operation, Tree, tree};
+use iced::advanced::widget::{Operation, Tree};
 use iced::event::Status;
 use iced::mouse::{Cursor, Interaction};
 
+/// A row where [constraints](Constraint) are applied to each element in the row.
 pub struct ConstrainedRow<'a, M, R> {
-  pub spacing: f32,
-  pub height: f32,
+  spacing: f32,
+  height: f32,
+  constraints: Vec<Constraint>,
   elements: Vec<Element<'a, M, R>>,
-  constraints: Vec<RowConstraint>,
 }
 
+/// A constraint to apply to an element in a [constrained row](ConstrainedRow).
 #[derive(Clone, Copy, PartialEq, Debug)]
-pub struct RowConstraint {
+pub struct Constraint {
   width_fill_portion: f32,
   horizontal_alignment: Alignment,
   vertical_alignment: Alignment,
 }
-impl Default for RowConstraint {
+impl Default for Constraint {
   fn default() -> Self {
-    Self { width_fill_portion: 1.0, horizontal_alignment: Alignment::Start, vertical_alignment: Alignment::Start }
+    Self {
+      width_fill_portion: 1.0,
+      horizontal_alignment: Alignment::Start,
+      vertical_alignment: Alignment::Center
+    }
   }
 }
-impl From<f32> for RowConstraint {
+impl From<f32> for Constraint {
   fn from(width_fill_portion: f32) -> Self {
     Self { width_fill_portion, ..Self::default() }
   }
 }
-impl From<u32> for RowConstraint {
+impl From<u32> for Constraint {
   fn from(width_fill_portion: u32) -> Self {
     Self::from(width_fill_portion as f32)
   }
 }
 
 impl<'a, M, R> ConstrainedRow<'a, M, R> {
+  /// Creates a new constrained row without any constraints and elements. Consider using
+  /// [with_constraints_and_elements](Self::with_constraints_and_elements) or [with_capacity](Self::with_capacity) to
+  /// reduce [`Vec`] resize allocations.
   pub fn new() -> Self {
-    Self::with_elements_and_constraints(Vec::new(), Vec::new())
+    Self::with_constraints_and_elements(Vec::new(), Vec::new())
   }
-  pub fn with_elements_and_constraints(
+  /// Creates a new constrained row with `constraints` for widths and alignments of `elements`.
+  ///
+  /// If `constraints` is not the same size as `elements`, `constraints` will be resized to be the same size as
+  /// `header_elements`, adding default constraints if needed.
+  pub fn with_constraints_and_elements(
+    mut constraints: Vec<Constraint>,
     elements: Vec<Element<'a, M, R>>,
-    mut constraints: Vec<RowConstraint>,
   ) -> Self {
     constraints.resize_with(elements.len(), Default::default);
     Self {
-      spacing: 0.0,
-      height: 26.0,
-      elements,
+      spacing: 1.0,
+      height: 24.0,
       constraints,
+      elements,
     }
   }
+  /// Creates a new constrained row without any constraints and elements, but reserves `capacity` in the constraints and
+  /// elements [`Vec`]s.
   pub fn with_capacity(capacity: usize) -> Self {
-    Self::with_elements_and_constraints(Vec::with_capacity(capacity), Vec::with_capacity(capacity))
+    Self::with_constraints_and_elements(Vec::with_capacity(capacity), Vec::with_capacity(capacity))
   }
 
-  pub fn push(mut self, element: impl Into<Element<'a, M, R>>, constraint: impl Into<RowConstraint>) -> Self {
-    self.elements.push(element.into());
+  /// Sets the horizontal `spacing` _between_ elements of the row.
+  pub fn spacing(mut self, spacing: f32) -> Self {
+    self.spacing = spacing;
+    self
+  }
+  /// Sets the `height` of the row.
+  pub fn height(mut self, height: f32) -> Self {
+    self.height = height;
+    self
+  }
+
+  /// Appends `constraint` and `element` to the constraints and elements of the row.
+  pub fn push(mut self, constraint: impl Into<Constraint>, element: impl Into<Element<'a, M, R>>) -> Self {
     self.constraints.push(constraint.into());
+    self.elements.push(element.into());
     self
   }
 }
 
+impl<'a, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for ConstrainedRow<'a, M, R> {
+  fn into(self) -> Element<'a, M, R> {
+    Element::new(self)
+  }
+}
+
 impl<'a, M, R: Renderer> Widget<M, R> for ConstrainedRow<'a, M, R> {
-  fn state(&self) -> tree::State { tree::State::None }
-  fn tag(&self) -> tree::Tag { tree::Tag::stateless() }
   fn children(&self) -> Vec<Tree> {
     self.elements.iter().map(Tree::new).collect()
   }
@@ -74,7 +105,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for ConstrainedRow<'a, M, R> {
   fn width(&self) -> Length { Length::Fill }
   fn height(&self) -> Length { Length::Fixed(self.height) }
   fn layout(&self, tree: &mut Tree, renderer: &R, limits: &Limits) -> Node {
-    let limits = limits.height(self.height);
+    let limits = limits.max_height(self.height);
     let max = limits.max();
 
     let cells = self.elements.len();
@@ -85,10 +116,10 @@ impl<'a, M, R: Renderer> Widget<M, R> for ConstrainedRow<'a, M, R> {
     let mut x = 0.0;
     for ((element, constraint), tree) in self.elements.iter().zip(&self.constraints).zip(&mut tree.children) {
       let width = (constraint.width_fill_portion / total_fill_portion) * available_width;
-      let element_limits = limits.width(width);
+      let element_limits = limits.max_width(width);
       let mut node = element.as_widget().layout(tree, renderer, &element_limits);
       node.move_to(Point::new(x, 0.0));
-      node.align(constraint.horizontal_alignment, constraint.vertical_alignment, element_limits.fill());
+      node.align(constraint.horizontal_alignment, constraint.vertical_alignment, element_limits.max());
       nodes.push(node);
       x += width + self.spacing;
     }
@@ -130,11 +161,5 @@ impl<'a, M, R: Renderer> Widget<M, R> for ConstrainedRow<'a, M, R> {
 
   fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout, renderer: &R) -> Option<overlay::Element<'o, M, R>> {
     crate::widget::child::overlay(&mut self.elements, tree, layout, renderer)
-  }
-}
-
-impl<'a, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for ConstrainedRow<'a, M, R> {
-  fn into(self) -> Element<'a, M, R> {
-    Element::new(self)
   }
 }
