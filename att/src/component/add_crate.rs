@@ -6,6 +6,8 @@ use iced::widget::text_input;
 
 use crate::component::Update;
 use crate::widget::builder::WidgetBuilder;
+use crate::widget::table::Table;
+use crate::widget::WidgetExt;
 
 /// Search for a crate on crates.io and add it.
 #[derive(Debug)]
@@ -72,31 +74,39 @@ impl AddCrate {
     Update::default()
   }
 
-  pub fn view(&self) -> Element<'_, Message> {
+  pub fn view<'a>(&'a self) -> Element<'a, Message> {
     let builder = WidgetBuilder::default()
       .text_input("Crate search term", &self.search_term).id(self.search_id.clone()).on_input(Message::SetSearchTerm).add();
+
     let crates = match &self.crates {
       Some(Ok(crates)) => {
-        let mut builder = WidgetBuilder::new_heap_with_capacity(crates.crates.len());
-        for krate in &crates.crates {
-          let row = WidgetBuilder::default()
-            .text(&krate.id).width(300).add()
-            .text(&krate.max_version).width(150).add()
-            .text(krate.updated_at.format("%Y-%m-%d").to_string()).width(150).add()
-            .text(format!("{}", krate.downloads)).width(100).add()
-            .button("Add").positive_style().padding([0.0, 5.0]).add(|| Message::AddCrate(krate.clone()))
-            .into_row().add()
-            .take();
-          builder = builder.add_element(row);
-        }
-        builder
-          .into_column().spacing(2.0).fill_width().add()
-          .into_scrollable().add()
-          .take()
+        let cell_to_element = |row, col| -> Option<Element<'a, Message>> {
+          let Some(krate): Option<&Crate> = crates.crates.get(row) else { return None; };
+          let element = match col {
+            0 => WidgetBuilder::default().add_text(&krate.id).take(),
+            1 => WidgetBuilder::default().add_text(&krate.max_version).take(),
+            2 => WidgetBuilder::default().add_text(krate.updated_at.format("%Y-%m-%d").to_string()).take(),
+            3 => WidgetBuilder::default().add_text(format!("{}", krate.downloads)).take(),
+            4 => WidgetBuilder::default().button("Add").padding([1.0, 5.0]).positive_style().add(|| Message::AddCrate(krate.clone())).take(),
+            _ => return None,
+          };
+          Some(element)
+        };
+        Table::with_capacity(5, cell_to_element)
+          .spacing(1.0)
+          .body_row_height(24.0)
+          .body_row_count(crates.crates.len())
+          .push(2, "Name")
+          .push(1, "Latest Version")
+          .push(1, "Updated at")
+          .push(1, "Downloads")
+          .push(1, "")
+          .into_element()
       }
       Some(Err(e)) => WidgetBuilder::default().add_text(format!("{:?}", e)).take(),
       _ => WidgetBuilder::default().add_space_fill_width().take()
     };
+
     builder
       .add_element(crates)
       .into_column().spacing(20).width(800).height(600).add()

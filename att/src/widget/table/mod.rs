@@ -21,13 +21,13 @@ pub struct Table<'a, M, R, F> {
   header_elements: Vec<Element<'a, M, R>>,
   header_row_height: f32,
 
-  body_row_count: usize,
   body_row_height: f32,
+  body_row_count: usize,
   cell_to_element: F,
 }
 
 impl<'a, M, R, F> Table<'a, M, R, F> where
-  F: Fn(usize, usize) -> Element<'a, M, R> + 'a
+  F: Fn(usize, usize) -> Option<Element<'a, M, R>> + 'a
 {
   /// Creates a new table with a `cell_to_element` function to lazily create widget elements for cells.
   pub fn new(cell_to_element: F) -> Self {
@@ -57,8 +57,8 @@ impl<'a, M, R, F> Table<'a, M, R, F> where
       column_constraints,
       header_elements,
       header_row_height: row_height,
-      body_row_count: 0,
       body_row_height: row_height,
+      body_row_count: 0,
       cell_to_element
     }
   }
@@ -88,12 +88,12 @@ impl<'a, M, R, F> Table<'a, M, R, F> where
     self
   }
 
-  pub fn body_row_count(mut self, body_row_count: usize) -> Self {
-    self.body_row_count = body_row_count;
-    self
-  }
   pub fn body_row_height(mut self, height: f32) -> Self {
     self.body_row_height = height;
+    self
+  }
+  pub fn body_row_count(mut self, body_row_count: usize) -> Self {
+    self.body_row_count = body_row_count;
     self
   }
 
@@ -106,7 +106,7 @@ impl<'a, M, R, F> Table<'a, M, R, F> where
 
 impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Table<'a, M, R, F> where
   R::Theme: scrollable::StyleSheet,
-  F: Fn(usize, usize) -> Element<'a, M, R> + 'a
+  F: Fn(usize, usize) -> Option<Element<'a, M, R>> + 'a
 {
   fn into(self) -> Element<'a, M, R> {
     let header = ConstrainedRow::with_constraints_and_elements(self.column_constraints.clone(), self.header_elements)
@@ -119,7 +119,9 @@ impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Table<'a, M, R,
     space_elements.resize_with(column_count, || Space::new(Length::Fill, Length::Fill).into());
     let phantom_row = ConstrainedRow::with_constraints_and_elements(self.column_constraints, space_elements);
 
-    let body = Body::new(self.spacing, column_count, self.body_row_height, self.body_row_count, self.cell_to_element, phantom_row.into());
+    let cell_to_element = move |row, col| (self.cell_to_element)(row, col)
+      .unwrap_or_else(|| Space::new(Length::Fill, Length::Fill).into());
+    let body = Body::new(self.spacing, column_count, self.body_row_height, self.body_row_count, cell_to_element, phantom_row.into());
     let body = Scrollable::new(body);
 
     Column::with_children(vec![header.into(), body.into()])

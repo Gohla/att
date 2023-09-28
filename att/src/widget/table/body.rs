@@ -21,7 +21,14 @@ pub struct Body<'a, M, R, F> {
   element_state: RefCell<ElementState<'a, M, R>>,
 }
 impl<'a, M, R, F> Body<'a, M, R, F> {
-  pub fn new(spacing: f32, column_count: usize, row_height: f32, row_count: usize, cell_to_element: F, phantom_row: Element<'a, M, R>) -> Self {
+  pub fn new(
+    spacing: f32,
+    column_count: usize,
+    row_height: f32,
+    row_count: usize,
+    cell_to_element: F,
+    phantom_row: Element<'a, M, R>
+  ) -> Self {
     Self {
       spacing,
       column_count,
