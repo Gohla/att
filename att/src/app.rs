@@ -120,7 +120,7 @@ impl Application for App {
   fn view(&self) -> Element<'_, Message, Renderer<Theme>> {
     let content = WidgetBuilder::default()
       .text("Blessed Crates").size(20.0).add()
-      .button("Add Crate").add(|| Message::OpenAddCrateModal)
+      .button("Add Crate").on_press(|| Message::OpenAddCrateModal).add()
       .add_space_fill_width()
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .into_row().spacing(10.0).align_center().fill_width().add()

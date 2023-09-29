@@ -87,7 +87,7 @@ impl AddCrate {
             1 => WidgetBuilder::default().add_text(&krate.max_version).take(),
             2 => WidgetBuilder::default().add_text(krate.updated_at.format("%Y-%m-%d").to_string()).take(),
             3 => WidgetBuilder::default().add_text(format!("{}", krate.downloads)).take(),
-            4 => WidgetBuilder::default().button("Add").padding([1.0, 5.0]).positive_style().add(|| Message::AddCrate(krate.clone())).take(),
+            4 => WidgetBuilder::default().button("Add").padding([1.0, 5.0]).positive_style().on_press(|| Message::AddCrate(krate.clone())).add().take(),
             _ => return None,
           };
           Some(element)

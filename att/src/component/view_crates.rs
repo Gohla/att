@@ -32,7 +32,7 @@ impl ViewCrates {
         1 => WidgetBuilder::default().add_text(&data.max_version).take(),
         2 => WidgetBuilder::default().add_text(data.updated_at.format("%Y-%m-%d").to_string()).take(),
         3 => WidgetBuilder::default().add_text(format!("{}", data.downloads)).take(),
-        4 => WidgetBuilder::default().button("Remove").destructive_style().padding([1.0, 5.0]).add(|| Message::RemoveCrate(id.clone())).take(),
+        4 => WidgetBuilder::default().button("Remove").destructive_style().padding([1.0, 5.0]).on_press(|| Message::RemoveCrate(id.clone())).add().take(),
         _ => return None,
       };
       Some(element)

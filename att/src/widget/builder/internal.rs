@@ -396,7 +396,6 @@ pub trait ButtonActions<'a, M> {
   fn on_press<F: Fn() -> M + 'a>(self, on_press: F) -> Self::Change;
 }
 pub trait CreateButton<'a, S: Types<'a>> where
-  S::Renderer: TextRenderer,
   S::Theme: ButtonStyleSheet
 {
   type Message: Clone;
@@ -414,7 +413,6 @@ impl<'a, M> ButtonActions<'a, M> for ButtonPassthrough {
   }
 }
 impl<'a, S: Types<'a>> CreateButton<'a, S> for ButtonPassthrough where
-  S::Renderer: TextRenderer,
   S::Theme: ButtonStyleSheet,
   S::Message: Clone,
 {
@@ -442,7 +440,6 @@ impl<'a, M> ButtonActions<'a, M> for ButtonFunctions<'a, M> {
   }
 }
 impl<'a, S: Types<'a>> CreateButton<'a, S> for ButtonFunctions<'a, S::Message> where
-  S::Renderer: TextRenderer,
   S::Theme: ButtonStyleSheet,
 {
   type Message = ();

@@ -10,6 +10,6 @@ pub fn light_dark_toggle<'a, M: 'a>(dark_mode_enabled: bool, on_press: impl Fn()
     .text(icon).font(ICON_FONT).horizontal_alignment(Horizontal::Center).width(20).add()
     .take();
   WidgetBuilder::default()
-    .button(text).add(on_press)
+    .button(text).on_press(on_press).add()
     .take()
 }

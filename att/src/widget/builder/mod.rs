@@ -5,7 +5,7 @@ use iced::advanced::text::Renderer as TextRenderer;
 use iced::alignment::{Horizontal, Vertical};
 pub use iced::theme::Button as ButtonStyle;
 pub use iced::theme::Theme as BuiltinTheme;
-use iced::widget::{Button, Column, Container, Row, Rule, Scrollable, Space, Text};
+use iced::widget::{Column, Container, Row, Rule, Scrollable, Space, Text};
 pub use iced::widget::button::StyleSheet as ButtonStyleSheet;
 pub use iced::widget::container::{Id as ContainerId, StyleSheet as ContainerStyleSheet};
 pub use iced::widget::rule::StyleSheet as RuleStyleSheet;
@@ -16,6 +16,8 @@ pub use iced::widget::text::StyleSheet as TextStyleSheet;
 pub use iced::widget::text_input::{Icon as TextInputIcon, Id as TextInputId, StyleSheet as TextInputStyleSheet};
 
 use internal::{AnyState, CreateTextInput, Heap, Nil, OneState, TextInputActions, TextInputPassthrough};
+
+use crate::widget::builder::internal::{ButtonActions, ButtonPassthrough, CreateButton};
 
 mod internal;
 
@@ -117,10 +119,10 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
     TextInputBuilder::new(self.0, placeholder, value)
   }
   /// Build a [`Button`] widget from `content`.
-  pub fn button(self, content: impl Into<Element<'a, (), S::Renderer>>) -> ButtonBuilder<'a, S> where
+  pub fn button<C>(self, content: C) -> ButtonBuilder<'a, S, C, ButtonPassthrough> where
     S::Theme: ButtonStyleSheet
   {
-    ButtonBuilder::new(self.0, content.into())
+    ButtonBuilder::new(self.0, content)
   }
 
   /// Build an [`Element`] from `element`.
@@ -511,49 +513,59 @@ impl<'a, S: AnyState<'a>, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> 
 
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<'a, S: AnyState<'a>> where
+pub struct ButtonBuilder<'a, S: AnyState<'a>, C, A> where
   S::Theme: ButtonStyleSheet
 {
   state: S,
-  button: Button<'a, (), S::Renderer>,
-  disabled: bool,
+  content: C,
+  actions: A,
+  width: Length,
+  height: Length,
+  padding: Padding,
+  style: <S::Theme as ButtonStyleSheet>::Style,
 }
-impl<'a, S: AnyState<'a>> ButtonBuilder<'a, S> where
+impl<'a, S: AnyState<'a>, C> ButtonBuilder<'a, S, C, ButtonPassthrough> where
   S::Theme: ButtonStyleSheet
 {
-  fn new(state: S, content: Element<'a, (), S::Renderer>) -> Self {
+  fn new(state: S, content: C) -> Self {
     Self {
       state,
-      button: Button::new(content),
-      disabled: false,
+      content,
+      actions: ButtonPassthrough,
+      width: Length::Shrink,
+      height: Length::Shrink,
+      padding: 5.0.into(),
+      style: Default::default(),
     }
   }
-
+}
+impl<'a, S: AnyState<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'a, S, C, A> where
+  S::Theme: ButtonStyleSheet
+{
   /// Sets the width of the [`Button`].
   pub fn width(mut self, width: impl Into<Length>) -> Self {
-    self.button = self.button.width(width);
+    self.width = width.into();
     self
   }
   /// Sets the height of the [`Button`].
   pub fn height(mut self, height: impl Into<Length>) -> Self {
-    self.button = self.button.height(height);
+    self.height = height.into();
     self
   }
   /// Sets the [`Padding`] of the [`Button`].
   pub fn padding(mut self, padding: impl Into<Padding>) -> Self {
-    self.button = self.button.padding(padding);
+    self.padding = padding.into();
     self
   }
-  /// Sets whether the [`Button`] is disabled.
-  pub fn disabled(mut self, disabled: bool) -> Self {
-    self.disabled = disabled;
-    self
+  /// Sets the function that will be called when the [`Button`] is pressed to `on_paste`.
+  pub fn on_press<F: Fn() -> S::Message + 'a>(self, on_press: F) -> ButtonBuilder<'a, S, C, A::Change> {
+    self.replace_actions(|actions| actions.on_press(on_press))
   }
   /// Sets the [`Style`] of the [`Button`].
   ///
   /// [`Style`]: S::Theme::Style
   pub fn style(mut self, style: impl Into<<S::Theme as ButtonStyleSheet>::Style>) -> Self {
-    self.button = self.button.style(style);
+    self.style = style.into();
     self
   }
   /// Sets the style of the [`Button`] to [`ButtonStyle::Primary`].
@@ -595,16 +607,31 @@ impl<'a, S: AnyState<'a>> ButtonBuilder<'a, S> where
     self.style(ButtonStyle::custom(style_sheet))
   }
 
-  /// Sets the function that will be called when the [`Button`] is pressed to `on_press`, then adds the [`Button`] to
-  /// the builder and returns the builder.
-  pub fn add(self, on_press: impl Fn() -> S::Message + 'a) -> S::AddBuilder {
-    // The reason for this convoluted way to set the `on_press` function is to avoid a `Clone` requirement for the
-    // application message type.
-    let mut button = self.button;
-    if !self.disabled {
-      button = button.on_press(());
+  fn replace_actions<AA>(self, change: impl FnOnce(A) -> AA) -> ButtonBuilder<'a, S, C, AA> {
+    ButtonBuilder {
+      state: self.state,
+      content: self.content,
+      actions: change(self.actions),
+      width: self.width,
+      height: self.height,
+      padding: self.padding,
+      style: self.style,
     }
-    let element = Element::new(button).map(move |_| on_press());
+  }
+}
+impl<'a, S: AnyState<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> where
+  C: Into<Element<'a, A::Message, S::Renderer>>,
+  S::Theme: ButtonStyleSheet
+{
+  /// Adds the [`Button`] to the builder and returns the builder.
+  pub fn add(self) -> S::AddBuilder {
+    let element = self.actions.create(self.content, |button| {
+      button
+        .width(self.width)
+        .height(self.height)
+        .padding(self.padding)
+        .style(self.style)
+    });
     self.state.add(element)
   }
 }
