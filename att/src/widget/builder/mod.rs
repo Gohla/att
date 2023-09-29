@@ -68,6 +68,19 @@ impl<'a, M, R> Default for WidgetBuilder<Nil<Element<'a, M, R>>> {
   fn default() -> Self { Self::stack() }
 }
 
+/// Create a new stack-allocated widget builder.
+pub fn wb<'a, M, R>() -> WidgetBuilder<Nil<Element<'a, M, R>>> {
+  wb_stack()
+}
+/// Create a new stack-allocated widget builder.
+pub fn wb_stack<'a, M, R>() -> WidgetBuilder<Nil<Element<'a, M, R>>> {
+  WidgetBuilder::stack()
+}
+/// Create a new heap-allocated widget builder.
+pub fn wb_heap<'a, M, R>() -> WidgetBuilder<HeapList<Element<'a, M, R>>> {
+  WidgetBuilder::heap()
+}
+
 impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   /// Build a [`Space`] widget.
   pub fn space(self) -> SpaceBuilder<S> {
