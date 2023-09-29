@@ -15,9 +15,11 @@ use iced::widget::text::{LineHeight, Shaping};
 pub use iced::widget::text::StyleSheet as TextStyleSheet;
 pub use iced::widget::text_input::{Icon as TextInputIcon, Id as TextInputId, StyleSheet as TextInputStyleSheet};
 
-use internal::{AnyState, CreateTextInput, Heap, Nil, OneState, TextInputActions, TextInputPassthrough};
-
-use crate::widget::builder::internal::{ButtonActions, ButtonPassthrough, CreateButton};
+use internal::{AnyState, OneState};
+use internal::button::{ButtonActions, ButtonPassthrough, CreateButton};
+use internal::heap::HeapList;
+use internal::stack::Nil;
+use internal::text_input::{CreateTextInput, TextInputActions, TextInputPassthrough};
 
 mod internal;
 
@@ -40,7 +42,7 @@ impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
   /// [heap-based](Self::new_heap) builder can be used. TODO: workarounds
   pub fn new_stack() -> Self { Self(Nil::default()) }
 }
-impl<'a, M, R> WidgetBuilder<Heap<Element<'a, M, R>>> {
+impl<'a, M, R> WidgetBuilder<HeapList<Element<'a, M, R>>> {
   /// Create a new heap-based widget builder.
   ///
   /// The advantage of a heap-based widget builder is that its type never changes. Therefore, it can be used in the
@@ -55,9 +57,9 @@ impl<'a, M, R> WidgetBuilder<Heap<Element<'a, M, R>>> {
   ///   [reserving](Self::reserve) additional capacity if needed.
   ///
   /// Prefer a [stack-based](Self::new_stack) builder if possible.
-  pub fn new_heap() -> Self { Self(Heap::new()) }
+  pub fn new_heap() -> Self { Self(HeapList::new()) }
   /// Create a new heap-based widget builder and reserve `capacity` for elements.
-  pub fn new_heap_with_capacity(capacity: usize) -> Self { Self(Heap::with_capacity(capacity)) }
+  pub fn new_heap_with_capacity(capacity: usize) -> Self { Self(HeapList::with_capacity(capacity)) }
 }
 impl<'a, M, R> Default for WidgetBuilder<Nil<Element<'a, M, R>>> {
   /// Create a new stack-based widget builder.
@@ -174,7 +176,10 @@ impl<'a, S: OneState<'a>> WidgetBuilder<S> {
     self.0.take()
   }
 }
-impl<E> WidgetBuilder<Heap<E>> {
+impl<E> WidgetBuilder<HeapList<E>> {
+  /// Reserve space for `additional` elements.
+  ///
+  /// Can only be called when this is a heap-based builder..
   pub fn reserve(mut self, additional: usize) -> Self {
     self.0.reserve(additional);
     self
