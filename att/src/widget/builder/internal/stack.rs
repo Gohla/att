@@ -17,7 +17,7 @@ use iced::Element;
 
 use crate::widget::builder::WidgetBuilder;
 
-use super::{AnyState, OneState, Types};
+use super::{AnyState, ManyState, OneState, Types};
 
 /// Algebraic stack list constructor.
 pub struct Cons<E, Rest>(E, Rest);
@@ -84,37 +84,42 @@ impl<'a, M, R, L> AnyState<'a> for L where
   R: Renderer + 'a,
   L: StackList<E=Element<'a, M, R>>
 {
-  type AddBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
+  type AddOutput = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
   #[inline]
-  fn add(self, element: Element<'a, M, R>) -> Self::AddBuilder {
+  fn add(self, element: Element<'a, M, R>) -> Self::AddOutput {
     WidgetBuilder(StackList::add(self, element))
   }
 
-  type ConsumeBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
+  type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
   #[inline]
-  fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeBuilder {
+  fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeOutput {
     let vec = self.consume();
     let element = produce(vec);
     WidgetBuilder(Cons(element, Nil::default()))
   }
 
   #[inline]
-  fn take_vec(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
+  fn take_all(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
     self.consume()
+  }
+}
+impl<'a, M, R, L> ManyState<'a> for Cons<Element<'a, M, R>, L> where
+  M: 'a,
+  R: Renderer + 'a,
+  L: StackList<E=Element<'a, M, R>>
+{
+  type MapOutput = WidgetBuilder<Cons<Element<'a, M, R>, L>>;
+  #[inline]
+  fn map_last<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapOutput {
+    let Cons(element, rest) = self;
+    let element = map(element);
+    WidgetBuilder(Cons(element, rest))
   }
 }
 impl<'a, M, R> OneState<'a> for Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>> where
   M: 'a,
   R: Renderer + 'a
 {
-  type MapBuilder = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
-  #[inline]
-  fn map<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapBuilder {
-    let element = self.take();
-    let element = map(element);
-    WidgetBuilder(Cons(element, Nil::default()))
-  }
-
   #[inline]
   fn take(self) -> Element<'a, M, R> {
     self.0

@@ -109,7 +109,7 @@ impl AddCrate {
 
     builder
       .add_element(crates)
-      .into_column().spacing(20).width(800).height(600).add()
+      .column().spacing(20).width(800).height(600).add()
       .take()
   }
 

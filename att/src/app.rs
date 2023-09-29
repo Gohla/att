@@ -123,10 +123,10 @@ impl Application for App {
       .button("Add Crate").on_press(|| Message::OpenAddCrateModal).add()
       .add_space_fill_width()
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
-      .into_row().spacing(10.0).align_center().fill_width().add()
+      .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)
       .element(self.view_crates.view(&self.model, &self.cache)).map(Message::ToViewCrates).add()
-      .into_column().spacing(10.0).padding(10).fill().add()
+      .column().spacing(10.0).padding(10).fill().add()
       .take();
 
     if self.adding_crate {

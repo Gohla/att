@@ -5,7 +5,7 @@ use iced::Element;
 
 use crate::widget::builder::WidgetBuilder;
 
-use super::{AnyState, OneState, Types};
+use super::{AnyState, ManyState, OneState, Types};
 
 /// Heap-based list consisting either of a `Vec` with any number of elements, or a single element (with optional
 /// reserve_additional)
@@ -28,7 +28,7 @@ impl<E> HeapList<E> {
   }
 
   #[inline]
-  fn push(self, new_element: E) -> Self {
+  fn add(self, new_element: E) -> Self {
     match self {
       HeapList::Any(mut vec) => {
         vec.push(new_element);
@@ -54,20 +54,6 @@ impl<E> HeapList<E> {
       HeapList::One(element, _) => vec![element], // Note: ignore reserve_additional, since the vec will be consumed as-is.
     }
   }
-  #[inline]
-  fn take(self) -> (E, usize) {
-    match self {
-      HeapList::Any(mut vec) => {
-        let len = vec.len();
-        let 1 = len else {
-          panic!("builder should have precisely 1 element, but it has {}", len);
-        };
-        let element = vec.drain(..).next().unwrap();
-        (element, 0)
-      }
-      HeapList::One(element, reserve_additional) => (element, reserve_additional),
-    }
-  }
 }
 
 // Implement internal traits for `HeapList`.
@@ -83,40 +69,59 @@ impl<'a, M, R> AnyState<'a> for HeapList<Element<'a, M, R>> where
   M: 'a,
   R: Renderer + 'a,
 {
-  type AddBuilder = WidgetBuilder<Self>;
+  type AddOutput = WidgetBuilder<Self>;
   #[inline]
-  fn add(self, element: Element<'a, M, R>) -> Self::AddBuilder {
-    let heap = self.push(element);
+  fn add(self, element: Element<'a, M, R>) -> Self::AddOutput {
+    let heap = self.add(element);
     WidgetBuilder(heap)
   }
 
-  type ConsumeBuilder = WidgetBuilder<Self>;
+  type ConsumeOutput = WidgetBuilder<Self>;
   #[inline]
-  fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeBuilder {
+  fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeOutput {
     let vec = self.to_vec();
     let element = produce(vec);
     WidgetBuilder(HeapList::One(element, 0))
   }
 
   #[inline]
-  fn take_vec(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
+  fn take_all(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
     self.to_vec()
+  }
+}
+impl<'a, M, R> ManyState<'a> for HeapList<Element<'a, M, R>> where
+  M: 'a,
+  R: Renderer + 'a
+{
+  type MapOutput = WidgetBuilder<Self>;
+  #[inline]
+  fn map_last<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapOutput {
+    let mapped = match self {
+      HeapList::Any(mut vec) => {
+        let element = vec.pop()
+          .unwrap_or_else(|| panic!("builder should have at least 1 element"));
+        let element = map(element);
+        vec.push(element);
+        HeapList::Any(vec)
+      }
+      HeapList::One(element, reserve_additional) => HeapList::One(map(element), reserve_additional),
+    };
+    WidgetBuilder(mapped)
   }
 }
 impl<'a, M, R> OneState<'a> for HeapList<Element<'a, M, R>> where
   M: 'a,
   R: Renderer + 'a
 {
-  type MapBuilder = WidgetBuilder<Self>;
-  #[inline]
-  fn map<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapBuilder {
-    let (element, reserve_additional) = self.take();
-    let element = map(element);
-    WidgetBuilder(HeapList::One(element, reserve_additional))
-  }
-
   #[inline]
   fn take(self) -> Element<'a, M, R> {
-    self.take().0
+    match self {
+      HeapList::Any(mut vec) => {
+        let len = vec.len();
+        vec.drain(..).next()
+          .unwrap_or_else(|| panic!("builder should have precisely 1 element, but it has {}", len))
+      }
+      HeapList::One(element, _) => element,
+    }
   }
 }

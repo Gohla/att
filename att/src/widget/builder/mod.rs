@@ -21,6 +21,8 @@ use internal::heap::HeapList;
 use internal::stack::Nil;
 use internal::text_input::{CreateTextInput, TextInputActions, TextInputPassthrough};
 
+use crate::widget::builder::internal::ManyState;
+
 mod internal;
 
 #[repr(transparent)]
@@ -28,9 +30,9 @@ mod internal;
 pub struct WidgetBuilder<S>(S);
 
 impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
-  /// Create a new stack-based widget builder.
+  /// Create a new stack-allocated widget builder.
   ///
-  /// The advantages of a stack-based widget builder are:
+  /// The advantages of a stack-allocated widget builder are:
   /// - It has full compile-time safety: incorrect state is a compilation error.
   /// - It has low run-time overhead: all elements are stored on the stack and are only converted into a [`Vec`] of
   ///   exactly the right size when needed, for example when creating a [`Column`] or [`Row`]. This is equivalent to
@@ -40,30 +42,30 @@ impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
   /// The disadvantage is that every operation changes the type of the builder, and this makes it impossible to use in
   /// some cases. For example, using it in a while loop to continually add elements is not possible. In that case, a
   /// [heap-based](Self::new_heap) builder can be used. TODO: workarounds
-  pub fn new_stack() -> Self { Self(Nil::default()) }
+  pub fn stack() -> Self { Self(Nil::default()) }
 }
 impl<'a, M, R> WidgetBuilder<HeapList<Element<'a, M, R>>> {
-  /// Create a new heap-based widget builder.
+  /// Create a new heap-allocated widget builder.
   ///
-  /// The advantage of a heap-based widget builder is that its type never changes. Therefore, it can be used in the
-  /// cases where a [heap-based](Self::new_heap) builder cannot be used.
+  /// The advantage of a heap-allocated widget builder is that its type never changes. Therefore, it can be used in the
+  /// cases where a [stack-allocated](Self::stack) builder cannot be used.
   ///
-  /// The disadvantages of a heap-based widget builder are:
+  /// The disadvantages of a heap-allocated widget builder are:
   /// - It does not have full compile-time safety: some incorrect state must be handled at run-time
-  ///   - Attempting to build a [`Scrollable`] or a [`Container`] when there are 0 or more than 1 elements in the builder is an error.
-  ///   - Attempting to to take the element out of the builder when there are 0 or more than 1 elements is an error.
+  ///   - Attempting to build a [`Scrollable`] or a [`Container`] when there are no elements in the builder is an error.
+  ///   - Attempting to take the single element out of the builder when there are 0 or more than 1 elements is an error.
   /// - It has some run-time overhead: elements are stored on the heap, and some run-time checks are needed. Overhead
-  ///   can be minimized by creating the builder with [enough capacity](Self::new_heap_with_capacity), and by
+  ///   can be minimized by creating the builder with [enough capacity](Self::heap_with_capacity), and by
   ///   [reserving](Self::reserve) additional capacity if needed.
   ///
-  /// Prefer a [stack-based](Self::new_stack) builder if possible.
-  pub fn new_heap() -> Self { Self(HeapList::new()) }
-  /// Create a new heap-based widget builder and reserve `capacity` for elements.
-  pub fn new_heap_with_capacity(capacity: usize) -> Self { Self(HeapList::with_capacity(capacity)) }
+  /// Prefer a [stack-allocated](Self::stack) builder if possible.
+  pub fn heap() -> Self { Self(HeapList::new()) }
+  /// Create a new heap-allocated widget builder and reserve `capacity` for elements.
+  pub fn heap_with_capacity(capacity: usize) -> Self { Self(HeapList::with_capacity(capacity)) }
 }
 impl<'a, M, R> Default for WidgetBuilder<Nil<Element<'a, M, R>>> {
-  /// Create a new stack-based widget builder.
-  fn default() -> Self { Self::new_stack() }
+  /// Create a new stack-allocated widget builder.
+  fn default() -> Self { Self::stack() }
 }
 
 impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
@@ -72,11 +74,11 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
     SpaceBuilder::new(self.0)
   }
   /// Adds a width-filling [`Space`] to this builder.
-  pub fn add_space_fill_width(self) -> S::AddBuilder {
+  pub fn add_space_fill_width(self) -> S::AddOutput {
     self.space().fill_width().add()
   }
   /// Adds a height-filling [`Space`] to this builder.
-  pub fn add_space_fill_height(self) -> S::AddBuilder {
+  pub fn add_space_fill_height(self) -> S::AddOutput {
     self.space().fill_height().add()
   }
 
@@ -87,13 +89,13 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
     RuleBuilder::new(self.0)
   }
   /// Adds a horizontal [`Rule`] with `height` to this builder.
-  pub fn add_horizontal_rule(self, height: impl Into<Pixels>) -> S::AddBuilder where
+  pub fn add_horizontal_rule(self, height: impl Into<Pixels>) -> S::AddOutput where
     S::Theme: RuleStyleSheet
   {
     self.rule().horizontal(height).add()
   }
   /// Adds a vertical [`Rule`] with `width` to this builder.
-  pub fn add_vertical_rule(self, width: impl Into<Pixels>) -> S::AddBuilder where
+  pub fn add_vertical_rule(self, width: impl Into<Pixels>) -> S::AddOutput where
     S::Theme: RuleStyleSheet
   {
     self.rule().vertical(width).add()
@@ -107,7 +109,7 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
     TextBuilder::new(self.0, content.into())
   }
   /// Adds a [`Text`] widget with `content` to this builder.
-  pub fn add_text(self, content: impl Into<Cow<'a, str>>) -> S::AddBuilder where
+  pub fn add_text(self, content: impl Into<Cow<'a, str>>) -> S::AddOutput where
     S::Renderer: TextRenderer,
     S::Theme: TextStyleSheet
   {
@@ -132,46 +134,47 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
     ElementBuilder::new(self.0, element.into())
   }
   /// Adds `element` to this builder.
-  pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Renderer>>) -> S::AddBuilder {
+  pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Renderer>>) -> S::AddOutput {
     self.element(element).add()
   }
 
   /// Build a [`Column`] widget that will consume all elements in this builder.
-  pub fn into_column(self) -> ColumnBuilder<S> {
+  pub fn column(self) -> ColumnBuilder<S> {
     ColumnBuilder::new(self.0)
   }
   /// Build a [`Row`] widget that will consume all elements in this builder.
-  pub fn into_row(self) -> RowBuilder<S> {
+  pub fn row(self) -> RowBuilder<S> {
     RowBuilder::new(self.0)
   }
 
   /// Take a [`Vec`] with all element out of this builder.
-  pub fn take_vec(self) -> Vec<Element<'a, S::Message, S::Renderer>> {
-    self.0.take_vec()
+  pub fn take_all(self) -> Vec<Element<'a, S::Message, S::Renderer>> {
+    self.0.take_all()
   }
 }
-impl<'a, S: OneState<'a>> WidgetBuilder<S> {
-  /// Build a [`Scrollable`] widget that will consume the single element in this builder.
+impl<'a, S: ManyState<'a>> WidgetBuilder<S> {
+  /// Build a [`Scrollable`] widget that will consume the last element in this builder.
   ///
-  /// Can only be called when this builder has exactly one widget.
-  pub fn into_scrollable(self) -> ScrollableBuilder<'a, S> where
+  /// Can only be called when this builder has at least one element.
+  pub fn scrollable(self) -> ScrollableBuilder<'a, S> where
     S::Theme: ScrollableStyleSheet
   {
     ScrollableBuilder::new(self.0)
   }
 
-  /// Build a [`Container`] widget that will consume the single element in this builder.
+  /// Build a [`Container`] widget that will consume the last element in this builder.
   ///
-  /// Can only be called when this builder has exactly one widget.
-  pub fn into_container(self) -> ContainerBuilder<'a, S> where
+  /// Can only be called when this builder has at least one element.
+  pub fn container(self) -> ContainerBuilder<'a, S> where
     S::Theme: ContainerStyleSheet
   {
     ContainerBuilder::new(self.0)
   }
-
+}
+impl<'a, S: OneState<'a>> WidgetBuilder<S> {
   /// Take the single element out of this builder.
   ///
-  /// Can only be called when this builder has exactly one widget.
+  /// Can only be called when this builder has exactly one element.
   pub fn take(self) -> Element<'a, S::Message, S::Renderer> {
     self.0.take()
   }
@@ -179,7 +182,7 @@ impl<'a, S: OneState<'a>> WidgetBuilder<S> {
 impl<E> WidgetBuilder<HeapList<E>> {
   /// Reserve space for `additional` elements.
   ///
-  /// Can only be called when this is a heap-based builder..
+  /// Can only be called when this is a heap-allocated builder.
   pub fn reserve(mut self, additional: usize) -> Self {
     self.0.reserve(additional);
     self
@@ -222,7 +225,7 @@ impl<'a, S: AnyState<'a>> SpaceBuilder<S> {
   }
 
   /// Adds the [`Space`] widget to the builder and returns the builder.
-  pub fn add(self) -> S::AddBuilder {
+  pub fn add(self) -> S::AddOutput {
     let space = Space::new(self.width, self.height);
     self.state.add(space.into())
   }
@@ -257,7 +260,7 @@ impl<'a, S: AnyState<'a>> RuleBuilder<S> where
     self
   }
 
-  pub fn add(self) -> S::AddBuilder {
+  pub fn add(self) -> S::AddOutput {
     let rule = if self.is_vertical {
       Rule::vertical(self.width_or_height)
     } else {
@@ -345,7 +348,7 @@ impl<'a, S: AnyState<'a>> TextBuilder<'a, S> where
     self
   }
 
-  pub fn add(self) -> S::AddBuilder {
+  pub fn add(self) -> S::AddOutput {
     self.state.add(self.text.into())
   }
 }
@@ -489,7 +492,7 @@ impl<'a, S: AnyState<'a>, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> 
   S::Theme: TextInputStyleSheet
 {
   /// Adds the [`TextInput`](iced::widget::TextInput) to the builder and returns the builder.
-  pub fn add(self) -> S::AddBuilder {
+  pub fn add(self) -> S::AddOutput {
     let element = self.actions.create(&self.placeholder, &self.value, |mut text_input| {
       if let Some(id) = self.id {
         text_input = text_input.id(id);
@@ -629,7 +632,7 @@ impl<'a, S: AnyState<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> 
   S::Theme: ButtonStyleSheet
 {
   /// Adds the [`Button`] to the builder and returns the builder.
-  pub fn add(self) -> S::AddBuilder {
+  pub fn add(self) -> S::AddOutput {
     let element = self.actions.create(self.content, |button| {
       button
         .width(self.width)
@@ -658,7 +661,7 @@ impl<'a, S: AnyState<'a>, M: 'a> ElementBuilder<'a, S, M> {
   }
 }
 impl<'a, S: AnyState<'a>> ElementBuilder<'a, S, S::Message> {
-  pub fn add(self) -> S::AddBuilder {
+  pub fn add(self) -> S::AddOutput {
     self.state.add(self.element)
   }
 }
@@ -742,7 +745,7 @@ impl<'a, S> ColumnBuilder<S> {
   }
 }
 impl<'a, S: AnyState<'a>> ColumnBuilder<S> {
-  pub fn add(self) -> S::ConsumeBuilder {
+  pub fn add(self) -> S::ConsumeOutput {
     self.state.consume(|vec| {
       Column::with_children(vec)
         .spacing(self.spacing)
@@ -827,7 +830,7 @@ impl<'a, S> RowBuilder<S> {
   }
 }
 impl<'a, S: AnyState<'a>> RowBuilder<S> {
-  pub fn add(self) -> S::ConsumeBuilder {
+  pub fn add(self) -> S::ConsumeOutput {
     self.state.consume(|vec| {
       Row::with_children(vec)
         .spacing(self.spacing)
@@ -842,7 +845,7 @@ impl<'a, S: AnyState<'a>> RowBuilder<S> {
 
 /// Builder for a [`Scrollable`] widget.
 #[must_use]
-pub struct ScrollableBuilder<'a, S: OneState<'a>> where
+pub struct ScrollableBuilder<'a, S: ManyState<'a>> where
   S::Theme: ScrollableStyleSheet
 {
   state: S,
@@ -853,7 +856,7 @@ pub struct ScrollableBuilder<'a, S: OneState<'a>> where
   on_scroll: Option<Box<dyn Fn(Viewport) -> S::Message + 'a>>,
   style: <S::Theme as ScrollableStyleSheet>::Style,
 }
-impl<'a, S: OneState<'a>> ScrollableBuilder<'a, S> where
+impl<'a, S: ManyState<'a>> ScrollableBuilder<'a, S> where
   S::Theme: ScrollableStyleSheet
 {
   fn new(state: S) -> Self {
@@ -901,8 +904,8 @@ impl<'a, S: OneState<'a>> ScrollableBuilder<'a, S> where
     self
   }
 
-  pub fn add(self) -> S::MapBuilder {
-    self.state.map(|content| {
+  pub fn add(self) -> S::MapOutput {
+    self.state.map_last(|content| {
       let mut scrollable = Scrollable::new(content)
         .width(self.width)
         .height(self.height)
@@ -921,7 +924,7 @@ impl<'a, S: OneState<'a>> ScrollableBuilder<'a, S> where
 
 /// Builder for a [`Container`] widget.
 #[must_use]
-pub struct ContainerBuilder<'a, S: OneState<'a>> where
+pub struct ContainerBuilder<'a, S: ManyState<'a>> where
   S::Theme: ContainerStyleSheet
 {
   state: S,
@@ -935,7 +938,7 @@ pub struct ContainerBuilder<'a, S: OneState<'a>> where
   vertical_alignment: Vertical,
   style: <S::Theme as ContainerStyleSheet>::Style,
 }
-impl<'a, S: OneState<'a>> ContainerBuilder<'a, S> where
+impl<'a, S: ManyState<'a>> ContainerBuilder<'a, S> where
   S::Theme: ContainerStyleSheet
 {
   fn new(state: S) -> Self {
@@ -1010,8 +1013,8 @@ impl<'a, S: OneState<'a>> ContainerBuilder<'a, S> where
     self
   }
 
-  pub fn add(self) -> S::MapBuilder {
-    self.state.map(|content| {
+  pub fn add(self) -> S::MapOutput {
+    self.state.map_last(|content| {
       let mut container = Container::new(content)
         .padding(self.padding)
         .width(self.width)
