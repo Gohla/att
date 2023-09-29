@@ -2,7 +2,8 @@ use std::marker::PhantomData;
 
 use iced::advanced::Renderer;
 use iced::Element;
-use iced::widget::TextInput;
+use iced::widget::{Button, TextInput};
+pub use iced::widget::button::StyleSheet as ButtonStyleSheet;
 
 use super::{TextInputStyleSheet, TextRenderer};
 use super::WidgetBuilder;
@@ -30,6 +31,9 @@ pub trait AnyState<'a>: Types<'a> {
   /// [`Element`], then return a [new builder](Self::ConsumeBuilder) with that element.
   fn consume<F>(self, produce: F) -> Self::ConsumeBuilder where
     F: FnOnce(Vec<Element<'a, Self::Message, Self::Renderer>>) -> Element<'a, Self::Message, Self::Renderer>;
+
+  /// Take the [elements](Element) from `self` into a [`Vec`] and return it.
+  fn take_vec(self) -> Vec<Element<'a, Self::Message, Self::Renderer>>;
 }
 
 /// Internal trait for widget builder state of length 1, providing map and take operations.
@@ -131,6 +135,11 @@ impl<'a, M, R, L> AnyState<'a> for L where
     let vec = self.consume();
     let element = produce(vec);
     WidgetBuilder(Cons(element, Nil::default()))
+  }
+
+  #[inline]
+  fn take_vec(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
+    self.consume()
   }
 }
 
@@ -242,6 +251,11 @@ impl<'a, M, R> AnyState<'a> for Heap<Element<'a, M, R>> where
     let vec = self.consume();
     let element = produce(vec);
     WidgetBuilder(Heap::One(element, 0))
+  }
+
+  #[inline]
+  fn take_vec(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
+    self.consume()
   }
 }
 
@@ -373,3 +387,74 @@ pub enum TextInputAction {
   Paste(String),
   Submit,
 }
+
+
+// Button internals
+
+pub trait ButtonActions<'a, M> {
+  type Change;
+  fn on_press<F: Fn() -> M + 'a>(self, on_press: F) -> Self::Change;
+}
+pub trait CreateButton<'a, S: Types<'a>> where
+  S::Renderer: TextRenderer,
+  S::Theme: ButtonStyleSheet
+{
+  type Message: Clone;
+  fn create<E, F>(self, content: E, modify: F) -> Element<'a, S::Message, S::Renderer> where
+    E: Into<Element<'a, Self::Message, S::Renderer>>,
+    F: FnOnce(Button<'a, Self::Message, S::Renderer>) -> Button<'a, Self::Message, S::Renderer>;
+}
+
+pub struct ButtonPassthrough;
+impl<'a, M> ButtonActions<'a, M> for ButtonPassthrough {
+  type Change = ButtonFunctions<'a, M>;
+  #[inline]
+  fn on_press<F: Fn() -> M + 'a>(self, on_press: F) -> Self::Change {
+    ButtonFunctions { on_press: Box::new(on_press) }
+  }
+}
+impl<'a, S: Types<'a>> CreateButton<'a, S> for ButtonPassthrough where
+  S::Renderer: TextRenderer,
+  S::Theme: ButtonStyleSheet,
+  S::Message: Clone,
+{
+  type Message = S::Message;
+  #[inline]
+  fn create<E, F>(self, content: E, modify: F) -> Element<'a, S::Message, S::Renderer> where
+    E: Into<Element<'a, Self::Message, S::Renderer>>,
+    F: FnOnce(Button<'a, Self::Message, S::Renderer>) -> Button<'a, Self::Message, S::Renderer>
+  {
+    let mut button = Button::new(content);
+    button = modify(button);
+    Element::new(button)
+  }
+}
+
+pub struct ButtonFunctions<'a, M> {
+  on_press: Box<dyn Fn() -> M + 'a>,
+}
+impl<'a, M> ButtonActions<'a, M> for ButtonFunctions<'a, M> {
+  type Change = Self;
+  #[inline]
+  fn on_press<F: Fn() -> M + 'a>(mut self, on_press: F) -> Self::Change {
+    self.on_press = Box::new(on_press);
+    self
+  }
+}
+impl<'a, S: Types<'a>> CreateButton<'a, S> for ButtonFunctions<'a, S::Message> where
+  S::Renderer: TextRenderer,
+  S::Theme: ButtonStyleSheet,
+{
+  type Message = ();
+  #[inline]
+  fn create<E, F>(self, content: E, modify: F) -> Element<'a, S::Message, S::Renderer> where
+    E: Into<Element<'a, Self::Message, S::Renderer>>,
+    F: FnOnce(Button<'a, Self::Message, S::Renderer>) -> Button<'a, Self::Message, S::Renderer>
+  {
+    let mut button = Button::new(content)
+      .on_press(());
+    button = modify(button);
+    Element::new(button).map(move |_| (self.on_press)())
+  }
+}
+

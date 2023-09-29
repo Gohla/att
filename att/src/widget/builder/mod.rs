@@ -28,9 +28,9 @@ impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
   ///
   /// The advantages of a stack-based widget builder are:
   /// - It has full compile-time safety: incorrect state is a compilation error.
-  /// - It has low overhead: all elements are stored on the stack and are only converted into a [`Vec`] of exactly the
-  ///   right size when needed, for example when creating a [`Column`] or [`Row`]. This is equivalent to hand-optimized
-  ///   code using `column!` and `row!`, but without needing macros which can break IDE editor services.
+  /// - It has low run-time overhead: all elements are stored on the stack and are only converted into a [`Vec`] of
+  ///   exactly the right size when needed, for example when creating a [`Column`] or [`Row`]. This is equivalent to
+  ///   hand-optimized code using `column!` and `row!`, but without needing macros which can break IDE editor services.
   ///   TODO: check to see if it is zero-cost?
   ///
   /// The disadvantage is that every operation changes the type of the builder, and this makes it impossible to use in
@@ -48,8 +48,8 @@ impl<'a, M, R> WidgetBuilder<Heap<Element<'a, M, R>>> {
   /// - It does not have full compile-time safety: some incorrect state must be handled at run-time
   ///   - Attempting to build a [`Scrollable`] or a [`Container`] when there are 0 or more than 1 elements in the builder is an error.
   ///   - Attempting to to take the element out of the builder when there are 0 or more than 1 elements is an error.
-  /// - It has some overhead: elements are stored on the heap, and some run-time checks are needed. Overhead can be
-  ///   minimized by creating the builder with [enough capacity](Self::new_heap_with_capacity), and by
+  /// - It has some run-time overhead: elements are stored on the heap, and some run-time checks are needed. Overhead
+  ///   can be minimized by creating the builder with [enough capacity](Self::new_heap_with_capacity), and by
   ///   [reserving](Self::reserve) additional capacity if needed.
   ///
   /// Prefer a [stack-based](Self::new_stack) builder if possible.
@@ -110,11 +110,11 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
     self.text(content).add()
   }
   /// Build a [`TextInput`] widget from `content`.
-  pub fn text_input(self, placeholder: impl AsRef<str>, value: impl AsRef<str>) -> TextInputBuilder<'a, S, TextInputPassthrough> where
+  pub fn text_input(self, placeholder: &'a str, value: &'a str) -> TextInputBuilder<'a, S, TextInputPassthrough> where
     S::Renderer: TextRenderer,
     S::Theme: TextInputStyleSheet
   {
-    TextInputBuilder::new(self.0, placeholder.as_ref(), value.as_ref())
+    TextInputBuilder::new(self.0, placeholder, value)
   }
   /// Build a [`Button`] widget from `content`.
   pub fn button(self, content: impl Into<Element<'a, (), S::Renderer>>) -> ButtonBuilder<'a, S> where
@@ -139,6 +139,11 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   /// Build a [`Row`] widget that will consume all elements in this builder.
   pub fn into_row(self) -> RowBuilder<S> {
     RowBuilder::new(self.0)
+  }
+
+  /// Take a [`Vec`] with all element out of this builder.
+  pub fn take_vec(self) -> Vec<Element<'a, S::Message, S::Renderer>> {
+    self.0.take_vec()
   }
 }
 impl<'a, S: OneState<'a>> WidgetBuilder<S> {
@@ -190,21 +195,26 @@ impl<'a, S: AnyState<'a>> SpaceBuilder<S> {
     }
   }
 
+  /// Sets the `width` of the [`Space`].
   pub fn width(mut self, width: impl Into<Length>) -> Self {
     self.width = width.into();
     self
   }
+  /// Sets the `height` of the [`Space`].
   pub fn height(mut self, height: impl Into<Length>) -> Self {
     self.height = height.into();
     self
   }
+  /// Sets the `width` of the [`Space`] to `Length::Fill`.
   pub fn fill_width(self) -> Self {
     self.width(Length::Fill)
   }
+  /// Sets the `height` of the [`Space`] to `Length::Fill`.
   pub fn fill_height(self) -> Self {
     self.height(Length::Fill)
   }
 
+  /// Adds the [`Space`] widget to the builder and returns the builder.
   pub fn add(self) -> S::AddBuilder {
     let space = Space::new(self.width, self.height);
     self.state.add(space.into())
@@ -341,8 +351,8 @@ pub struct TextInputBuilder<'a, S: AnyState<'a>, A> where
 {
   state: S,
   id: Option<TextInputId>,
-  placeholder: String,
-  value: String,
+  placeholder: &'a str,
+  value: &'a str,
   password: bool,
   font: Option<<S::Renderer as TextRenderer>::Font>,
   width: Length,
@@ -357,12 +367,12 @@ impl<'a, S: AnyState<'a>> TextInputBuilder<'a, S, TextInputPassthrough> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
-  fn new(state: S, placeholder: &str, value: &str) -> Self {
+  fn new(state: S, placeholder: &'a str, value: &'a str) -> Self {
     Self {
       state,
       id: None,
-      placeholder: String::from(placeholder),
-      value: String::from(value),
+      placeholder,
+      value,
       password: false,
       font: None,
       width: Length::Fill,
@@ -432,56 +442,38 @@ impl<'a, S: AnyState<'a>, A: TextInputActions<'a, S::Message>> TextInputBuilder<
     self.style = style.into();
     self
   }
-  /// Sets the message that should be produced when some text is typed into
-  /// the [`TextInput`].
+
+  /// Sets the function that will be called when text is typed into the [`TextInput`] to `on_input`.
   ///
   /// If this method is not called, the [`TextInput`] will be disabled.
   pub fn on_input<F: Fn(String) -> S::Message + 'a>(self, on_input: F) -> TextInputBuilder<'a, S, A::Change> {
     self.replace_actions(|actions| actions.on_input(on_input))
   }
-  /// Sets the message that should be produced when some text is pasted into
-  /// the [`TextInput`].
+  /// Sets the function that will be called when text is pasted into the [`TextInput`] to `on_paste`.
   pub fn on_paste<F: Fn(String) -> S::Message + 'a>(self, on_paste: F) -> TextInputBuilder<'a, S, A::Change> {
     self.replace_actions(|actions| actions.on_paste(on_paste))
   }
-  /// Sets the message that should be produced when the [`TextInput`] is
-  /// focused and the enter key is pressed.
+  /// Sets the function that will be called when the [`TextInput`] is focussed and the enter key is pressed to
+  /// `on_paste`.
   pub fn on_submit<F: Fn() -> S::Message + 'a>(self, on_submit: F) -> TextInputBuilder<'a, S, A::Change> {
     self.replace_actions(|actions| actions.on_submit(on_submit))
   }
 
   fn replace_actions<AA>(self, change: impl FnOnce(A) -> AA) -> TextInputBuilder<'a, S, AA> {
-    let TextInputBuilder {
-      state,
-      id,
-      placeholder,
-      value,
-      password,
-      font,
-      width,
-      padding,
-      size,
-      line_height,
-      actions,
-      icon,
-      style,
-      ..
-    } = self;
-    let actions = change(actions);
     TextInputBuilder {
-      state,
-      id,
-      placeholder,
-      value,
-      password,
-      font,
-      width,
-      padding,
-      size,
-      line_height,
-      actions,
-      icon,
-      style
+      state: self.state,
+      id: self.id,
+      placeholder: self.placeholder,
+      value: self.value,
+      password: self.password,
+      font: self.font,
+      width: self.width,
+      padding: self.padding,
+      size: self.size,
+      line_height: self.line_height,
+      actions: change(self.actions),
+      icon: self.icon,
+      style: self.style
     }
   }
 }
@@ -489,6 +481,7 @@ impl<'a, S: AnyState<'a>, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> 
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
+  /// Adds the [`TextInput`](iced::widget::TextInput) to the builder and returns the builder.
   pub fn add(self) -> S::AddBuilder {
     let element = self.actions.create(&self.placeholder, &self.value, |mut text_input| {
       if let Some(id) = self.id {
