@@ -2,7 +2,7 @@ use iced::Element;
 use iced::widget::Button;
 use iced::widget::button::StyleSheet as ButtonStyleSheet;
 
-use super::Types;
+use super::super::state::Types;
 
 pub trait ButtonActions<'a, M> {
   type Change;

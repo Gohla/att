@@ -3,9 +3,8 @@
 use iced::advanced::Renderer;
 use iced::Element;
 
-use crate::widget::builder::WidgetBuilder;
-
-use super::{AnyState, ManyState, OneState, Types};
+use super::{StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, Types};
+use super::super::WidgetBuilder;
 
 /// Heap-based list consisting either of a `Vec` with any number of elements, or a single element (with optional
 /// reserve_additional)
@@ -13,9 +12,14 @@ pub enum HeapList<E> {
   Any(Vec<E>),
   One(E, usize),
 }
-impl<E> HeapList<E> {
+impl<E> Default for HeapList<E> {
   #[inline]
-  pub fn new() -> Self { Self::Any(Vec::new()) }
+  fn default() -> Self {
+    Self::Any(Vec::new()) // TODO: prevent creation of empty vec with a Zero variant?
+  }
+}
+
+impl<E> HeapList<E> {
   #[inline]
   pub fn with_capacity(capacity: usize) -> Self { Self::Any(Vec::with_capacity(capacity)) }
 
@@ -56,43 +60,33 @@ impl<E> HeapList<E> {
   }
 }
 
-// Implement internal traits for `HeapList`.
-impl<'a, M, R> Types<'a> for HeapList<Element<'a, M, R>> where
-  M: 'a,
-  R: Renderer + 'a,
-{
+
+// Implement state traits for `HeapList`.
+
+impl<'a, M: 'a, R: Renderer + 'a> Types<'a> for HeapList<Element<'a, M, R>> {
   type Message = M;
   type Renderer = R;
   type Theme = R::Theme;
 }
-impl<'a, M, R> AnyState<'a> for HeapList<Element<'a, M, R>> where
-  M: 'a,
-  R: Renderer + 'a,
-{
+
+impl<'a, M: 'a, R: Renderer + 'a> StateAdd<'a> for HeapList<Element<'a, M, R>> {
   type AddOutput = WidgetBuilder<Self>;
   #[inline]
   fn add(self, element: Element<'a, M, R>) -> Self::AddOutput {
-    let heap = self.add(element);
-    WidgetBuilder(heap)
+    WidgetBuilder(self.add(element))
   }
+}
 
+impl<'a, M: 'a, R: Renderer + 'a> StateConsume<'a> for HeapList<Element<'a, M, R>> {
   type ConsumeOutput = WidgetBuilder<Self>;
-  #[inline]
   fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeOutput {
     let vec = self.to_vec();
     let element = produce(vec);
     WidgetBuilder(HeapList::One(element, 0))
   }
-
-  #[inline]
-  fn take_all(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
-    self.to_vec()
-  }
 }
-impl<'a, M, R> ManyState<'a> for HeapList<Element<'a, M, R>> where
-  M: 'a,
-  R: Renderer + 'a
-{
+
+impl<'a, M: 'a, R: Renderer + 'a> StateMap<'a> for HeapList<Element<'a, M, R>> {
   type MapOutput = WidgetBuilder<Self>;
   #[inline]
   fn map_last<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapOutput {
@@ -109,10 +103,15 @@ impl<'a, M, R> ManyState<'a> for HeapList<Element<'a, M, R>> where
     WidgetBuilder(mapped)
   }
 }
-impl<'a, M, R> OneState<'a> for HeapList<Element<'a, M, R>> where
-  M: 'a,
-  R: Renderer + 'a
-{
+
+impl<'a, M: 'a, R: Renderer + 'a> StateTakeAll<'a> for HeapList<Element<'a, M, R>> {
+  #[inline]
+  fn take_all(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
+    self.to_vec()
+  }
+}
+
+impl<'a, M: 'a, R: Renderer + 'a> StateTake<'a> for HeapList<Element<'a, M, R>> {
   #[inline]
   fn take(self) -> Element<'a, M, R> {
     match self {

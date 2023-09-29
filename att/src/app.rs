@@ -118,7 +118,7 @@ impl Application for App {
   }
 
   fn view(&self) -> Element<'_, Message, Renderer<Theme>> {
-    let content = WidgetBuilder::default()
+    let content = WidgetBuilder::stack()
       .text("Blessed Crates").size(20.0).add()
       .button("Add Crate").on_press(|| Message::OpenAddCrateModal).add()
       .add_space_fill_width()

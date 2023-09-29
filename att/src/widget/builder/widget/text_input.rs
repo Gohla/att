@@ -3,7 +3,7 @@ use iced::Element;
 use iced::widget::text_input::StyleSheet as TextInputStyleSheet;
 use iced::widget::TextInput;
 
-use super::Types;
+use super::super::state::Types;
 
 pub trait TextInputActions<'a, M> {
   type Change;

@@ -75,7 +75,7 @@ impl AddCrate {
   }
 
   pub fn view<'a>(&'a self) -> Element<'a, Message> {
-    let builder = WidgetBuilder::default()
+    let builder = WidgetBuilder::stack()
       .text_input("Crate search term", &self.search_term).id(self.search_id.clone()).on_input(Message::SetSearchTerm).add();
 
     let crates = match &self.crates {
@@ -83,11 +83,11 @@ impl AddCrate {
         let cell_to_element = |row, col| -> Option<Element<'a, Message>> {
           let Some(krate): Option<&Crate> = crates.crates.get(row) else { return None; };
           let element = match col {
-            0 => WidgetBuilder::default().add_text(&krate.id).take(),
-            1 => WidgetBuilder::default().add_text(&krate.max_version).take(),
-            2 => WidgetBuilder::default().add_text(krate.updated_at.format("%Y-%m-%d").to_string()).take(),
-            3 => WidgetBuilder::default().add_text(format!("{}", krate.downloads)).take(),
-            4 => WidgetBuilder::default().button("Add").padding([1.0, 5.0]).positive_style().on_press(|| Message::AddCrate(krate.clone())).add().take(),
+            0 => WidgetBuilder::once().add_text(&krate.id),
+            1 => WidgetBuilder::once().add_text(&krate.max_version),
+            2 => WidgetBuilder::once().add_text(krate.updated_at.format("%Y-%m-%d").to_string()),
+            3 => WidgetBuilder::once().add_text(format!("{}", krate.downloads)),
+            4 => WidgetBuilder::once().button("Add").padding([1.0, 5.0]).positive_style().on_press(|| Message::AddCrate(krate.clone())).add(),
             _ => return None,
           };
           Some(element)
@@ -103,8 +103,8 @@ impl AddCrate {
           .push(1, "")
           .into_element()
       }
-      Some(Err(e)) => WidgetBuilder::default().add_text(format!("{:?}", e)).take(),
-      _ => WidgetBuilder::default().add_space_fill_width().take()
+      Some(Err(e)) => WidgetBuilder::once().add_text(format!("{:?}", e)),
+      _ => WidgetBuilder::once().add_space_fill_width(),
     };
 
     builder

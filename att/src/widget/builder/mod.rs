@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::marker::PhantomData;
 
 use iced::{Alignment, Color, Element, Length, Padding, Pixels};
 use iced::advanced::text::Renderer as TextRenderer;
@@ -15,16 +16,16 @@ use iced::widget::text::{LineHeight, Shaping};
 pub use iced::widget::text::StyleSheet as TextStyleSheet;
 pub use iced::widget::text_input::{Icon as TextInputIcon, Id as TextInputId, StyleSheet as TextInputStyleSheet};
 
-use internal::{AnyState, OneState};
-use internal::button::{ButtonActions, ButtonPassthrough, CreateButton};
-use internal::heap::HeapList;
-use internal::stack::Nil;
-use internal::text_input::{CreateTextInput, TextInputActions, TextInputPassthrough};
+use state::{StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
+use state::heap::HeapList;
+use state::stack::Nil;
+use widget::button::{ButtonActions, ButtonPassthrough, CreateButton};
+use widget::text_input::{CreateTextInput, TextInputActions, TextInputPassthrough};
 
-use crate::widget::builder::internal::ManyState;
+mod state;
+mod widget;
 
-mod internal;
-
+/// Widget builder.
 #[repr(transparent)]
 #[must_use]
 pub struct WidgetBuilder<S>(S);
@@ -42,8 +43,9 @@ impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
   /// The disadvantage is that every operation changes the type of the builder, and this makes it impossible to use in
   /// some cases. For example, using it in a while loop to continually add elements is not possible. In that case, a
   /// [heap-based](Self::new_heap) builder can be used. TODO: workarounds
-  pub fn stack() -> Self { Self(Nil::default()) }
+  pub fn stack() -> Self { Self(Default::default()) }
 }
+
 impl<'a, M, R> WidgetBuilder<HeapList<Element<'a, M, R>>> {
   /// Create a new heap-allocated widget builder.
   ///
@@ -59,29 +61,17 @@ impl<'a, M, R> WidgetBuilder<HeapList<Element<'a, M, R>>> {
   ///   [reserving](Self::reserve) additional capacity if needed.
   ///
   /// Prefer a [stack-allocated](Self::stack) builder if possible.
-  pub fn heap() -> Self { Self(HeapList::new()) }
+  pub fn heap() -> Self { Self(Default::default()) }
   /// Create a new heap-allocated widget builder and reserve `capacity` for elements.
   pub fn heap_with_capacity(capacity: usize) -> Self { Self(HeapList::with_capacity(capacity)) }
 }
-impl<'a, M, R> Default for WidgetBuilder<Nil<Element<'a, M, R>>> {
-  /// Create a new stack-allocated widget builder.
-  fn default() -> Self { Self::stack() }
+
+impl<'a, M, R> WidgetBuilder<PhantomData<Element<'a, M, R>>> {
+  /// Create a new widget builder that can only be used once to build a single widget.
+  pub fn once() -> Self { Self(Default::default()) }
 }
 
-/// Create a new stack-allocated widget builder.
-pub fn wb<'a, M, R>() -> WidgetBuilder<Nil<Element<'a, M, R>>> {
-  wb_stack()
-}
-/// Create a new stack-allocated widget builder.
-pub fn wb_stack<'a, M, R>() -> WidgetBuilder<Nil<Element<'a, M, R>>> {
-  WidgetBuilder::stack()
-}
-/// Create a new heap-allocated widget builder.
-pub fn wb_heap<'a, M, R>() -> WidgetBuilder<HeapList<Element<'a, M, R>>> {
-  WidgetBuilder::heap()
-}
-
-impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
+impl<'a, S: StateAdd<'a>> WidgetBuilder<S> {
   /// Build a [`Space`] widget.
   pub fn space(self) -> SpaceBuilder<S> {
     SpaceBuilder::new(self.0)
@@ -150,7 +140,9 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Renderer>>) -> S::AddOutput {
     self.element(element).add()
   }
+}
 
+impl<'a, S: StateConsume<'a>> WidgetBuilder<S> {
   /// Build a [`Column`] widget that will consume all elements in this builder.
   pub fn column(self) -> ColumnBuilder<S> {
     ColumnBuilder::new(self.0)
@@ -159,13 +151,9 @@ impl<'a, S: AnyState<'a>> WidgetBuilder<S> {
   pub fn row(self) -> RowBuilder<S> {
     RowBuilder::new(self.0)
   }
-
-  /// Take a [`Vec`] with all element out of this builder.
-  pub fn take_all(self) -> Vec<Element<'a, S::Message, S::Renderer>> {
-    self.0.take_all()
-  }
 }
-impl<'a, S: ManyState<'a>> WidgetBuilder<S> {
+
+impl<'a, S: StateMap<'a>> WidgetBuilder<S> {
   /// Build a [`Scrollable`] widget that will consume the last element in this builder.
   ///
   /// Can only be called when this builder has at least one element.
@@ -184,7 +172,15 @@ impl<'a, S: ManyState<'a>> WidgetBuilder<S> {
     ContainerBuilder::new(self.0)
   }
 }
-impl<'a, S: OneState<'a>> WidgetBuilder<S> {
+
+impl<'a, S: StateTakeAll<'a>> WidgetBuilder<S> {
+  /// Take a [`Vec`] with all element out of this builder.
+  pub fn take_all(self) -> Vec<Element<'a, S::Message, S::Renderer>> {
+    self.0.take_all()
+  }
+}
+
+impl<'a, S: StateTake<'a>> WidgetBuilder<S> {
   /// Take the single element out of this builder.
   ///
   /// Can only be called when this builder has exactly one element.
@@ -192,6 +188,7 @@ impl<'a, S: OneState<'a>> WidgetBuilder<S> {
     self.0.take()
   }
 }
+
 impl<E> WidgetBuilder<HeapList<E>> {
   /// Reserve space for `additional` elements.
   ///
@@ -209,7 +206,7 @@ pub struct SpaceBuilder<S> {
   width: Length,
   height: Length,
 }
-impl<'a, S: AnyState<'a>> SpaceBuilder<S> {
+impl<'a, S: StateAdd<'a>> SpaceBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -251,7 +248,7 @@ pub struct RuleBuilder<S> {
   width_or_height: Pixels,
   is_vertical: bool,
 }
-impl<'a, S: AnyState<'a>> RuleBuilder<S> where
+impl<'a, S: StateAdd<'a>> RuleBuilder<S> where
   S::Theme: RuleStyleSheet
 {
   fn new(state: S) -> Self {
@@ -285,14 +282,14 @@ impl<'a, S: AnyState<'a>> RuleBuilder<S> where
 
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<'a, S: AnyState<'a>> where
+pub struct TextBuilder<'a, S: StateAdd<'a>> where
   S::Renderer: TextRenderer,
   S::Theme: TextStyleSheet
 {
   state: S,
   text: Text<'a, S::Renderer>
 }
-impl<'a, S: AnyState<'a>> TextBuilder<'a, S> where
+impl<'a, S: StateAdd<'a>> TextBuilder<'a, S> where
   S::Renderer: TextRenderer,
   S::Theme: TextStyleSheet
 {
@@ -331,7 +328,7 @@ impl<'a, S: AnyState<'a>> TextBuilder<'a, S> where
   ///
   /// Only available when the [`BuiltinTheme`] is used.
   pub fn style_color(self, color: impl Into<Color>) -> Self where
-    S: AnyState<'a, Theme=BuiltinTheme>
+    S: StateAdd<'a, Theme=BuiltinTheme>
   {
     self.style(color.into())
   }
@@ -368,7 +365,7 @@ impl<'a, S: AnyState<'a>> TextBuilder<'a, S> where
 
 /// Builder for a [`TextInput`] widget.
 #[must_use]
-pub struct TextInputBuilder<'a, S: AnyState<'a>, A> where
+pub struct TextInputBuilder<'a, S: StateAdd<'a>, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -386,7 +383,7 @@ pub struct TextInputBuilder<'a, S: AnyState<'a>, A> where
   icon: Option<TextInputIcon<<S::Renderer as TextRenderer>::Font>>,
   style: <S::Theme as TextInputStyleSheet>::Style,
 }
-impl<'a, S: AnyState<'a>> TextInputBuilder<'a, S, TextInputPassthrough> where
+impl<'a, S: StateAdd<'a>> TextInputBuilder<'a, S, TextInputPassthrough> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -408,7 +405,7 @@ impl<'a, S: AnyState<'a>> TextInputBuilder<'a, S, TextInputPassthrough> where
     }
   }
 }
-impl<'a, S: AnyState<'a>, A: TextInputActions<'a, S::Message>> TextInputBuilder<'a, S, A> where
+impl<'a, S: StateAdd<'a>, A: TextInputActions<'a, S::Message>> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -500,7 +497,7 @@ impl<'a, S: AnyState<'a>, A: TextInputActions<'a, S::Message>> TextInputBuilder<
     }
   }
 }
-impl<'a, S: AnyState<'a>, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> where
+impl<'a, S: StateAdd<'a>, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -534,7 +531,7 @@ impl<'a, S: AnyState<'a>, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> 
 
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<'a, S: AnyState<'a>, C, A> where
+pub struct ButtonBuilder<'a, S: StateAdd<'a>, C, A> where
   S::Theme: ButtonStyleSheet
 {
   state: S,
@@ -545,7 +542,7 @@ pub struct ButtonBuilder<'a, S: AnyState<'a>, C, A> where
   padding: Padding,
   style: <S::Theme as ButtonStyleSheet>::Style,
 }
-impl<'a, S: AnyState<'a>, C> ButtonBuilder<'a, S, C, ButtonPassthrough> where
+impl<'a, S: StateAdd<'a>, C> ButtonBuilder<'a, S, C, ButtonPassthrough> where
   S::Theme: ButtonStyleSheet
 {
   fn new(state: S, content: C) -> Self {
@@ -560,7 +557,7 @@ impl<'a, S: AnyState<'a>, C> ButtonBuilder<'a, S, C, ButtonPassthrough> where
     }
   }
 }
-impl<'a, S: AnyState<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'a, S, C, A> where
+impl<'a, S: StateAdd<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'a, S, C, A> where
   S::Theme: ButtonStyleSheet
 {
   /// Sets the width of the [`Button`].
@@ -592,38 +589,38 @@ impl<'a, S: AnyState<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'a,
   /// Sets the style of the [`Button`] to [`ButtonStyle::Primary`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn primary_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+  pub fn primary_style(self) -> Self where S: StateAdd<'a, Theme=BuiltinTheme> {
     self.style(ButtonStyle::Secondary)
   }
   /// Sets the style of the [`Button`] to [`ButtonStyle::Secondary`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn secondary_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+  pub fn secondary_style(self) -> Self where S: StateAdd<'a, Theme=BuiltinTheme> {
     self.style(ButtonStyle::Secondary)
   }
   /// Sets the style of the [`Button`] to [`ButtonStyle::Positive`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn positive_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+  pub fn positive_style(self) -> Self where S: StateAdd<'a, Theme=BuiltinTheme> {
     self.style(ButtonStyle::Positive)
   }
   /// Sets the style of the [`Button`] to [`ButtonStyle::Destructive`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn destructive_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+  pub fn destructive_style(self) -> Self where S: StateAdd<'a, Theme=BuiltinTheme> {
     self.style(ButtonStyle::Destructive)
   }
   /// Sets the style of the [`Button`] to [`ButtonStyle::Text`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn text_style(self) -> Self where S: AnyState<'a, Theme=BuiltinTheme> {
+  pub fn text_style(self) -> Self where S: StateAdd<'a, Theme=BuiltinTheme> {
     self.style(ButtonStyle::Text)
   }
   /// Sets the style of the [`Button`] to a custom [`ButtonStyleSheet`] implementation.
   ///
   /// Only available when the [`BuiltinTheme`] is used.
   pub fn custom_style(self, style_sheet: impl ButtonStyleSheet<Style=BuiltinTheme> + 'static) -> Self where
-    S: AnyState<'a, Theme=BuiltinTheme>
+    S: StateAdd<'a, Theme=BuiltinTheme>
   {
     self.style(ButtonStyle::custom(style_sheet))
   }
@@ -640,7 +637,7 @@ impl<'a, S: AnyState<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'a,
     }
   }
 }
-impl<'a, S: AnyState<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> where
+impl<'a, S: StateAdd<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> where
   C: Into<Element<'a, A::Message, S::Renderer>>,
   S::Theme: ButtonStyleSheet
 {
@@ -659,11 +656,11 @@ impl<'a, S: AnyState<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> 
 
 /// Builder for an [`Element`]
 #[must_use]
-pub struct ElementBuilder<'a, S: AnyState<'a>, M> {
+pub struct ElementBuilder<'a, S: StateAdd<'a>, M> {
   state: S,
   element: Element<'a, M, S::Renderer>,
 }
-impl<'a, S: AnyState<'a>, M: 'a> ElementBuilder<'a, S, M> {
+impl<'a, S: StateAdd<'a>, M: 'a> ElementBuilder<'a, S, M> {
   fn new(state: S, element: Element<'a, M, S::Renderer>) -> Self {
     Self { state, element }
   }
@@ -673,7 +670,7 @@ impl<'a, S: AnyState<'a>, M: 'a> ElementBuilder<'a, S, M> {
     ElementBuilder { state: self.state, element }
   }
 }
-impl<'a, S: AnyState<'a>> ElementBuilder<'a, S, S::Message> {
+impl<'a, S: StateAdd<'a>> ElementBuilder<'a, S, S::Message> {
   pub fn add(self) -> S::AddOutput {
     self.state.add(self.element)
   }
@@ -757,7 +754,7 @@ impl<'a, S> ColumnBuilder<S> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, S: AnyState<'a>> ColumnBuilder<S> {
+impl<'a, S: StateConsume<'a>> ColumnBuilder<S> {
   pub fn add(self) -> S::ConsumeOutput {
     self.state.consume(|vec| {
       Column::with_children(vec)
@@ -842,7 +839,7 @@ impl<'a, S> RowBuilder<S> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, S: AnyState<'a>> RowBuilder<S> {
+impl<'a, S: StateConsume<'a>> RowBuilder<S> {
   pub fn add(self) -> S::ConsumeOutput {
     self.state.consume(|vec| {
       Row::with_children(vec)
@@ -858,7 +855,7 @@ impl<'a, S: AnyState<'a>> RowBuilder<S> {
 
 /// Builder for a [`Scrollable`] widget.
 #[must_use]
-pub struct ScrollableBuilder<'a, S: ManyState<'a>> where
+pub struct ScrollableBuilder<'a, S: StateMap<'a>> where
   S::Theme: ScrollableStyleSheet
 {
   state: S,
@@ -869,7 +866,7 @@ pub struct ScrollableBuilder<'a, S: ManyState<'a>> where
   on_scroll: Option<Box<dyn Fn(Viewport) -> S::Message + 'a>>,
   style: <S::Theme as ScrollableStyleSheet>::Style,
 }
-impl<'a, S: ManyState<'a>> ScrollableBuilder<'a, S> where
+impl<'a, S: StateMap<'a>> ScrollableBuilder<'a, S> where
   S::Theme: ScrollableStyleSheet
 {
   fn new(state: S) -> Self {
@@ -937,7 +934,7 @@ impl<'a, S: ManyState<'a>> ScrollableBuilder<'a, S> where
 
 /// Builder for a [`Container`] widget.
 #[must_use]
-pub struct ContainerBuilder<'a, S: ManyState<'a>> where
+pub struct ContainerBuilder<'a, S: StateMap<'a>> where
   S::Theme: ContainerStyleSheet
 {
   state: S,
@@ -951,7 +948,7 @@ pub struct ContainerBuilder<'a, S: ManyState<'a>> where
   vertical_alignment: Vertical,
   style: <S::Theme as ContainerStyleSheet>::Style,
 }
-impl<'a, S: ManyState<'a>> ContainerBuilder<'a, S> where
+impl<'a, S: StateMap<'a>> ContainerBuilder<'a, S> where
   S::Theme: ContainerStyleSheet
 {
   fn new(state: S) -> Self {
