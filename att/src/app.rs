@@ -85,7 +85,9 @@ impl Application for App {
   fn update(&mut self, message: Message) -> Command<Self::Message> {
     match message {
       Message::ToViewCrates(message) => {
-        self.view_crates.update(message, &mut self.model, &mut self.cache);
+        return self.view_crates.update(message, &self.crates_client, &mut self.model, &mut self.cache)
+          .into_command()
+          .map(|m| Message::ToViewCrates(m));
       }
       Message::ToAddCrate(message) => {
         let (action, command) = self.add_crate.update(message, &self.crates_client).unwrap();
