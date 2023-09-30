@@ -81,4 +81,3 @@ impl<A, M> Update<A, Command<M>> {
     Update::new(self.action, self.command.map(f))
   }
 }
-

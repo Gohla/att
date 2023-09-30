@@ -88,7 +88,6 @@ impl Application for App {
         self.view_crates.update(message, &mut self.model, &mut self.cache);
       }
       Message::ToAddCrate(message) => {
-        println!("Message::ToAddCrate {:?}", message);
         let (action, command) = self.add_crate.update(message, &self.crates_client).unwrap();
         if let Some(krate) = action {
           self.model.blessed_crate_ids.insert(krate.id.clone());
@@ -97,7 +96,7 @@ impl Application for App {
           self.add_crate.clear_search_term();
           self.adding_crate = false;
         }
-        return command.map(|m|Message::ToAddCrate(m));
+        return command.map(|m| Message::ToAddCrate(m));
       }
 
       Message::OpenAddCrateModal => {
@@ -156,8 +155,6 @@ impl Application for App {
     let exit_subscription = event::listen_with(|event, _| {
       (event == Event::Window(window::Event::CloseRequested)).then_some(Message::Exit)
     });
-    // let add_crate_subscription = self.add_crate.subscription(&self.crates_io_api).map(Message::ToAddCrate);
-    // Subscription::batch([exit_subscription, add_crate_subscription])
     exit_subscription
   }
 }

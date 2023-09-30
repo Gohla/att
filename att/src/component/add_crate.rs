@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use crates_io_api::{Crate, CratesPage};
 use iced::{Command, Element};
 use iced::widget::text_input;
@@ -10,27 +8,24 @@ use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
 
-/// Search for a crate on crates.io and add it.
 #[derive(Debug)]
 pub struct AddCrate {
-  wait_before_searching: Duration,
   search_id: text_input::Id,
   search_term: String,
-  // next_search_time: Option<Instant>,
   crates: Option<Result<CratesPage, crates_io_api::Error>>,
 }
 
 #[derive(Debug)]
 pub enum Message {
   SetSearchTerm(String),
-  SetCrates(Option<Result<CratesPage, crates_io_api::Error>>),
+  SetCrates(Result<CratesPage, crates_io_api::Error>),
   AddCrate(Crate),
+  Ignore,
 }
 
 impl Default for AddCrate {
   fn default() -> Self {
     Self {
-      wait_before_searching: Duration::from_millis(200),
       search_id: text_input::Id::unique(),
       search_term: String::new(),
       crates: None,
@@ -39,10 +34,6 @@ impl Default for AddCrate {
 }
 
 impl AddCrate {
-  pub fn wait_before_searching(&mut self, wait_before_searching: Duration) {
-    self.wait_before_searching = wait_before_searching;
-  }
-
   pub fn focus_search_term_input<M: 'static>(&self) -> Command<M> {
     text_input::focus(self.search_id.clone())
   }
@@ -58,14 +49,19 @@ impl AddCrate {
     match message {
       Message::SetSearchTerm(s) => {
         self.search_term = s.clone();
-        return Update::perform(crates_client.clone().search(s), |r| Message::SetCrates(r));
+        let crates_client = crates_client.clone();
+        return if !s.is_empty() {
+          Update::perform(crates_client.search(s), |r| r.map_or(Message::Ignore, |r| Message::SetCrates(r)))
+        } else {
+          self.crates = None;
+          Update::perform(crates_client.cancel_search(), |_| Message::Ignore)
+        };
       }
-      Message::SetCrates(crates) => if let Some(crates) = crates {
-        self.crates = Some(crates)
-      },
+      Message::SetCrates(crates) => self.crates = Some(crates),
       Message::AddCrate(krate) => {
         return Update::from_action(krate)
       },
+      Message::Ignore => {},
     }
     Update::empty()
   }

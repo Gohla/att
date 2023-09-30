@@ -1,7 +1,8 @@
 use std::time::{Duration, Instant};
 
 use crates_io_api::{AsyncClient, CratesPage, CratesQuery, Sort};
-use iced::futures::future::OptionFuture;
+use iced::futures::future::{Either, pending};
+use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
 #[derive(Clone)]
@@ -9,29 +10,47 @@ pub struct CratesClient {
   tx: mpsc::Sender<Request>
 }
 
+#[derive(Debug, Error)]
+pub enum AsyncError {
+  #[error("Failed to send request; manager receiver was closed")]
+  Tx,
+  #[error("Failed to receive response; sender was closed")]
+  Rx,
+}
+impl<T> From<mpsc::error::SendError<T>> for AsyncError {
+  fn from(_: mpsc::error::SendError<T>) -> Self { Self::Tx }
+}
+impl From<oneshot::error::RecvError> for AsyncError {
+  fn from(_: oneshot::error::RecvError) -> Self { Self::Rx }
+}
+
 impl CratesClient {
   pub fn new(crates_io_api: AsyncClient) -> Self {
-    let (tx, rx) = mpsc::channel(100);
+    let (tx, rx) = mpsc::channel(64);
     let manager = Manager { crates_io_api, rx };
     tokio::spawn(manager.run());
     Self { tx }
   }
 
-  pub async fn search(self, search_term: String) -> Option<Result<CratesPage, crates_io_api::Error>> {
+
+  pub async fn search(self, search_term: String) -> Result<Result<CratesPage, crates_io_api::Error>, AsyncError> {
+    Ok(self.send_receive(|tx| Request::Search(search_term, tx)).await?)
+  }
+
+  pub async fn cancel_search(self) -> Result<(), AsyncError> {
+    self.send(Request::CancelSearch).await
+  }
+
+
+  async fn send_receive<T>(&self, make_request: impl FnOnce(oneshot::Sender<T>) -> Request) -> Result<T, AsyncError> {
     let (tx, rx) = oneshot::channel();
-    if self.tx.send(Request::Search(search_term, tx)).await.is_err() {
-      println!("Client: Manager receiver was closed");
-      return None;
-    } else {
-      println!("Client: Sent");
-    }
-    let result = rx.await;
-    if let Err(_) = result {
-      println!("Client: Oneshot sender was closed");
-    } else {
-      println!("Client: Received");
-    }
-    result.ok()
+    self.tx.send(make_request(tx)).await?;
+    Ok(rx.await?)
+  }
+
+  async fn send(&self, request: Request) -> Result<(), AsyncError> {
+    self.tx.send(request).await?;
+    Ok(())
   }
 }
 
@@ -43,37 +62,31 @@ struct Manager {
 
 enum Request {
   Search(String, oneshot::Sender<Result<CratesPage, crates_io_api::Error>>),
+  CancelSearch,
 }
 
 impl Manager {
   async fn run(mut self) {
-    let search: OptionFuture<_> = None.into();
+    let search = Either::Left(pending());
     tokio::pin!(search);
 
     loop {
       tokio::select! {
-        Some(_) = &mut search => {
-          println!("Manager: Setting search to None because search completed");
-          search.set(None.into());
+        _ = &mut search => {
+          search.set(Either::Left(pending()));
         },
         Some(request) = self.rx.recv() => {
           match request {
             Request::Search(search_term, tx) => {
-              if search_term.is_empty() {
-                println!("Manager: Setting search to None because search term is empty");
-                search.set(None.into());
-              } else {
-                println!("Manager: Setting search to Some because search term is not empty");
-                let sleep_until = Instant::now() + Duration::from_millis(1000);
-                search.set(Some(do_search(sleep_until, search_term, self.crates_io_api.clone(), tx)).into());
-              }
+              let sleep_until = Instant::now() + Duration::from_millis(300);
+              search.set(Either::Right(do_search(sleep_until, search_term, self.crates_io_api.clone(), tx)));
+            },
+            Request::CancelSearch => {
+              search.set(Either::Left(pending()));
             }
           }
         },
-        else => {
-          println!("Manager: Breaking out!");
-          break;
-        }
+        else => { break; }
       }
     }
   }
@@ -85,19 +98,11 @@ async fn do_search(
   crates_io_api: AsyncClient,
   tx: oneshot::Sender<Result<CratesPage, crates_io_api::Error>>,
 ) {
-  println!("Manager: Sleeping until {:?}", sleep_until);
   tokio::time::sleep_until(sleep_until.into()).await;
   let query = CratesQuery::builder()
     .search(search_term)
     .sort(Sort::Relevance)
     .build();
-  println!("Manager: Searching");
   let response = crates_io_api.crates(query).await;
-  println!("Manager: Response {:?}", response);
-  let result = tx.send(response); // Ignore error ok: do nothing if receiver was dropped.
-  if result.is_err() {
-    println!("Manager: Send fail");
-  } else {
-    println!("Manager: Send success");
-  }
+  let _ = tx.send(response); // Ignore error ok: do nothing if receiver was dropped.
 }
