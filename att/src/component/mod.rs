@@ -1,4 +1,7 @@
+use std::future::Future;
+
 use iced::Command;
+
 use crate::widget::maybe_send::MaybeSend;
 
 pub mod add_crate;
@@ -10,25 +13,45 @@ pub struct Update<A = (), C = ()> {
   action: A,
   command: C,
 }
+
 impl<A, C> Update<A, C> {
-  pub fn new(action: A, command: C) -> Self { Self { action, command } }
+  pub fn new(action: A, command: C) -> Self {
+    Self { action, command }
+  }
 }
-impl<A> Update<A, ()> {
-  pub fn from_action(action: impl Into<A>) -> Self { Self::new(action.into(), ()) }
+impl<A: Default, M> Update<A, Command<M>> {
+  pub fn empty() -> Self {
+    Self::new(A::default(), Command::none())
+  }
 }
-impl<C> Update<(), C> {
-  pub fn from_command(command: impl Into<C>) -> Self { Self::new((), command.into()) }
+impl<A, M> Update<A, Command<M>> {
+  pub fn from_action(action: impl Into<A>) -> Self {
+    Self::new(action.into(), Command::none())
+  }
 }
+impl<A: Default, M> Update<A, Command<M>> {
+  pub fn from_command(command: impl Into<Command<M>>) -> Self {
+    Self::new(A::default(), command.into())
+  }
+
+  pub fn perform<T>(
+    future: impl Future<Output=T> + 'static + MaybeSend,
+    f: impl FnOnce(T) -> M + 'static + MaybeSend,
+  ) -> Self {
+    Self::from_command(Command::perform(future, f))
+  }
+}
+
 impl<A, C> Update<A, C> {
   pub fn unwrap(self) -> (A, C) { (self.action, self.command) }
 
   pub fn action(&self) -> &A { &self.action }
   pub fn into_action(self) -> A { self.action }
   pub fn take_action(self) -> (A, Update<(), C>) {
-    (self.action, Update::from_command(self.command))
+    (self.action, Update::new((), self.command))
   }
   pub fn discard_action(self) -> Update<(), C> {
-    Update::from_command(self.command)
+    Update::new((), self.command)
   }
   pub fn map_action<AA>(self, f: impl Fn(A) -> AA) -> Update<AA, C> {
     Update::new(f(self.action), self.command)
@@ -37,10 +60,10 @@ impl<A, C> Update<A, C> {
   pub fn command(&self) -> &C { &self.command }
   pub fn into_command(self) -> C { self.command }
   pub fn take_command(self) -> (C, Update<A, ()>) {
-    (self.command, Update::from_action(self.action))
+    (self.command, Update::new(self.action, ()))
   }
   pub fn discard_command(self) -> Update<A, ()> {
-    Update::from_action(self.action)
+    Update::new(self.action, ())
   }
 }
 impl<A, C> Update<Option<A>, C> {
@@ -58,3 +81,4 @@ impl<A, M> Update<A, Command<M>> {
     Update::new(self.action, self.command.map(f))
   }
 }
+

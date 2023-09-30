@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::component::add_crate::{self, AddCrate};
 use crate::component::view_crates::{self, ViewCrates};
+use crate::crates_client::CratesClient;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
 use crate::widget::load_icon_font_command;
@@ -42,7 +43,7 @@ pub struct App {
   dark_mode: bool,
 
   save_fn: SaveFn,
-  crates_io_api: AsyncClient,
+  crates_client: CratesClient,
 }
 
 #[derive(Debug)]
@@ -75,7 +76,7 @@ impl Application for App {
       dark_mode: flags.dark_mode,
 
       save_fn: flags.save_fn,
-      crates_io_api: flags.crates_io_api,
+      crates_client: CratesClient::new(flags.crates_io_api),
     };
     (app, load_icon_font_command(Message::FontLoaded))
   }
@@ -87,13 +88,16 @@ impl Application for App {
         self.view_crates.update(message, &mut self.model, &mut self.cache);
       }
       Message::ToAddCrate(message) => {
-        if let Some(krate) = self.add_crate.update(message).into_action() {
+        println!("Message::ToAddCrate {:?}", message);
+        let (action, command) = self.add_crate.update(message, &self.crates_client).unwrap();
+        if let Some(krate) = action {
           self.model.blessed_crate_ids.insert(krate.id.clone());
           self.cache.crate_data.insert(krate.id.clone(), krate);
 
           self.add_crate.clear_search_term();
           self.adding_crate = false;
         }
+        return command.map(|m|Message::ToAddCrate(m));
       }
 
       Message::OpenAddCrateModal => {
@@ -152,7 +156,8 @@ impl Application for App {
     let exit_subscription = event::listen_with(|event, _| {
       (event == Event::Window(window::Event::CloseRequested)).then_some(Message::Exit)
     });
-    let add_crate_subscription = self.add_crate.subscription(&self.crates_io_api).map(Message::ToAddCrate);
-    Subscription::batch([exit_subscription, add_crate_subscription])
+    // let add_crate_subscription = self.add_crate.subscription(&self.crates_io_api).map(Message::ToAddCrate);
+    // Subscription::batch([exit_subscription, add_crate_subscription])
+    exit_subscription
   }
 }

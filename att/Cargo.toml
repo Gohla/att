@@ -6,7 +6,7 @@ publish = false
 
 [dependencies]
 iced = { features = ["advanced", "lazy", "tokio"], git = "https://github.com/iced-rs/iced.git", rev = "4613eb2" }
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["time", "macros"] }
 crates_io_api = "0.8"
 chrono = "0.4"
 serde = { version = "1", features = ["derive"] }

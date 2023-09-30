@@ -12,6 +12,7 @@ use crate::app::{App, Flags};
 pub mod app;
 pub mod widget;
 pub mod component;
+pub mod crates_client;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let directories = directories::ProjectDirs::from("", "", "ATT");

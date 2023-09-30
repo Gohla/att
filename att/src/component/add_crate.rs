@@ -1,10 +1,11 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-use crates_io_api::{AsyncClient, Crate, CratesPage, CratesQuery, Sort};
-use iced::{Command, Element, futures, Subscription};
+use crates_io_api::{Crate, CratesPage};
+use iced::{Command, Element};
 use iced::widget::text_input;
 
 use crate::component::Update;
+use crate::crates_client::CratesClient;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
@@ -15,14 +16,14 @@ pub struct AddCrate {
   wait_before_searching: Duration,
   search_id: text_input::Id,
   search_term: String,
-  next_search_time: Option<Instant>,
+  // next_search_time: Option<Instant>,
   crates: Option<Result<CratesPage, crates_io_api::Error>>,
 }
 
 #[derive(Debug)]
 pub enum Message {
   SetSearchTerm(String),
-  SetCrates(Result<CratesPage, crates_io_api::Error>),
+  SetCrates(Option<Result<CratesPage, crates_io_api::Error>>),
   AddCrate(Crate),
 }
 
@@ -32,7 +33,6 @@ impl Default for AddCrate {
       wait_before_searching: Duration::from_millis(200),
       search_id: text_input::Id::unique(),
       search_term: String::new(),
-      next_search_time: None,
       crates: None,
     }
   }
@@ -49,29 +49,25 @@ impl AddCrate {
 
   pub fn clear_search_term(&mut self) {
     self.search_term.clear();
-    self.next_search_time = None;
     self.crates = None;
   }
 }
 
 impl AddCrate {
-  pub fn update(&mut self, message: Message) -> Update<Option<Crate>> {
+  pub fn update(&mut self, message: Message, crates_client: &CratesClient) -> Update<Option<Crate>, Command<Message>> {
     match message {
       Message::SetSearchTerm(s) => {
-        self.search_term = s;
-        if !self.search_term.is_empty() {
-          self.next_search_time = Some(Instant::now() + self.wait_before_searching);
-        } else {
-          self.next_search_time = None;
-          self.crates = None;
-        }
+        self.search_term = s.clone();
+        return Update::perform(crates_client.clone().search(s), |r| Message::SetCrates(r));
       }
-      Message::SetCrates(crates) => self.crates = Some(crates),
+      Message::SetCrates(crates) => if let Some(crates) = crates {
+        self.crates = Some(crates)
+      },
       Message::AddCrate(krate) => {
         return Update::from_action(krate)
       },
     }
-    Update::default()
+    Update::empty()
   }
 
   pub fn view<'a>(&'a self) -> Element<'a, Message> {
@@ -111,23 +107,5 @@ impl AddCrate {
       .add_element(crates)
       .column().spacing(20).width(800).height(600).add()
       .take()
-  }
-
-  pub fn subscription(&self, crates_io_api: &AsyncClient) -> Subscription<Message> {
-    let Some(next_search) = self.next_search_time else {
-      return Subscription::none();
-    };
-    let search_term = self.search_term.clone();
-    let crates_io_api = crates_io_api.clone();
-    let stream = futures::stream::once(async move {
-      tokio::time::sleep_until(next_search.into()).await;
-      let query = CratesQuery::builder()
-        .search(search_term)
-        .sort(Sort::Relevance)
-        .build();
-      let response = crates_io_api.crates(query).await;
-      Message::SetCrates(response)
-    });
-    iced::subscription::run_with_id(next_search, stream)
   }
 }

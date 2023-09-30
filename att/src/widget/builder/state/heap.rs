@@ -1,4 +1,9 @@
-//! Heap implementation: run-time type safety, not zero-cost, but type does not change.
+//! Heap-allocated list:
+//!
+//! - Limited compile-time type safety, checks required at run-time.
+//! - Some run-time overhead. TODO: benchmark this
+//! - Low compile-time overhead.
+//! - Every operation is type-preserving.
 
 use iced::advanced::Renderer;
 use iced::Element;
@@ -6,7 +11,7 @@ use iced::Element;
 use super::{StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, Types};
 use super::super::WidgetBuilder;
 
-/// Heap-based list.
+/// Heap-allocated list.
 pub enum HeapList<E> {
   Zero,
   One(E, usize),

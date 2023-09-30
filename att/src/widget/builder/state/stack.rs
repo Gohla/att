@@ -1,4 +1,9 @@
-//! Stack implementation: full compile-time safety and zero-cost, but every operation changes the type of the state.
+//! Stack-allocated list:
+//!
+//! - Full compile-time safety.
+//! - Low run-time overhead. TODO: benchmark this
+//! - Some compile-time overhead. TODO: benchmark this
+//! - Every operation changes the type of the list.
 //!
 //! Inspirations:
 //!
@@ -28,8 +33,8 @@ impl<E> Default for Nil<E> {
   fn default() -> Self { Self(PhantomData::default()) }
 }
 
-/// Internal trait for algebraic stack list operations.
-pub trait StackList: Sized {
+/// Stack-allocated list.
+trait StackList: Sized {
   /// Type of elements in the list.
   type E;
   /// The length of this list.
