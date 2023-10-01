@@ -20,19 +20,21 @@ pub enum Message {
 }
 
 impl ViewCrates {
+  #[tracing::instrument(skip_all)]
   pub fn update(&mut self, message: Message, crates_client: &CratesClient, model: &mut Model, cache: &mut Cache) -> Update<(), Command<Message>> {
     match message {
-      Message::RequestCrateUpdate(crate_name) => {
+      Message::RequestCrateUpdate(id) => {
         // TODO: make Ignore message default and add convenience to crates_client that maps to default on async error, and then maps the message
-        return Update::perform(crates_client.clone().update(crate_name), |r| r.map_or(Message::Ignore, |r| Message::ReceiveCrateUpdate(r)))
+        return Update::perform(crates_client.clone().update(id), |r| r.map_or(Message::Ignore, |r| Message::ReceiveCrateUpdate(r)))
       }
       Message::ReceiveCrateUpdate(r) => {
         match r {
           Ok(r) => {
-            println!("Updated data for crate: {}", r.crate_data.id);
-            cache.crate_data.insert(r.crate_data.id.clone(), r.crate_data);
+            let id = r.crate_data.id.clone();
+            tracing::info!(id, "updated crate data");
+            cache.crate_data.insert(id, r.crate_data);
           }
-          Err(e) => println!("Failed to retrieve crate data: {:?}", e),
+          Err(cause) => tracing::error!(?cause, "failed to update crate data"),
         }
       }
       Message::RemoveCrate(id) => {
@@ -44,6 +46,7 @@ impl ViewCrates {
     Update::empty()
   }
 
+  #[tracing::instrument(skip_all)]
   pub fn view<'a>(&'a self, model: &'a Model, cache: &'a Cache) -> Element<'a, Message> {
     let cell_to_element = |row, col| -> Option<Element<'a, Message>> {
       let Some(id) = model.blessed_crate_ids.iter().nth(row) else { return None; };

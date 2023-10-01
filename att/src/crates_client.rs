@@ -2,7 +2,8 @@ use std::collections::VecDeque;
 use std::time::{Duration, Instant};
 
 use crates_io_api::{AsyncClient, CrateResponse, CratesPage, CratesQuery, Sort};
-use iced::futures::future::{Either, pending};
+use iced::futures::future::{Fuse, FusedFuture};
+use iced::futures::FutureExt;
 use thiserror::Error;
 use tokio::{pin, select};
 use tokio::sync::{mpsc, oneshot};
@@ -43,8 +44,8 @@ impl CratesClient {
   pub async fn cancel_search(self) -> Result<(), AsyncError> {
     self.send(Request::CancelSearch).await
   }
-  pub async fn update(self, crate_name: String) -> Result<UpdateResponse, AsyncError> {
-    Ok(self.send_receive(|tx| Request::Update(crate_name, tx)).await?)
+  pub async fn update(self, id: String) -> Result<UpdateResponse, AsyncError> {
+    Ok(self.send_receive(|tx| Request::Update(id, tx)).await?)
   }
 
   async fn send_receive<T>(&self, make_request: impl FnOnce(oneshot::Sender<T>) -> Request) -> Result<T, AsyncError> {
@@ -62,6 +63,9 @@ impl CratesClient {
 struct Manager {
   client: AsyncClient,
   rx: mpsc::Receiver<Request>,
+
+  // running_search: bool,
+  // running_update: bool,
 }
 
 enum Request {
@@ -74,34 +78,27 @@ impl Manager {
   async fn run(mut self) {
     let mut queued_updates = VecDeque::new();
 
-    pin! {
-      let search = Either::Left(pending());
-      let update = Either::Left(pending());
-    }
-    let mut running_search = false;
-    let mut running_update = false;
+    let search = Fuse::terminated();
+    let update = Fuse::terminated();
+    pin!(search, update);
 
     loop {
       select! {
         _ = &mut search => {
-          search.set(Either::Left(pending()));
-          running_search = false;
-          if !running_update {
+          if update.is_terminated() {
             // TODO: remove code duplication
-            if let Some((crate_name, tx)) = queued_updates.pop_front() {
-              update.set(Either::Right(do_update(crate_name, self.client.clone(), tx)));
-              running_update = true;
+            if let Some((id, tx)) = queued_updates.pop_front() {
+              tracing::info!(id, "dequeued and starting crate update");
+              update.set(do_update(id, self.client.clone(), tx).fuse());
             }
           }
         },
         _ = &mut update => {
-          update.set(Either::Left(pending()));
-          running_update = false;
-          if !running_search {
+          if search.is_terminated() {
             // TODO: remove code duplication
-            if let Some((crate_name, tx)) = queued_updates.pop_front() {
-              update.set(Either::Right(do_update(crate_name, self.client.clone(), tx)));
-              running_update = true;
+            if let Some((id, tx)) = queued_updates.pop_front() {
+              tracing::info!(id, "dequeued and starting crate update");
+              update.set(do_update(id, self.client.clone(), tx).fuse());
             }
           }
         },
@@ -109,29 +106,31 @@ impl Manager {
           match request {
             Request::Search(search_term, tx) => {
               let sleep_until = Instant::now() + Duration::from_millis(300);
-              search.set(Either::Right(do_search(sleep_until, search_term, self.client.clone(), tx)));
-              running_search = true;
+              tracing::info!(?sleep_until, search_term, "starting crate search");
+              search.set(do_search(sleep_until, search_term, self.client.clone(), tx).fuse());
             },
             Request::CancelSearch => {
-              search.set(Either::Left(pending()));
-              running_search = false;
+              tracing::info!("cancelling crate search");
+              search.set(Fuse::terminated());
 
-              if !running_update {
+              if update.is_terminated() {
                 // TODO: remove code duplication
-                if let Some((crate_name, tx)) = queued_updates.pop_front() {
-                  update.set(Either::Right(do_update(crate_name, self.client.clone(), tx)));
-                  running_update = true;
+                if let Some((id, tx)) = queued_updates.pop_front() {
+                  tracing::info!(id, "dequeued and starting crate update");
+                  update.set(do_update(id, self.client.clone(), tx).fuse());
                 }
               }
             },
-            Request::Update(crate_name, tx) => {
-              if running_search || running_update {
-                queued_updates.push_back((crate_name, tx));
+            Request::Update(id, tx) => {
+              if !search.is_terminated() || !update.is_terminated() {
+                tracing::info!(id, "queueing crate update");
+                queued_updates.push_back((id, tx));
               } else if queued_updates.is_empty() {
-                update.set(Either::Right(do_update(crate_name, self.client.clone(), tx)));
-                running_update = true;
+                tracing::info!(id, "starting crate update");
+                update.set(do_update(id, self.client.clone(), tx).fuse());
               } else {
-                queued_updates.push_back((crate_name, tx));
+                tracing::info!(id, "queueing crate update");
+                queued_updates.push_back((id, tx));
               }
             }
           }
@@ -140,8 +139,16 @@ impl Manager {
       }
     }
   }
+
+  // fn perform_search(&mut self, search_term: String, tx: oneshot::Sender<SearchResponse>) {
+  //   let sleep_until = Instant::now() + Duration::from_millis(300);
+  //   tracing::info!(?sleep_until, search_term, "starting crate search");
+  //   search.set(Either::Right(do_search(sleep_until, search_term, self.client.clone(), tx)));
+  //   self.running_search = true;
+  // }
 }
 
+#[tracing::instrument(skip(client, tx))]
 async fn do_search(sleep_until: Instant, search_term: String, client: AsyncClient, tx: oneshot::Sender<SearchResponse>) {
   tokio::time::sleep_until(sleep_until.into()).await;
   let query = CratesQuery::builder()
@@ -151,7 +158,9 @@ async fn do_search(sleep_until: Instant, search_term: String, client: AsyncClien
   let response = client.crates(query).await;
   let _ = tx.send(response); // Ignore error ok: do nothing if receiver was dropped.
 }
-async fn do_update(crate_name: String, client: AsyncClient, tx: oneshot::Sender<UpdateResponse>) {
-  let response = client.get_crate(&crate_name).await;
+
+#[tracing::instrument(skip(client, tx))]
+async fn do_update(id: String, client: AsyncClient, tx: oneshot::Sender<UpdateResponse>) {
+  let response = client.get_crate(&id).await;
   let _ = tx.send(response); // Ignore error ok: do nothing if receiver was dropped.
 }

@@ -15,6 +15,12 @@ pub mod component;
 pub mod crates_client;
 
 fn main() -> Result<(), Box<dyn Error>> {
+  let subscriber = tracing_subscriber::fmt()
+    .finish();
+  if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
+    eprintln!("Failed to set global tracing subscriber: {:?}", e);
+  }
+
   let directories = directories::ProjectDirs::from("", "", "ATT");
   let data_directory_path = directories.as_ref().map(|d| d.data_dir().to_path_buf());
   let data_file_path = data_directory_path.as_ref().map(|p| p.join("data.json"));
