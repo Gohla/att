@@ -14,12 +14,12 @@ pub struct CratesClient {
 }
 
 pub type SearchResponse = Result<CratesPage, crates_io_api::Error>;
-pub type UpdateResponse = Result<CrateResponse, crates_io_api::Error>;
+pub type RefreshResponse = Result<CrateResponse, crates_io_api::Error>;
 
 impl CratesClient {
   pub fn new(client: AsyncClient) -> Self {
     let (tx, rx) = mpsc::channel(64);
-    let manager = Manager::new(client, rx);
+    let manager = Task::new(rx, client);
     tokio::spawn(manager.run());
     Self { tx }
   }
@@ -30,8 +30,8 @@ impl CratesClient {
   pub async fn cancel_search(self) -> Result<(), AsyncError> {
     self.send(Request::CancelSearch).await
   }
-  pub async fn update(self, id: String) -> Result<UpdateResponse, AsyncError> {
-    Ok(self.send_receive(|tx| Request::Update(Update { id, tx })).await?)
+  pub async fn refresh(self, id: String) -> Result<RefreshResponse, AsyncError> {
+    Ok(self.send_receive(|tx| Request::Refresh(Refresh { id, tx })).await?)
   }
 
   async fn send_receive<T>(&self, make_request: impl FnOnce(oneshot::Sender<T>) -> Request) -> Result<T, AsyncError> {
@@ -49,40 +49,37 @@ impl CratesClient {
 enum Request {
   Search(Search),
   CancelSearch,
-  Update(Update)
+  Refresh(Refresh),
 }
 
-struct Manager {
-  client: AsyncClient,
+struct Task {
   rx: mpsc::Receiver<Request>,
-  running_search: Fuse<BoxFuture<'static, ()>>,
-  running_update: Fuse<BoxFuture<'static, ()>>,
-  queued_updates: VecDeque<Update>,
+  client: AsyncClient,
+  search: Fuse<BoxFuture<'static, ()>>,
+  refresh: Fuse<BoxFuture<'static, ()>>,
+  queue: VecDeque<Refresh>,
 }
-impl Manager {
-  fn new(client: AsyncClient, rx: mpsc::Receiver<Request>) -> Self {
-    Self {
-      client,
+impl Task {
+  fn new(rx: mpsc::Receiver<Request>, client: AsyncClient) -> Self {
+    let task = Self {
       rx,
-      queued_updates: VecDeque::new(),
-      running_search: Fuse::terminated(),
-      running_update: Fuse::terminated()
-    }
+      client,
+      queue: VecDeque::new(),
+      search: Fuse::terminated(),
+      refresh: Fuse::terminated()
+    };
+    task
   }
 
   #[tracing::instrument(skip_all)]
   async fn run(mut self) {
     loop {
       tokio::select! {
-        _ = &mut self.running_search => {
-          if self.running_update.is_terminated() {
-            self.try_run_queued_update();
-          }
+        _ = &mut self.search => {
+          self.try_run_queued_refresh();
         },
-        _ = &mut self.running_update => {
-          if self.running_search.is_terminated() {
-            self.try_run_queued_update();
-          }
+        _ = &mut self.refresh => {
+          self.try_run_queued_refresh();
         },
         Some(request) = self.rx.recv() => {
           match request {
@@ -91,19 +88,12 @@ impl Manager {
             },
             Request::CancelSearch => {
               self.cancel_search();
-              if self.running_update.is_terminated() {
-                self.try_run_queued_update();
-              }
+              self.try_run_queued_refresh();
             },
-            Request::Update(update) => {
-              if !self.running_search.is_terminated() || !self.running_update.is_terminated() {
-                self.queue_update(update);
-              } else if self.queued_updates.is_empty() {
-                self.run_update(update);
-              } else {
-                self.queue_update(update);
-              }
-            }
+            Request::Refresh(refresh) => {
+              self.queue_refresh(refresh);
+              self.try_run_queued_refresh();
+            },
           }
         },
         else => { break; }
@@ -113,25 +103,27 @@ impl Manager {
   }
 
   fn run_search(&mut self, search: Search) {
-    self.running_search = search.run(self.client.clone()).boxed().fuse();
+    self.search = search.run(self.client.clone()).boxed().fuse();
   }
   fn cancel_search(&mut self) {
     tracing::info!("cancelling crate search");
-    self.running_search = Fuse::terminated();
+    self.search = Fuse::terminated();
   }
 
-  fn queue_update(&mut self, update: Update) {
-    tracing::info!(id = update.id, "queueing crate update");
-    self.queued_updates.push_back(update);
+  fn queue_refresh(&mut self, refresh: Refresh) {
+    tracing::info!(id = refresh.id, "queueing crate refresh");
+    self.queue.push_back(refresh);
   }
-  fn try_run_queued_update(&mut self) {
-    if let Some(update) = self.queued_updates.pop_front() {
-      tracing::info!(id = update.id, "dequeued crate update");
-      self.run_update(update);
+  fn try_run_queued_refresh(&mut self) {
+    if self.search.is_terminated() && self.refresh.is_terminated() {
+      if let Some(refresh) = self.queue.pop_front() {
+        tracing::info!(id = refresh.id, "dequeued crate refresh");
+        self.run_refresh(refresh);
+      }
     }
   }
-  fn run_update(&mut self, update: Update) {
-    self.running_update = update.run(self.client.clone()).boxed().fuse();
+  fn run_refresh(&mut self, refresh: Refresh) {
+    self.refresh = refresh.run(self.client.clone()).boxed().fuse();
   }
 }
 
@@ -153,13 +145,13 @@ impl Search {
   }
 }
 
-struct Update {
+struct Refresh {
   id: String,
-  tx: oneshot::Sender<UpdateResponse>,
+  tx: oneshot::Sender<RefreshResponse>,
 }
-impl Update {
+impl Refresh {
   async fn run(self, client: AsyncClient) {
-    tracing::info!(id = self.id, "running crate update");
+    tracing::info!(id = self.id, "running crate refresh");
     let response = client.get_crate(&self.id).await;
     let _ = self.tx.send(response); // Ignore error ok: do nothing if receiver was dropped.
   }

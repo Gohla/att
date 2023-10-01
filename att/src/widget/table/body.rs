@@ -298,6 +298,7 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
   ) -> Cell<'c, 'a, M, R> {
     let element = element_state.get_or_insert(row, col, &self.cell_to_element);
     let tree = tree_state.get_or_insert(row, col, element);
+    tree.diff(element.as_widget());
     let limits = Limits::new(Size::ZERO, cell_bounds.size());
     let mut node = element.as_widget().layout(tree, renderer, &limits);
     // Since `cell_bounds` is from the layout of the phantom row, it always has a y-position of 0.0. We move the node to
@@ -341,7 +342,7 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
   /// Gets the column and bounds (retrieved from the layout of the phantom row) for `x` position relative to this table, or
   /// `None` if there is no column at `x`.
   fn col_and_bounds_at(&self, x: f32, layout: Layout) -> Option<(usize, Rectangle)> {
-    // TODO: more efficient way to implement this, not a for loop!
+    // TODO: more efficient way to implement this, not a for loop?
     if x < 0.0 { return None; } // Out of bounds
     let mut offset = 0f32;
     for (col, bounds) in Self::get_cell_bounds(layout).enumerate() {
@@ -353,6 +354,7 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
     None
   }
   /// Gets cell bounds (retrieved from the layout of the phantom row) from the `layout` of this table.
+  #[inline]
   fn get_cell_bounds(layout: Layout) -> impl Iterator<Item=Rectangle> + '_ {
     layout.children().next().unwrap().children().map(|l| l.bounds())
   }

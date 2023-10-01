@@ -541,6 +541,7 @@ pub struct ButtonBuilder<'a, S: StateAdd<'a>, C, A> where
   state: S,
   content: C,
   actions: A,
+  disabled: bool,
   width: Length,
   height: Length,
   padding: Padding,
@@ -554,6 +555,7 @@ impl<'a, S: StateAdd<'a>, C> ButtonBuilder<'a, S, C, ButtonPassthrough> where
       state,
       content,
       actions: ButtonPassthrough,
+      disabled: false,
       width: Length::Shrink,
       height: Length::Shrink,
       padding: 5.0.into(),
@@ -582,6 +584,11 @@ impl<'a, S: StateAdd<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'a,
   /// Sets the function that will be called when the [`Button`] is pressed to `on_paste`.
   pub fn on_press<F: Fn() -> S::Message + 'a>(self, on_press: F) -> ButtonBuilder<'a, S, C, A::Change> {
     self.replace_actions(|actions| actions.on_press(on_press))
+  }
+  /// Sets whether the [`Button`] is `disabled`.
+  pub fn disabled(mut self, disabled: bool) -> Self {
+    self.disabled = disabled;
+    self
   }
   /// Sets the [`Style`] of the [`Button`].
   ///
@@ -634,6 +641,7 @@ impl<'a, S: StateAdd<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'a,
       state: self.state,
       content: self.content,
       actions: change(self.actions),
+      disabled: self.disabled,
       width: self.width,
       height: self.height,
       padding: self.padding,
@@ -648,11 +656,15 @@ impl<'a, S: StateAdd<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> 
   /// Adds the [`Button`] to the builder and returns the builder.
   pub fn add(self) -> S::AddOutput {
     let element = self.actions.create(self.content, |button| {
-      button
+      let mut button = button
         .width(self.width)
         .height(self.height)
         .padding(self.padding)
-        .style(self.style)
+        .style(self.style);
+      if self.disabled {
+        button = button.on_press_maybe(None);
+      }
+      button
     });
     self.state.add(element)
   }

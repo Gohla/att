@@ -66,8 +66,14 @@ fn from_json_file_opt<T: serde::de::DeserializeOwned>(path: Option<impl AsRef<Pa
   let mut open_options = OpenOptions::new();
   open_options.read(true);
   let file_opt = open_file_opt(path, open_options)?;
-  let value_opt = file_opt.map(|file| serde_json::from_reader(io::BufReader::new(file))).transpose()?;
-  Ok(value_opt)
+  let result = file_opt.map(|file| serde_json::from_reader(io::BufReader::new(file))).transpose();
+  if let Err(cause) = &result {
+    if cause.classify() == serde_json::error::Category::Data {
+      tracing::error!(%cause, "failed to deserialize JSON due to data format changes; returning None");
+      return Ok(None)
+    }
+  }
+  Ok(result?)
 }
 fn to_json_file_opt<T: serde::Serialize>(path: Option<impl AsRef<Path>>, value: &T) -> Result<(), Box<dyn Error>> {
   let mut open_options = OpenOptions::new();
