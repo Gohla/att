@@ -1,3 +1,5 @@
+use std::time::{Duration, Instant};
+
 use crates_io_api::{Crate, CratesPage};
 use iced::{Command, Element};
 use iced::widget::text_input;
@@ -47,11 +49,12 @@ impl AddCrate {
 impl AddCrate {
   pub fn update(&mut self, message: Message, crates_client: &CratesClient) -> Update<Option<Crate>, Command<Message>> {
     match message {
-      Message::SetSearchTerm(s) => {
-        self.search_term = s.clone();
+      Message::SetSearchTerm(search_term) => {
+        self.search_term = search_term.clone();
         let crates_client = crates_client.clone();
-        return if !s.is_empty() {
-          Update::perform(crates_client.search(s), |r| r.map_or(Message::Ignore, |r| Message::SetCrates(r)))
+        return if !search_term.is_empty() {
+          let wait_until = Instant::now() + Duration::from_millis(300);
+          Update::perform(crates_client.search(wait_until, search_term), |r| r.map_or(Message::Ignore, |r| Message::SetCrates(r)))
         } else {
           self.crates = None;
           Update::perform(crates_client.cancel_search(), |_| Message::Ignore)
