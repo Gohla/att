@@ -2,6 +2,7 @@ use crates_io_api::CrateResponse;
 use iced::{Command, Element};
 
 use crate::app::{Cache, Model};
+use crate::async_util::PerformFutureExt;
 use crate::component::Update;
 use crate::crates_client::CratesClient;
 use crate::widget::builder::WidgetBuilder;
@@ -11,11 +12,12 @@ use crate::widget::WidgetExt;
 #[derive(Default, Debug)]
 pub struct ViewCrates;
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub enum Message {
   RequestCrateUpdate(String),
   ReceiveCrateUpdate(Result<CrateResponse, crates_io_api::Error>),
   RemoveCrate(String),
+  #[default]
   Ignore,
 }
 
@@ -24,26 +26,21 @@ impl ViewCrates {
   pub fn update(&mut self, message: Message, crates_client: &CratesClient, model: &mut Model, cache: &mut Cache) -> Update<(), Command<Message>> {
     match message {
       Message::RequestCrateUpdate(id) => {
-        // TODO: make Ignore message default and add convenience to crates_client that maps to default on async error, and then maps the message
-        return Update::perform(crates_client.clone().update(id), |r| r.map_or(Message::Ignore, |r| Message::ReceiveCrateUpdate(r)))
+        return crates_client.clone().update(id).perform(Message::ReceiveCrateUpdate).into()
       }
-      Message::ReceiveCrateUpdate(r) => {
-        match r {
-          Ok(r) => {
-            let id = r.crate_data.id.clone();
-            tracing::info!(id, "updated crate data");
-            cache.crate_data.insert(id, r.crate_data);
-          }
-          Err(cause) => tracing::error!(?cause, "failed to update crate data"),
-        }
+      Message::ReceiveCrateUpdate(Ok(response)) => {
+        let id = response.crate_data.id.clone();
+        tracing::info!(id, "updated crate data");
+        cache.crate_data.insert(id, response.crate_data);
       }
+      Message::ReceiveCrateUpdate(Err(cause)) => tracing::error!(?cause, "failed to update crate data"),
       Message::RemoveCrate(id) => {
         model.blessed_crate_ids.remove(&id);
         cache.crate_data.remove(&id);
       }
       Message::Ignore => {}
     }
-    Update::empty()
+    Update::default()
   }
 
   #[tracing::instrument(skip_all)]

@@ -6,23 +6,11 @@ use iced::futures::future::{BoxFuture, Fuse, FusedFuture};
 use iced::futures::FutureExt;
 use tokio::sync::{mpsc, oneshot};
 
+use crate::async_util::AsyncError;
+
 #[derive(Clone)]
 pub struct CratesClient {
   tx: mpsc::Sender<Request>
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum AsyncError {
-  #[error("Failed to send request; manager receiver was closed")]
-  Tx,
-  #[error("Failed to receive response; sender was closed")]
-  Rx,
-}
-impl<T> From<mpsc::error::SendError<T>> for AsyncError {
-  fn from(_: mpsc::error::SendError<T>) -> Self { Self::Tx }
-}
-impl From<oneshot::error::RecvError> for AsyncError {
-  fn from(_: oneshot::error::RecvError) -> Self { Self::Rx }
 }
 
 pub type SearchResponse = Result<CratesPage, crates_io_api::Error>;
@@ -69,7 +57,7 @@ struct Manager {
   rx: mpsc::Receiver<Request>,
   running_search: Fuse<BoxFuture<'static, ()>>,
   running_update: Fuse<BoxFuture<'static, ()>>,
-  queued_updates: VecDeque<Update>
+  queued_updates: VecDeque<Update>,
 }
 impl Manager {
   fn new(client: AsyncClient, rx: mpsc::Receiver<Request>) -> Self {

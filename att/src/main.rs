@@ -13,6 +13,7 @@ pub mod app;
 pub mod widget;
 pub mod component;
 pub mod crates_client;
+pub mod async_util;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let subscriber = tracing_subscriber::fmt()

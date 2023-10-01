@@ -2,16 +2,27 @@ use std::future::Future;
 
 use iced::Command;
 
-use crate::widget::maybe_send::MaybeSend;
+use crate::async_util::MaybeSend;
 
 pub mod add_crate;
 pub mod view_crates;
 
 /// Update received from components.
-#[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Update<A = (), C = ()> {
   action: A,
   command: C,
+}
+
+impl<A: Default, M> Default for Update<A, Command<M>> {
+  fn default() -> Self {
+    Self::new(A::default(), Command::none())
+  }
+}
+impl<A: Default, M> From<Command<M>> for Update<A, Command<M>> {
+  fn from(command: Command<M>) -> Self {
+    Self::from_command(command)
+  }
 }
 
 impl<A, C> Update<A, C> {

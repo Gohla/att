@@ -1,7 +1,7 @@
 use iced::{Command, Element, Font};
 use iced::advanced::Renderer;
 
-use crate::widget::maybe_send::MaybeSend;
+use crate::async_util::MaybeSend;
 
 pub mod builder;
 

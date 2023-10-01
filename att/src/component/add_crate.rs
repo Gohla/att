@@ -4,6 +4,7 @@ use crates_io_api::{Crate, CratesPage};
 use iced::{Command, Element};
 use iced::widget::text_input;
 
+use crate::async_util::PerformFutureExt;
 use crate::component::Update;
 use crate::crates_client::CratesClient;
 use crate::widget::builder::WidgetBuilder;
@@ -17,11 +18,12 @@ pub struct AddCrate {
   crates: Option<Result<CratesPage, crates_io_api::Error>>,
 }
 
-#[derive(Debug)]
+#[derive(Default, Debug)]
 pub enum Message {
   SetSearchTerm(String),
   SetCrates(Result<CratesPage, crates_io_api::Error>),
   AddCrate(Crate),
+  #[default]
   Ignore,
 }
 
@@ -47,6 +49,7 @@ impl AddCrate {
 }
 
 impl AddCrate {
+  #[tracing::instrument(skip_all)]
   pub fn update(&mut self, message: Message, crates_client: &CratesClient) -> Update<Option<Crate>, Command<Message>> {
     match message {
       Message::SetSearchTerm(search_term) => {
@@ -54,10 +57,10 @@ impl AddCrate {
         let crates_client = crates_client.clone();
         return if !search_term.is_empty() {
           let wait_until = Instant::now() + Duration::from_millis(300);
-          Update::perform(crates_client.search(wait_until, search_term), |r| r.map_or(Message::Ignore, |r| Message::SetCrates(r)))
+          crates_client.search(wait_until, search_term).perform(Message::SetCrates).into()
         } else {
           self.crates = None;
-          Update::perform(crates_client.cancel_search(), |_| Message::Ignore)
+          crates_client.cancel_search().perform_ignore().into()
         };
       }
       Message::SetCrates(crates) => self.crates = Some(crates),
@@ -66,9 +69,10 @@ impl AddCrate {
       },
       Message::Ignore => {},
     }
-    Update::empty()
+    Update::default()
   }
 
+  #[tracing::instrument(skip_all)]
   pub fn view<'a>(&'a self) -> Element<'a, Message> {
     let builder = WidgetBuilder::stack()
       .text_input("Crate search term", &self.search_term).id(self.search_id.clone()).on_input(Message::SetSearchTerm).add();
