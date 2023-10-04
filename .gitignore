@@ -12,7 +12,7 @@
 /target
 
 # Trunk
-/att/dist
+/client/dist
 /target_wasm
 
 # NPM

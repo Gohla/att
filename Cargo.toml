@@ -2,9 +2,13 @@ cargo-features = ["named-profiles", "profile-overrides"]
 
 [workspace]
 members = [
-  "att"
+  "core",
+  "client",
+  "server",
 ]
 default-members = [
-  "att"
+  "core",
+  "client",
+  "server",
 ]
 resolver = "2"
