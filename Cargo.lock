@@ -295,6 +295,7 @@ name = "att_core"
 version = "0.1.0"
 dependencies = [
  "chrono",
+ "crates_io_api",
  "serde",
 ]
 

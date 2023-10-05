@@ -8,3 +8,31 @@ pub struct Crate {
   pub updated_at: DateTime<Utc>,
   pub max_version: String,
 }
+impl Crate {
+  pub fn from_id(id: String) -> Self {
+    Self { id, ..Self::default() }
+  }
+}
+
+#[cfg(feature = "crates_io_api")]
+impl From<crates_io_api::Crate> for Crate {
+  fn from(c: crates_io_api::Crate) -> Self {
+    Self {
+      id: c.id,
+      downloads: c.downloads,
+      updated_at: c.updated_at,
+      max_version: c.max_version,
+    }
+  }
+}
+#[cfg(feature = "crates_io_api")]
+impl From<&crates_io_api::Crate> for Crate {
+  fn from(c: &crates_io_api::Crate) -> Self {
+    Self {
+      id: c.id.clone(),
+      downloads: c.downloads,
+      updated_at: c.updated_at,
+      max_version: c.max_version.clone(),
+    }
+  }
+}

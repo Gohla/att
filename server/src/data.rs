@@ -1,17 +1,16 @@
-use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io;
 use std::path::{Path, PathBuf};
 
-use chrono::{DateTime, Utc};
-use crates_io_api::Crate;
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
 
+use crate::krate::CrateData;
+
 #[derive(Default, Serialize, Deserialize)]
 pub struct Data {
-  pub blessed_crate_ids: BTreeSet<String>,
+  pub crate_data: CrateData,
 }
 impl Data {
   pub fn deserialize_or_default(project_dirs: &ProjectDirs) -> Result<Self, Box<dyn Error>> {
@@ -19,7 +18,6 @@ impl Data {
     let data = from_json_file(file_path)?.unwrap_or_default();
     Ok(data)
   }
-
   pub fn serialize(&self, project_dirs: &ProjectDirs) -> Result<(), Box<dyn Error>> {
     let (directory_path, file_path) = Self::paths(project_dirs);
     create_dir_all(directory_path)?;
@@ -30,31 +28,6 @@ impl Data {
   fn paths(project_dirs: &ProjectDirs) -> (&Path, PathBuf) {
     let directory_path = project_dirs.data_dir();
     let file_path = directory_path.join("data.json");
-    (directory_path, file_path)
-  }
-}
-
-#[derive(Default, Serialize, Deserialize)]
-pub struct Cache {
-  pub crate_data: BTreeMap<String, (Crate, DateTime<Utc>)>
-}
-impl Cache {
-  pub fn deserialize_or_default(project_dirs: &ProjectDirs) -> Result<Self, Box<dyn Error>> {
-    let (_, file_path) = Self::paths(project_dirs);
-    let cache = from_json_file(file_path)?.unwrap_or_default();
-    Ok(cache)
-  }
-
-  pub fn serialize(&self, project_dirs: &ProjectDirs) -> Result<(), Box<dyn Error>> {
-    let (directory_path, file_path) = Self::paths(project_dirs);
-    create_dir_all(directory_path)?;
-    to_json_file(file_path, self)?;
-    Ok(())
-  }
-
-  fn paths(project_dirs: &ProjectDirs) -> (&Path, PathBuf) {
-    let directory_path = project_dirs.cache_dir();
-    let file_path = directory_path.join("cache.json");
     (directory_path, file_path)
   }
 }

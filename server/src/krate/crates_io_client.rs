@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 use std::error::Error;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use crates_io_api::{AsyncClient, CrateResponse, CratesPage, CratesQuery, Sort};
 use futures::future::{BoxFuture, Fuse, FusedFuture};
@@ -10,14 +10,14 @@ use tokio::sync::{mpsc, oneshot};
 use crate::async_util::AsyncError;
 
 #[derive(Clone)]
-pub struct CratesClient {
+pub struct CratesIoClient {
   tx: mpsc::Sender<Request>
 }
 
 pub type SearchResponse = Result<CratesPage, crates_io_api::Error>;
 pub type RefreshResponse = Result<CrateResponse, crates_io_api::Error>;
 
-impl CratesClient {
+impl CratesIoClient {
   pub fn new(user_agent: &str) -> Result<Self, Box<dyn Error>> {
     let client = AsyncClient::new(user_agent, Duration::from_secs(1))?;
     let (tx, rx) = mpsc::channel(64);
@@ -26,8 +26,8 @@ impl CratesClient {
     Ok(Self { tx })
   }
 
-  pub async fn search(self, wait_until: Instant, search_term: String) -> Result<SearchResponse, AsyncError> {
-    Ok(self.send_receive(|tx| Request::Search(Search { wait_until, search_term, tx })).await?)
+  pub async fn search(self, search_term: String) -> Result<SearchResponse, AsyncError> {
+    Ok(self.send_receive(|tx| Request::Search(Search { search_term, tx })).await?)
   }
   pub async fn cancel_search(self) -> Result<(), AsyncError> {
     self.send(Request::CancelSearch).await
@@ -101,7 +101,7 @@ impl Task {
         else => { break; }
       }
     }
-    tracing::info!("crates manager task is ending");
+    tracing::info!("crates-io-client task is ending");
   }
 
   fn run_search(&mut self, search: Search) {
@@ -130,14 +130,12 @@ impl Task {
 }
 
 struct Search {
-  wait_until: Instant,
   search_term: String,
   tx: oneshot::Sender<SearchResponse>,
 }
 impl Search {
   async fn run(self, client: AsyncClient) {
-    tracing::info!(wait_until = ?self.wait_until, search_term = self.search_term, "running crate search");
-    tokio::time::sleep_until(self.wait_until.into()).await;
+    tracing::info!(search_term = self.search_term, "running crate search");
     let query = CratesQuery::builder()
       .search(self.search_term)
       .sort(Sort::Relevance)

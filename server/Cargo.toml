@@ -1,19 +1,19 @@
 [package]
 name = "att_server"
-version = "0.1.0"
-edition = "2021"
-publish = false
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
 
 [dependencies]
-att_core = { path = "../core" }
+att_core = { path = "../core", features = ["crates_io_api"] }
 axum = "0.6"
-tokio = { version = "1", features = ["rt-multi-thread", "time", "macros", "signal"] }
-futures = "0.3"
-crates_io_api = "0.8"
-chrono = { version = "0.4", features = ["serde"] }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-directories = "5"
-thiserror = "1"
-tracing = "0.1"
-tracing-subscriber = "0.3"
+tokio = { workspace = true, features = ["rt-multi-thread", "time", "macros", "signal"] }
+futures.workspace = true
+crates_io_api.workspace = true
+chrono = { workspace = true, features = ["serde"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json.workspace = true
+directories.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

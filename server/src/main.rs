@@ -4,14 +4,14 @@ use std::sync::Arc;
 use tokio::signal;
 use tokio::sync::RwLock;
 
-use crate::app::{AppState, run};
-use crate::crates_client::CratesClient;
-use crate::data::{Cache, Data};
+use crate::app::{App, run};
+use crate::data::Data;
+use crate::krate::crates_io_client::CratesIoClient;
 
 mod app;
-mod crates_client;
 mod async_util;
 mod data;
+mod krate;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let subscriber = tracing_subscriber::fmt()
@@ -26,28 +26,21 @@ fn main() -> Result<(), Box<dyn Error>> {
   let _runtime_guard = runtime.enter();
 
   let project_dirs = directories::ProjectDirs::from("", "", "ATT");
-  let (data, cache) = if let Some(project_dirs) = &project_dirs {
-    let data = Data::deserialize_or_default(project_dirs)?;
-    let cache = Cache::deserialize_or_default(project_dirs)?;
-    (data, cache)
+  let data = if let Some(project_dirs) = &project_dirs {
+    Data::deserialize_or_default(project_dirs)?
   } else {
-    let data = Data::default();
-    let cache = Cache::default();
-    (data, cache)
+    Data::default()
   };
 
   let data = Arc::new(RwLock::new(data));
-  let cache = Arc::new(RwLock::new(cache));
-  let crates_client = CratesClient::new("Gohla (https://github.com/Gohla)")?;
-  let state = AppState { data, cache, crates_client };
+  let data_local = data.clone();
+  let crates_client = CratesIoClient::new("Gohla (https://github.com/Gohla)")?;
+  let app = App::new(data, crates_client);
 
-  runtime.block_on(run(state.clone(), shutdown_signal()))?;
+  runtime.block_on(run(app, shutdown_signal()))?;
 
   if let Some(project_dirs) = &project_dirs {
-    let data_result = state.data.blocking_read().serialize(&project_dirs);
-    let cache_result = state.cache.blocking_read().serialize(&project_dirs);
-    data_result?;
-    cache_result?;
+    data_local.blocking_read().serialize(&project_dirs)?;
   }
 
   Ok(())
