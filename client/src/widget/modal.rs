@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use iced::{Background, Color, Element, Event, keyboard, Length, Point, Rectangle, Size, Theme};
+use iced::{Background, Color, Element, Event, keyboard, Length, Point, Rectangle, Size, Theme, Vector};
 use iced::advanced::{Clipboard, Renderer, Shell};
 use iced::advanced::graphics::core::touch;
 use iced::advanced::layout::{Layout, Limits, Node};
@@ -222,6 +222,7 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
     renderer: &R,
     bounds: Size,
     _position: Point,
+    _translation: Vector,
   ) -> Node {
     let limits = Limits::new(Size::ZERO, bounds);
     let mut overlay_node = self.overlay.as_widget().layout(self.overlay_tree, renderer, &limits);

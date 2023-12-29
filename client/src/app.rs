@@ -48,7 +48,7 @@ pub enum Message {
   ToggleLightDarkMode,
 
   FontLoaded(Result<(), iced::font::Error>),
-  Exit,
+  Exit(window::Id),
 }
 
 impl Application for App {
@@ -92,9 +92,9 @@ impl Application for App {
       }
 
       Message::FontLoaded(_) => {},
-      Message::Exit => {
+      Message::Exit(window_id) => {
         let _ = (self.save_fn)(&self.model, &self.cache); // TODO: handle error
-        return window::close();
+        return window::close(window_id);
       }
     }
     Command::none()
@@ -123,7 +123,11 @@ impl Application for App {
 
   fn subscription(&self) -> Subscription<Message> {
     let exit_subscription = event::listen_with(|event, _| {
-      (event == Event::Window(window::Event::CloseRequested)).then_some(Message::Exit)
+      if let Event::Window(id, window::Event::CloseRequested) = event {
+        Some(Message::Exit(id))
+      } else {
+        None
+      }
     });
     exit_subscription
   }

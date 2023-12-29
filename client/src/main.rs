@@ -5,7 +5,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use crates_io_api::AsyncClient;
-use iced::{Application, Settings};
+use iced::{Application, Settings, window};
 
 use crate::app::{App, Flags};
 
@@ -46,6 +46,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
   let crates_io_api = AsyncClient::new("Gohla (https://github.com/Gohla)", Duration::from_secs(1))?;
 
+  let id = Some("att".to_string());
+  let window = window::Settings {
+    exit_on_close_request: false,
+    ..Default::default()
+  };
+
   let flags = Flags {
     model,
     cache,
@@ -54,7 +60,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     crates_io_api,
   };
   let settings = Settings {
-    exit_on_close_request: false,
+    id,
+    window,
     ..Settings::with_flags(flags)
   };
   App::run(settings)?;
