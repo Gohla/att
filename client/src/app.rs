@@ -10,7 +10,6 @@ use crate::component::view_crates::{self, ViewCrates};
 use crate::crates_client::CratesClient;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
-use crate::widget::load_icon_font_command;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Model {
@@ -47,7 +46,6 @@ pub enum Message {
 
   ToggleLightDarkMode,
 
-  FontLoaded(Result<(), iced::font::Error>),
   Exit(window::Id),
 }
 
@@ -63,8 +61,7 @@ impl Application for App {
     let crates_client = CratesClient::new(flags.crates_io_api);
 
     let (view_crates, view_crates_command) = ViewCrates::new(crates_client, &model, &cache);
-    let load_command = load_icon_font_command(Message::FontLoaded);
-    let command = Command::batch([view_crates_command.map(Message::ToViewCrates), load_command]);
+    let command = Command::batch([view_crates_command.map(Message::ToViewCrates)]);
 
     let app = App {
       model,
@@ -91,7 +88,6 @@ impl Application for App {
         self.dark_mode = !self.dark_mode;
       }
 
-      Message::FontLoaded(_) => {},
       Message::Exit(window_id) => {
         let _ = (self.save_fn)(&self.model, &self.cache); // TODO: handle error
         return window::close(window_id);

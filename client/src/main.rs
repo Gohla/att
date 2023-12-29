@@ -1,3 +1,4 @@
+use std::borrow::Cow;
 use std::error::Error;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io;
@@ -8,6 +9,7 @@ use crates_io_api::AsyncClient;
 use iced::{Application, Settings, window};
 
 use crate::app::{App, Flags};
+use crate::widget::ICON_FONT_BYTES;
 
 pub mod app;
 pub mod widget;
@@ -51,7 +53,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     exit_on_close_request: false,
     ..Default::default()
   };
-
   let flags = Flags {
     model,
     cache,
@@ -59,9 +60,13 @@ fn main() -> Result<(), Box<dyn Error>> {
     save_fn,
     crates_io_api,
   };
+  let fonts = vec![
+    Cow::Borrowed(ICON_FONT_BYTES)
+  ];
   let settings = Settings {
     id,
     window,
+    fonts,
     ..Settings::with_flags(flags)
   };
   App::run(settings)?;
