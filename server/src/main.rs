@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     .build()?;
   let _runtime_guard = runtime.enter();
 
-  let project_dirs = directories::ProjectDirs::from("", "", "ATT");
+  let project_dirs = directories::ProjectDirs::from("", "ATT", "Server");
   let data = if let Some(project_dirs) = &project_dirs {
     Data::deserialize_or_default(project_dirs)?
   } else {

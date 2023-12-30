@@ -6,7 +6,7 @@ publish.workspace = true
 
 [dependencies]
 att_core = { path = "../core", features = ["crates_io_api"] }
-axum = "0.6"
+axum = "0.7"
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "macros", "signal"] }
 futures.workspace = true
 crates_io_api.workspace = true

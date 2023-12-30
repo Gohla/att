@@ -16,6 +16,7 @@ pub mod widget;
 pub mod component;
 pub mod crates_client;
 pub mod async_util;
+pub mod client;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let subscriber = tracing_subscriber::fmt()
@@ -53,6 +54,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     exit_on_close_request: false,
     ..Default::default()
   };
+  let fonts = vec![
+    Cow::Borrowed(ICON_FONT_BYTES)
+  ];
   let flags = Flags {
     model,
     cache,
@@ -60,9 +64,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     save_fn,
     crates_io_api,
   };
-  let fonts = vec![
-    Cow::Borrowed(ICON_FONT_BYTES)
-  ];
   let settings = Settings {
     id,
     window,
