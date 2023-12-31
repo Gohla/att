@@ -80,15 +80,15 @@ async fn refresh_crate(State(app): State<App>, Path(crate_id): Path<String>) -> 
   let krate = data.crate_data.refresh_one(crate_id, &app.crates_io_client).await.map_err(|_| F)?;
   Ok(Json(krate))
 }
-async fn refresh_outdated_crates(State(app): State<App>) -> Result<(), F> {
+async fn refresh_outdated_crates(State(app): State<App>) -> Result<Json<Vec<Crate>>, F> {
   let mut data = app.data.write().await;
-  data.crate_data.refresh_outdated(&app.crates_io_client).await.map_err(|_| F)?;
-  Ok(())
+  let crates = data.crate_data.refresh_outdated(&app.crates_io_client).await.map_err(|_| F)?;
+  Ok(Json(crates))
 }
-async fn refresh_all_crates(State(app): State<App>) -> Result<(), F> {
+async fn refresh_all_crates(State(app): State<App>) -> Result<Json<Vec<Crate>>, F> {
   let mut data = app.data.write().await;
-  data.crate_data.refresh_all(&app.crates_io_client).await.map_err(|_| F)?;
-  Ok(())
+  let crates = data.crate_data.refresh_all(&app.crates_io_client).await.map_err(|_| F)?;
+  Ok(Json(crates))
 }
 
 // Error "utility"

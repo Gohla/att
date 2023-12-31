@@ -18,6 +18,7 @@ pub struct ViewCrates {
   add_crate: AddCrate,
   adding_crate: bool,
   crates_being_refreshed: BTreeSet<String>,
+  all_crates_being_refreshed: bool,
   id_to_crate: HashMap<String, Crate>,
   client: Client,
 }
@@ -49,6 +50,7 @@ impl ViewCrates {
       add_crate: Default::default(),
       adding_crate: false,
       crates_being_refreshed: Default::default(),
+      all_crates_being_refreshed: false,
       id_to_crate: Default::default(),
       client,
     };
@@ -87,9 +89,11 @@ impl ViewCrates {
         return self.client.clone().refresh_crate(crate_id).perform(UpdateCrate).into();
       }
       RefreshOutdated => {
+        self.all_crates_being_refreshed = true;
         return self.client.clone().refresh_outdated_crates().perform(UpdateCrates).into();
       }
       RefreshAll => {
+        self.all_crates_being_refreshed = true;
         return self.client.clone().refresh_all_crates().perform(UpdateCrates).into();
       }
 
@@ -99,7 +103,10 @@ impl ViewCrates {
         self.crates_being_refreshed.remove(&id);
         self.id_to_crate.insert(id, krate);
       }
-      UpdateCrate(Err(cause)) => tracing::error!(?cause, "failed to update crate"),
+      UpdateCrate(Err(cause)) => {
+        tracing::error!(?cause, "failed to update crate");
+        // TODO: remove crate id from `crates_being_refreshed`
+      },
       UpdateCrates(Ok(crates)) => {
         for krate in crates {
           let id = krate.id.clone();
@@ -107,8 +114,12 @@ impl ViewCrates {
           self.crates_being_refreshed.remove(&id);
           self.id_to_crate.insert(id, krate);
         }
+        self.all_crates_being_refreshed = false;
       }
-      UpdateCrates(Err(cause)) => tracing::error!(?cause, "failed to update crates"),
+      UpdateCrates(Err(cause)) => {
+        tracing::error!(?cause, "failed to update crates");
+        self.all_crates_being_refreshed = false;
+      },
 
       RemoveCrate(id) => {
         self.crates_being_refreshed.remove(&id);
@@ -136,7 +147,7 @@ impl ViewCrates {
         4 => WidgetBuilder::once().button("Refresh")
           .padding([1.0, 5.0])
           .on_press(|| Message::RefreshCrate(id.clone()))
-          .disabled(self.crates_being_refreshed.contains(id))
+          .disabled(self.all_crates_being_refreshed || self.crates_being_refreshed.contains(id))
           .add(),
         5 => WidgetBuilder::once()
           .button("Remove")
@@ -163,8 +174,8 @@ impl ViewCrates {
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
       .button("Add Crate").on_press(|| Message::OpenAddCrateModal).add()
-      .button("Refresh Outdated").on_press(|| Message::RefreshOutdated).disabled(!self.crates_being_refreshed.is_empty()).add()
-      .button("Refresh All").on_press(|| Message::RefreshAll).disabled(!self.crates_being_refreshed.is_empty()).add()
+      .button("Refresh Outdated").on_press(|| Message::RefreshOutdated).disabled(self.all_crates_being_refreshed || !self.crates_being_refreshed.is_empty()).add()
+      .button("Refresh All").on_press(|| Message::RefreshAll).disabled(self.all_crates_being_refreshed || !self.crates_being_refreshed.is_empty()).add()
       .add_space_fill_width()
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)

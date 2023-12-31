@@ -81,10 +81,10 @@ impl CrateData {
     self.update(krate.clone(), Utc::now());
     Ok(krate)
   }
-  pub async fn refresh_outdated(&mut self, crates_io_client: &CratesIoClient) -> Result<(), Box<dyn Error>> {
+  pub async fn refresh_outdated(&mut self, crates_io_client: &CratesIoClient) -> Result<Vec<Crate>, Box<dyn Error>> {
     self.refresh_multiple(crates_io_client, Utc::now(), Self::should_refresh).await
   }
-  pub async fn refresh_all(&mut self, crates_io_client: &CratesIoClient) -> Result<(), Box<dyn Error>> {
+  pub async fn refresh_all(&mut self, crates_io_client: &CratesIoClient) -> Result<Vec<Crate>, Box<dyn Error>> {
     self.refresh_multiple(crates_io_client, Utc::now(), |_, _| true).await
   }
   async fn refresh_multiple(
@@ -92,7 +92,8 @@ impl CrateData {
     crates_io_client: &CratesIoClient,
     now: DateTime<Utc>,
     should_refresh: impl Fn(&DateTime<Utc>, &DateTime<Utc>) -> bool
-  ) -> Result<(), Box<dyn Error>> {
+  ) -> Result<Vec<Crate>, Box<dyn Error>> {
+    let mut refreshed = Vec::new();
     // Refresh outdated cached crate data.
     for (krate, last_refreshed) in self.id_to_crate.values_mut() {
       let id = &krate.id;
@@ -101,6 +102,7 @@ impl CrateData {
           let response = crates_io_client.clone().refresh(id.clone()).await??;
           *krate = response.crate_data.into();
           *last_refreshed = now;
+          refreshed.push(krate.clone());
         }
       }
     }
@@ -108,10 +110,12 @@ impl CrateData {
     for id in &self.followed_crate_ids {
       if !self.id_to_crate.contains_key(id) {
         let response = crates_io_client.clone().refresh(id.clone()).await??;
-        self.id_to_crate.insert(id.clone(), (response.crate_data.into(), now));
+        let krate: Crate = response.crate_data.into();
+        self.id_to_crate.insert(id.clone(), (krate.clone(), now));
+        refreshed.push(krate);
       }
     }
-    Ok(())
+    Ok(refreshed)
   }
 
   fn update(&mut self, krate: Crate, now: DateTime<Utc>) {
