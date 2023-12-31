@@ -1,4 +1,5 @@
 use reqwest::{Client as HttpClient, IntoUrl};
+use tracing::debug;
 use url::Url;
 
 use att_core::{Crate, Search};
@@ -20,6 +21,7 @@ impl Client {
 
   pub async fn search_crates(self, search: Search) -> Result<Vec<Crate>, ClientError> {
     let url = self.base_url.join("crates")?;
+    debug!(?search, %url, "sending search crates request");
     let request = self.http_client.get(url).json(&search).build()?;
     let response = self.http_client.execute(request).await?;
     let crates = response.json().await?;
@@ -27,21 +29,24 @@ impl Client {
   }
 
   pub async fn follow_crate(self, crate_id: String) -> Result<Crate, ClientError> {
-    let url = self.base_url.join("crates")?.join(&crate_id)?.join("follow")?;
+    let url = self.base_url.join(&format!("crates/{crate_id}/follow"))?;
+    debug!(crate_id, %url, "sending follow crate request");
     let request = self.http_client.post(url).build()?;
     let response = self.http_client.execute(request).await?;
     let krate = response.json().await?;
     Ok(krate)
   }
   pub async fn unfollow_crate(self, crate_id: String) -> Result<(), ClientError> {
-    let url = self.base_url.join("crates")?.join(&crate_id)?.join("follow")?;
+    let url = self.base_url.join(&format!("crates/{crate_id}/follow"))?;
+    debug!(crate_id, %url, "sending unfollow crate request");
     let request = self.http_client.delete(url).build()?;
     self.http_client.execute(request).await?;
     Ok(())
   }
 
   pub async fn refresh_crate(self, crate_id: String) -> Result<Crate, ClientError> {
-    let url = self.base_url.join("crates")?.join(&crate_id)?.join("refresh")?;
+    let url = self.base_url.join(&format!("crates/{crate_id}/refresh"))?;
+    debug!(crate_id, %url, "sending refresh crate request");
     let request = self.http_client.post(url).build()?;
     let response = self.http_client.execute(request).await?;
     let krate = response.json().await?;
@@ -49,6 +54,7 @@ impl Client {
   }
   pub async fn refresh_outdated_crates(self) -> Result<Vec<Crate>, ClientError> {
     let url = self.base_url.join("crates/refresh_outdated")?;
+    debug!(%url, "sending refresh outdated crates request");
     let request = self.http_client.post(url).build()?;
     let response = self.http_client.execute(request).await?;
     let crates: Vec<Crate> = response.json().await?;
@@ -56,6 +62,7 @@ impl Client {
   }
   pub async fn refresh_all_crates(self) -> Result<Vec<Crate>, ClientError> {
     let url = self.base_url.join("crates/refresh_all")?;
+    debug!(%url, "sending refresh all crates request");
     let request = self.http_client.post(url).build()?;
     let response = self.http_client.execute(request).await?;
     let crates: Vec<Crate> = response.json().await?;

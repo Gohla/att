@@ -19,6 +19,7 @@ edition = "2021"
 publish = false
 
 [workspace.dependencies]
+att_core = { path = "core" }
 tokio = "1"
 futures = "0.3"
 reqwest = "0.11"
