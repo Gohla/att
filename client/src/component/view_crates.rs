@@ -62,44 +62,45 @@ impl ViewCrates {
     _data: &mut Data,
     _cache: &mut Cache
   ) -> Update<(), Command<Message>> {
+    use Message::*;
     match message {
-      Message::ToAddCrate(message) => {
+      ToAddCrate(message) => {
         let (action, command) = self.add_crate.update(message, &self.client).into_action_command();
         if let Some(krate) = action {
           self.id_to_crate.insert(krate.id.clone(), krate);
           self.add_crate.clear_search_term();
           self.adding_crate = false;
         }
-        return command.map(Message::ToAddCrate).into();
+        return command.map(ToAddCrate).into();
       }
-      Message::OpenAddCrateModal => {
+      OpenAddCrateModal => {
         self.adding_crate = true;
         return self.add_crate.focus_search_term_input().into();
       }
-      Message::CloseAddCrateModal => {
+      CloseAddCrateModal => {
         self.add_crate.clear_search_term();
         self.adding_crate = false;
       }
 
-      Message::RefreshCrate(crate_id) => {
+      RefreshCrate(crate_id) => {
         self.crates_being_refreshed.insert(crate_id.clone());
-        return self.client.clone().refresh_crate(crate_id).perform(Message::UpdateCrate).into();
+        return self.client.clone().refresh_crate(crate_id).perform(UpdateCrate).into();
       }
-      Message::RefreshOutdated => {
-        return self.client.clone().refresh_outdated_crates().perform(Message::UpdateCrates).into();
+      RefreshOutdated => {
+        return self.client.clone().refresh_outdated_crates().perform(UpdateCrates).into();
       }
-      Message::RefreshAll => {
-        return self.client.clone().refresh_all_crates().perform(Message::UpdateCrates).into();
+      RefreshAll => {
+        return self.client.clone().refresh_all_crates().perform(UpdateCrates).into();
       }
 
-      Message::UpdateCrate(Ok(krate)) => {
+      UpdateCrate(Ok(krate)) => {
         let id = krate.id.clone();
         tracing::info!(id, "update crate");
         self.crates_being_refreshed.remove(&id);
         self.id_to_crate.insert(id, krate);
       }
-      Message::UpdateCrate(Err(cause)) => tracing::error!(?cause, "failed to update crate"),
-      Message::UpdateCrates(Ok(crates)) => {
+      UpdateCrate(Err(cause)) => tracing::error!(?cause, "failed to update crate"),
+      UpdateCrates(Ok(crates)) => {
         for krate in crates {
           let id = krate.id.clone();
           tracing::info!(id, "update crate");
@@ -107,14 +108,14 @@ impl ViewCrates {
           self.id_to_crate.insert(id, krate);
         }
       }
-      Message::UpdateCrates(Err(cause)) => tracing::error!(?cause, "failed to update crates"),
+      UpdateCrates(Err(cause)) => tracing::error!(?cause, "failed to update crates"),
 
-      Message::RemoveCrate(id) => {
+      RemoveCrate(id) => {
         self.crates_being_refreshed.remove(&id);
         self.id_to_crate.remove(&id);
       }
 
-      Message::Ignore => {}
+      Ignore => {}
     }
     Update::default()
   }
@@ -160,7 +161,7 @@ impl ViewCrates {
       .into_element();
 
     let content = WidgetBuilder::stack()
-      .text("Blessed Crates").size(20.0).add()
+      .text("Followed Crates").size(20.0).add()
       .button("Add Crate").on_press(|| Message::OpenAddCrateModal).add()
       .button("Refresh Outdated").on_press(|| Message::RefreshOutdated).disabled(!self.crates_being_refreshed.is_empty()).add()
       .button("Refresh All").on_press(|| Message::RefreshAll).disabled(!self.crates_being_refreshed.is_empty()).add()
