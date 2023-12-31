@@ -38,13 +38,12 @@ pub async fn run(app: App, shutdown_signal: impl Future<Output=()> + Send + 'sta
 
   use axum::routing::{get, post};
   let router = Router::new()
-    .route("/crate/blessed", get(crate_blessed))
-    .route("/crate/blessed/add/:id", post(crate_blessed_add))
-    .route("/crate/blessed/remove/:id", post(crate_blessed_remove))
-    .route("/crate/search", get(crate_search))
-    .route("/crate/refresh/outdated", post(crate_refresh_outdated))
-    .route("/crate/refresh/all", post(crate_refresh_all))
-    .route("/crate/refresh/one/:id", post(crate_refresh_one))
+    .route("/api/v1/crates", get(search_crates))
+    .route("/api/v1/crates/:crate_id", get(get_crate))
+    .route("/api/v1/crates/:crate_id/follow", post(follow_crate).delete(unfollow_crate))
+    .route("/api/v1/crates/:crate_id/refresh", post(refresh_crate))
+    .route("/api/v1/crates/refresh_outdated", post(refresh_outdated_crates))
+    .route("/api/v1/crates/refresh_all", post(refresh_all_crates))
     .with_state(app)
     ;
 
@@ -55,41 +54,41 @@ pub async fn run(app: App, shutdown_signal: impl Future<Output=()> + Send + 'sta
   Ok(())
 }
 
-async fn crate_blessed(State(app): State<App>) -> Json<Vec<Crate>> {
-  let data = app.data.read().await;
-  let blessed_crates = data.crate_data.get_blessed_crates();
-  Json(blessed_crates)
-}
-async fn crate_blessed_add(State(app): State<App>, Path(id): Path<String>) -> Result<Json<Crate>, F> {
+async fn search_crates(State(app): State<App>, Json(search): Json<Search>) -> Result<Json<Vec<Crate>>, F> {
   let mut data = app.data.write().await;
-  let krate = data.crate_data.add_blessed_crate(id, &app.crates_io_client).await.map_err(|_| F)?;
-  Ok(Json(krate))
-}
-async fn crate_blessed_remove(State(app): State<App>, Path(id): Path<String>) {
-  let mut data = app.data.write().await;
-  data.crate_data.remove_blessed_crate(id);
-}
-
-async fn crate_search(State(app): State<App>, Json(search): Json<Search>) -> Result<Json<Vec<Crate>>, F> {
-  let mut data = app.data.write().await;
-  let crates = data.crate_data.search(search, &app.crates_io_client).await.map_err(|_| F)?;
+  let crates = data.crate_data.search_crates(search, &app.crates_io_client).await.map_err(|_| F)?;
   Ok(Json(crates))
 }
+async fn get_crate(State(app): State<App>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
+  let mut data = app.data.write().await;
+  let krate = data.crate_data.get_crate(crate_id, &app.crates_io_client).await.map_err(|_| F)?;
+  Ok(Json(krate))
+}
 
-async fn crate_refresh_outdated(State(app): State<App>) -> Result<(), F> {
+async fn follow_crate(State(app): State<App>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
+  let mut data = app.data.write().await;
+  let krate = data.crate_data.follow_crate(crate_id, &app.crates_io_client).await.map_err(|_| F)?;
+  Ok(Json(krate))
+}
+async fn unfollow_crate(State(app): State<App>, Path(crate_id): Path<String>) {
+  let mut data = app.data.write().await;
+  data.crate_data.unfollow_crate(crate_id);
+}
+
+async fn refresh_crate(State(app): State<App>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
+  let mut data = app.data.write().await;
+  let krate = data.crate_data.refresh_one(crate_id, &app.crates_io_client).await.map_err(|_| F)?;
+  Ok(Json(krate))
+}
+async fn refresh_outdated_crates(State(app): State<App>) -> Result<(), F> {
   let mut data = app.data.write().await;
   data.crate_data.refresh_outdated(&app.crates_io_client).await.map_err(|_| F)?;
   Ok(())
 }
-async fn crate_refresh_all(State(app): State<App>) -> Result<(), F> {
+async fn refresh_all_crates(State(app): State<App>) -> Result<(), F> {
   let mut data = app.data.write().await;
   data.crate_data.refresh_all(&app.crates_io_client).await.map_err(|_| F)?;
   Ok(())
-}
-async fn crate_refresh_one(State(app): State<App>, Path(id): Path<String>) -> Result<Json<Crate>, F> {
-  let mut data = app.data.write().await;
-  let krate = data.crate_data.refresh_one(id, &app.crates_io_client).await.map_err(|_| F)?;
-  Ok(Json(krate))
 }
 
 // Error "utility"

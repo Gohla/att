@@ -9,7 +9,6 @@ pub mod constrained_row;
 pub mod modal;
 pub mod table;
 pub mod dark_light_toggle;
-pub mod maybe_send;
 
 /// Widget extensions
 pub trait WidgetExt<'a, M, R> {

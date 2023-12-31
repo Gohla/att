@@ -1,11 +1,13 @@
 use std::error::Error;
+use std::ops::Deref;
 use std::sync::Arc;
 
 use tokio::signal;
 use tokio::sync::RwLock;
 
+use att_core::start::{DirectoryKind, Start};
+
 use crate::app::{App, run};
-use crate::data::Data;
 use crate::krate::crates_io_client::CratesIoClient;
 
 mod app;
@@ -14,34 +16,23 @@ mod data;
 mod krate;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let subscriber = tracing_subscriber::fmt()
-    .finish();
-  if let Err(e) = tracing::subscriber::set_global_default(subscriber) {
-    eprintln!("Failed to set global tracing subscriber: {:?}", e);
-  }
+  let start = Start::new("Server");
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .enable_all()
     .build()?;
   let _runtime_guard = runtime.enter();
 
-  let project_dirs = directories::ProjectDirs::from("", "ATT", "Server");
-  let data = if let Some(project_dirs) = &project_dirs {
-    Data::deserialize_or_default(project_dirs)?
-  } else {
-    Data::default()
-  };
-
+  let data = start.deserialize_json_file(DirectoryKind::Data, "data.json")?.unwrap_or_default();
   let data = Arc::new(RwLock::new(data));
   let data_local = data.clone();
-  let crates_client = CratesIoClient::new("Gohla (https://github.com/Gohla)")?;
-  let app = App::new(data, crates_client);
 
+  let crates_io_client = CratesIoClient::new("Gohla (https://github.com/Gohla)")?;
+
+  let app = App::new(data, crates_io_client);
   runtime.block_on(run(app, shutdown_signal()))?;
 
-  if let Some(project_dirs) = &project_dirs {
-    data_local.blocking_read().serialize(&project_dirs)?;
-  }
+  start.serialize_json_file(DirectoryKind::Data, "data.json", data_local.blocking_read().deref())?;
 
   Ok(())
 }

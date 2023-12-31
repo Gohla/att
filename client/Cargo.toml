@@ -5,20 +5,15 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-att_core = { path = "../core" }
+att_core = { path = "../core", features = ["start", "serde", "start_serde_json"] }
 iced = { features = ["advanced", "lazy", "tokio"], git = "https://github.com/iced-rs/iced.git", rev = "dd249a1d11c68b8fee1828d58bae158946ee2ebd" }
 tokio = { workspace = true, features = ["time", "macros"] }
 reqwest = { workspace = true, features = ["json"] }
 url.workspace = true
-crates_io_api.workspace = true
-chrono = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true
 dark-light = "1"
-directories.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 iced = { features = ["advanced", "lazy", "tokio", "webgl"], git = "https://github.com/iced-rs/iced.git", rev = "dd249a1d11c68b8fee1828d58bae158946ee2ebd" }

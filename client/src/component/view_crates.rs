@@ -1,14 +1,14 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap};
 
-use chrono::{DateTime, Duration, Utc};
-use crates_io_api::CrateResponse;
 use iced::{Command, Element};
 
-use crate::app::{Cache, Model};
+use att_core::Crate;
+
+use crate::app::{Cache, Data};
 use crate::async_util::PerformFutureExt;
+use crate::client::{Client, ClientError};
 use crate::component::{add_crate, Update};
 use crate::component::add_crate::AddCrate;
-use crate::crates_client::CratesClient;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::modal::Modal;
 use crate::widget::table::Table;
@@ -18,7 +18,8 @@ pub struct ViewCrates {
   add_crate: AddCrate,
   adding_crate: bool,
   crates_being_refreshed: BTreeSet<String>,
-  crates_client: CratesClient,
+  id_to_crate: HashMap<String, Crate>,
+  client: Client,
 }
 
 #[derive(Default, Debug)]
@@ -32,7 +33,9 @@ pub enum Message {
   RefreshOutdated,
   RefreshAll,
 
-  SetCrateData(Result<CrateResponse, crates_io_api::Error>),
+  UpdateCrate(Result<Crate, ClientError>),
+  UpdateCrates(Result<Vec<Crate>, ClientError>),
+
   RemoveCrate(String),
 
   #[default]
@@ -40,31 +43,28 @@ pub enum Message {
 }
 
 impl ViewCrates {
-  pub fn new(crates_client: CratesClient, model: &Model, cache: &Cache) -> (Self, Command<Message>) {
-    let mut view_crates = Self {
+  pub fn new(client: Client) -> Self {
+    Self {
       add_crate: Default::default(),
       adding_crate: false,
       crates_being_refreshed: Default::default(),
-      crates_client,
-    };
-    let command = view_crates.refresh_outdated_cached_crate_data(model, cache);
-    (view_crates, command)
+      id_to_crate: Default::default(),
+      client,
+    }
   }
 
   #[tracing::instrument(skip_all)]
   pub fn update(
     &mut self,
     message: Message,
-    model: &mut Model,
-    cache: &mut Cache
+    _data: &mut Data,
+    _cache: &mut Cache
   ) -> Update<(), Command<Message>> {
     match message {
       Message::ToAddCrate(message) => {
-        let (action, command) = self.add_crate.update(message, &self.crates_client).unwrap();
+        let (action, command) = self.add_crate.update(message, &self.client).into_action_command();
         if let Some(krate) = action {
-          model.blessed_crate_ids.insert(krate.id.clone());
-          cache.crate_data.insert(krate.id.clone(), (krate, Utc::now()));
-
+          self.id_to_crate.insert(krate.id.clone(), krate);
           self.add_crate.clear_search_term();
           self.adding_crate = false;
         }
@@ -79,27 +79,37 @@ impl ViewCrates {
         self.adding_crate = false;
       }
 
-      Message::RefreshCrate(id) => {
-        self.crates_being_refreshed.insert(id.clone());
-        return self.crates_client.clone().refresh(id).perform(Message::SetCrateData).into();
+      Message::RefreshCrate(crate_id) => {
+        self.crates_being_refreshed.insert(crate_id.clone());
+        return self.client.clone().refresh_crate(crate_id).perform(Message::UpdateCrate).into();
       }
       Message::RefreshOutdated => {
-        return self.refresh_outdated_cached_crate_data(model, cache).into();
+        return self.client.clone().refresh_outdated_crates().perform(Message::UpdateCrates).into();
       }
       Message::RefreshAll => {
-        return self.refresh_all_cached_crate_data(model, cache).into();
+        return self.client.clone().refresh_all_crates().perform(Message::UpdateCrates).into();
       }
 
-      Message::SetCrateData(Ok(response)) => {
-        let id = response.crate_data.id.clone();
-        tracing::info!(id, "set crate data");
+      Message::UpdateCrate(Ok(krate)) => {
+        let id = krate.id.clone();
+        tracing::info!(id, "update crate");
         self.crates_being_refreshed.remove(&id);
-        cache.crate_data.insert(id, (response.crate_data, Utc::now()));
+        self.id_to_crate.insert(id, krate);
       }
-      Message::SetCrateData(Err(cause)) => tracing::error!(?cause, "failed to set crate data"),
+      Message::UpdateCrate(Err(cause)) => tracing::error!(?cause, "failed to update crate"),
+      Message::UpdateCrates(Ok(crates)) => {
+        for krate in crates {
+          let id = krate.id.clone();
+          tracing::info!(id, "update crate");
+          self.crates_being_refreshed.remove(&id);
+          self.id_to_crate.insert(id, krate);
+        }
+      }
+      Message::UpdateCrates(Err(cause)) => tracing::error!(?cause, "failed to update crates"),
+
       Message::RemoveCrate(id) => {
-        model.blessed_crate_ids.remove(&id);
-        cache.crate_data.remove(&id);
+        self.crates_being_refreshed.remove(&id);
+        self.id_to_crate.remove(&id);
       }
 
       Message::Ignore => {}
@@ -107,54 +117,17 @@ impl ViewCrates {
     Update::default()
   }
 
-  pub fn refresh_outdated_cached_crate_data(&mut self, model: &Model, cache: &Cache) -> Command<Message> {
-    let now = Utc::now();
-    self.refresh_cached_crate_data(
-      model,
-      cache,
-      |last_refresh| now.signed_duration_since(last_refresh) > Duration::hours(1)
-    )
-  }
-
-  pub fn refresh_all_cached_crate_data(&mut self, model: &Model, cache: &Cache) -> Command<Message> {
-    self.refresh_cached_crate_data(model, cache, |_| true)
-  }
-
-  pub fn refresh_cached_crate_data(&mut self, model: &Model, cache: &Cache, should_refresh: impl Fn(&DateTime<Utc>) -> bool) -> Command<Message> {
-    let mut commands = Vec::new();
-    // Refresh outdated cached crate data.
-    for (krate, last_refreshed) in cache.crate_data.values() {
-      let id = &krate.id;
-      if model.blessed_crate_ids.contains(id) {
-        if should_refresh(last_refreshed) {
-          commands.push(self.crates_client.clone().refresh(id.clone()).perform(Message::SetCrateData));
-          self.crates_being_refreshed.insert(id.clone());
-        }
-      }
-    }
-    // Refresh missing cached crate data.
-    for id in &model.blessed_crate_ids {
-      if !cache.crate_data.contains_key(id) {
-        commands.push(self.crates_client.clone().refresh(id.clone()).perform(Message::SetCrateData));
-        self.crates_being_refreshed.insert(id.clone());
-      }
-    }
-    Command::batch(commands)
-  }
-
-
   #[tracing::instrument(skip_all)]
-  pub fn view<'a>(&'a self, model: &'a Model, cache: &'a Cache) -> Element<'a, Message> {
+  pub fn view<'a>(&'a self, _data: &'a Data, _cache: &'a Cache) -> Element<'a, Message> {
     let cell_to_element = |row, col| -> Option<Element<'a, Message>> {
-      let Some(id) = model.blessed_crate_ids.iter().nth(row) else { return None; };
-      if let Some((data, _)) = cache.crate_data.get(id) {
-        match col {
-          1 => return Some(WidgetBuilder::once().add_text(&data.max_version)),
-          2 => return Some(WidgetBuilder::once().add_text(data.updated_at.format("%Y-%m-%d").to_string())),
-          3 => return Some(WidgetBuilder::once().add_text(format!("{}", data.downloads))),
-          _ => {}
-        }
+      let Some(krate) = self.id_to_crate.values().nth(row) else { return None; };
+      match col {
+        1 => return Some(WidgetBuilder::once().add_text(&krate.max_version)),
+        2 => return Some(WidgetBuilder::once().add_text(krate.updated_at.format("%Y-%m-%d").to_string())),
+        3 => return Some(WidgetBuilder::once().add_text(format!("{}", krate.downloads))),
+        _ => {}
       }
+      let id = &krate.id;
       let element = match col {
         0 => WidgetBuilder::once().add_text(id),
         4 => WidgetBuilder::once().button("Refresh")
@@ -175,7 +148,7 @@ impl ViewCrates {
     let table = Table::with_capacity(5, cell_to_element)
       .spacing(1.0)
       .body_row_height(24.0)
-      .body_row_count(model.blessed_crate_ids.len())
+      .body_row_count(self.id_to_crate.len())
       .push(2, "Name")
       .push(1, "Latest Version")
       .push(1, "Updated at")

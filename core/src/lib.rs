@@ -1,18 +1,25 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+#[cfg(feature = "start")]
+pub mod start;
+
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct Search {
-  pub search_term: String,
+  pub search_term: Option<String>,
+  pub followed: bool,
 }
 impl Search {
-  pub fn new(search_term: String) -> Self {
-    Self { search_term, ..Self::default() }
+  pub fn from_term(search_term: String) -> Self {
+    Self { search_term: Some(search_term), ..Self::default() }
+  }
+  pub fn followed() -> Self {
+    Self { followed: true, ..Self::default() }
   }
 }
 impl From<String> for Search {
   fn from(search_term: String) -> Self {
-    Self::new(search_term)
+    Self::from_term(search_term)
   }
 }
 
@@ -29,7 +36,7 @@ impl Crate {
   }
 }
 
-#[cfg(feature = "crates_io_api")]
+#[cfg(feature = "crates_io")]
 impl From<crates_io_api::Crate> for Crate {
   fn from(c: crates_io_api::Crate) -> Self {
     Self {
@@ -40,7 +47,7 @@ impl From<crates_io_api::Crate> for Crate {
     }
   }
 }
-#[cfg(feature = "crates_io_api")]
+#[cfg(feature = "crates_io")]
 impl From<&crates_io_api::Crate> for Crate {
   fn from(c: &crates_io_api::Crate) -> Self {
     Self {

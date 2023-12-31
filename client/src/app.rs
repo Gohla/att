@@ -1,38 +1,35 @@
-use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 
-use chrono::{DateTime, Utc};
-use crates_io_api::{AsyncClient, Crate};
 use iced::{Application, Command, Element, Event, event, executor, Renderer, Subscription, Theme, window};
 use serde::{Deserialize, Serialize};
 
+use att_core::Crate;
+
+use crate::client::Client;
 use crate::component::view_crates::{self, ViewCrates};
-use crate::crates_client::CratesClient;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
 
 #[derive(Default, Serialize, Deserialize)]
-pub struct Model {
-  pub blessed_crate_ids: BTreeSet<String>,
-}
+pub struct Data {}
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Cache {
-  pub crate_data: BTreeMap<String, (Crate, DateTime<Utc>)>
+  blessed_crates: Vec<Crate>,
 }
 
-pub type SaveFn = Box<dyn FnMut(&Model, &Cache) -> Result<(), Box<dyn Error>> + 'static>;
+pub type SaveFn = Box<dyn FnMut(&Data, &Cache) -> Result<(), Box<dyn Error>> + 'static>;
 
 pub struct Flags {
-  pub model: Option<Model>,
+  pub data: Option<Data>,
   pub cache: Option<Cache>,
-  pub dark_mode: bool,
   pub save_fn: SaveFn,
-  pub crates_io_api: AsyncClient,
+  pub client: Client,
+  pub dark_mode: bool,
 }
 
 pub struct App {
-  model: Model,
+  data: Data,
   cache: Cache,
   save_fn: SaveFn,
 
@@ -56,21 +53,21 @@ impl Application for App {
   type Flags = Flags;
 
   fn new(flags: Flags) -> (Self, Command<Message>) {
-    let model = flags.model.unwrap_or_default();
+    let data = flags.data.unwrap_or_default();
     let cache = flags.cache.unwrap_or_default();
-    let crates_client = CratesClient::new(flags.crates_io_api);
 
-    let (view_crates, view_crates_command) = ViewCrates::new(crates_client, &model, &cache);
-    let command = Command::batch([view_crates_command.map(Message::ToViewCrates)]);
+    let view_crates = ViewCrates::new(flags.client);
 
     let app = App {
-      model,
+      data,
       cache,
       save_fn: flags.save_fn,
 
       view_crates,
       dark_mode: flags.dark_mode,
     };
+
+    let command = Command::batch([]);
 
     (app, command)
   }
@@ -79,7 +76,7 @@ impl Application for App {
   fn update(&mut self, message: Message) -> Command<Self::Message> {
     match message {
       Message::ToViewCrates(message) => {
-        return self.view_crates.update(message, &mut self.model, &mut self.cache)
+        return self.view_crates.update(message, &mut self.data, &mut self.cache)
           .into_command()
           .map(|m| Message::ToViewCrates(m));
       }
@@ -89,7 +86,7 @@ impl Application for App {
       }
 
       Message::Exit(window_id) => {
-        let _ = (self.save_fn)(&self.model, &self.cache); // TODO: handle error
+        let _ = (self.save_fn)(&self.data, &self.cache); // TODO: handle error
         return window::close(window_id);
       }
     }
@@ -103,7 +100,7 @@ impl Application for App {
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)
-      .add_element(self.view_crates.view(&self.model, &self.cache).map(Message::ToViewCrates))
+      .add_element(self.view_crates.view(&self.data, &self.cache).map(Message::ToViewCrates))
       .column().spacing(10.0).padding(10).fill().add()
       .take();
 

@@ -5,15 +5,12 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-att_core = { path = "../core", features = ["crates_io_api"] }
+att_core = { path = "../core", features = ["start", "start_serde_json", "serde", "crates_io"] }
 axum = "0.7"
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "macros", "signal"] }
 futures.workspace = true
 crates_io_api.workspace = true
 chrono = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
-serde_json.workspace = true
-directories.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
-tracing-subscriber.workspace = true

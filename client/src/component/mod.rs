@@ -54,7 +54,7 @@ impl<A: Default, M> Update<A, Command<M>> {
 }
 
 impl<A, C> Update<A, C> {
-  pub fn unwrap(self) -> (A, C) { (self.action, self.command) }
+  pub fn into_action_command(self) -> (A, C) { (self.action, self.command) }
 
   pub fn action(&self) -> &A { &self.action }
   pub fn into_action(self) -> A { self.action }
