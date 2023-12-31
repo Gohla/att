@@ -2,7 +2,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use iced::{Command, Element};
 
-use att_core::Crate;
+use att_core::{Crate, Search};
 
 use crate::app::{Cache, Data};
 use crate::async_util::PerformFutureExt;
@@ -43,14 +43,16 @@ pub enum Message {
 }
 
 impl ViewCrates {
-  pub fn new(client: Client) -> Self {
-    Self {
+  pub fn new(client: Client) -> (Self, Command<Message>) {
+    let command = client.clone().search_crates(Search::followed()).perform(Message::UpdateCrates);
+    let view_crates = Self {
       add_crate: Default::default(),
       adding_crate: false,
       crates_being_refreshed: Default::default(),
       id_to_crate: Default::default(),
       client,
-    }
+    };
+    (view_crates, command)
   }
 
   #[tracing::instrument(skip_all)]

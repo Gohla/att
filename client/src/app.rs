@@ -56,7 +56,8 @@ impl Application for App {
     let data = flags.data.unwrap_or_default();
     let cache = flags.cache.unwrap_or_default();
 
-    let view_crates = ViewCrates::new(flags.client);
+    let (view_crates, view_crates_command) = ViewCrates::new(flags.client);
+    let view_crates_command = view_crates_command.map(Message::ToViewCrates);
 
     let app = App {
       data,
@@ -67,7 +68,7 @@ impl Application for App {
       dark_mode: flags.dark_mode,
     };
 
-    let command = Command::batch([]);
+    let command = Command::batch([view_crates_command]);
 
     (app, command)
   }
