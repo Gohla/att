@@ -6,13 +6,12 @@ use iced::{Application, Settings, window};
 use att_core::start::{DirectoryKind, Start};
 
 use crate::app::{App, Flags};
-use crate::client::Client;
+use crate::client::AttHttpClient;
 use crate::widget::ICON_FONT_BYTES;
 
 pub mod app;
 pub mod widget;
 pub mod component;
-pub mod async_util;
 pub mod client;
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -26,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   });
 
   let base_url = std::env::var("ATT_CLIENT_BASE_URL").expect("ATT_CLIENT_BASE_URL env variable is not set");
-  let client = Client::from_base_url(base_url)?;
+  let client = AttHttpClient::from_base_url(base_url)?;
 
   let dark_mode = match dark_light::detect() {
     dark_light::Mode::Dark => true,

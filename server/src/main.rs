@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 use att_core::start::{DirectoryKind, Start};
 
 use crate::app::{App, run};
-use crate::krate::crates_io_client::CratesIoClient;
+use crate::krate::Crates;
 
 mod app;
 mod async_util;
@@ -27,9 +27,9 @@ fn main() -> Result<(), Box<dyn Error>> {
   let data = Arc::new(RwLock::new(data));
   let data_local = data.clone();
 
-  let crates_io_client = CratesIoClient::new("Gohla (https://github.com/Gohla)")?;
+  let crates = Crates::new("Gohla (https://github.com/Gohla)")?;
 
-  let app = App::new(data, crates_io_client);
+  let app = App::new(data, crates);
   runtime.block_on(run(app, shutdown_signal()))?;
 
   start.serialize_json_file(DirectoryKind::Data, "data.json", data_local.blocking_read().deref())?;

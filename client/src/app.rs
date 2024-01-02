@@ -1,11 +1,13 @@
+use std::collections::HashMap;
 use std::error::Error;
 
 use iced::{Application, Command, Element, Event, event, executor, Renderer, Subscription, Theme, window};
 use serde::{Deserialize, Serialize};
+use tracing::error;
 
 use att_core::Crate;
 
-use crate::client::Client;
+use crate::client::AttHttpClient;
 use crate::component::view_crates::{self, ViewCrates};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
@@ -15,7 +17,7 @@ pub struct Data {}
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Cache {
-  blessed_crates: Vec<Crate>,
+  pub id_to_crate: HashMap<String, Crate>,
 }
 
 pub type SaveFn = Box<dyn FnMut(&Data, &Cache) -> Result<(), Box<dyn Error>> + 'static>;
@@ -24,7 +26,7 @@ pub struct Flags {
   pub data: Option<Data>,
   pub cache: Option<Cache>,
   pub save_fn: SaveFn,
-  pub client: Client,
+  pub client: AttHttpClient,
   pub dark_mode: bool,
 }
 
@@ -56,7 +58,7 @@ impl Application for App {
     let data = flags.data.unwrap_or_default();
     let cache = flags.cache.unwrap_or_default();
 
-    let (view_crates, view_crates_command) = ViewCrates::new(flags.client);
+    let (view_crates, view_crates_command) = ViewCrates::new(flags.client, &cache);
     let view_crates_command = view_crates_command.map(Message::ToViewCrates);
 
     let app = App {
@@ -77,7 +79,7 @@ impl Application for App {
   fn update(&mut self, message: Message) -> Command<Self::Message> {
     match message {
       Message::ToViewCrates(message) => {
-        return self.view_crates.update(message, &mut self.data, &mut self.cache)
+        return self.view_crates.update(message)
           .into_command()
           .map(|m| Message::ToViewCrates(m));
       }
@@ -87,7 +89,10 @@ impl Application for App {
       }
 
       Message::Exit(window_id) => {
-        let _ = (self.save_fn)(&self.data, &self.cache); // TODO: handle error
+        self.view_crates.cache(&mut self.cache);
+        if let Err(cause) = (self.save_fn)(&self.data, &self.cache) {
+          error!(?cause, "failed to save data and cache");
+        }
         return window::close(window_id);
       }
     }

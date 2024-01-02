@@ -12,22 +12,22 @@ use tokio::sync::RwLock;
 use att_core::{Crate, Search};
 
 use crate::data::Data;
-use crate::krate::crates_io_client::CratesIoClient;
+use crate::krate::Crates;
 
 #[derive(Clone)]
 pub struct App {
   data: Arc<RwLock<Data>>,
-  crates_io_client: CratesIoClient,
+  crates: Crates,
 }
 
 impl App {
   pub fn new(
     data: Arc<RwLock<Data>>,
-    crates_io_client: CratesIoClient,
+    crates: Crates,
   ) -> Self {
     Self {
       data,
-      crates_io_client,
+      crates,
     }
   }
 }
@@ -56,38 +56,38 @@ pub async fn run(app: App, shutdown_signal: impl Future<Output=()> + Send + 'sta
 
 async fn search_crates(State(app): State<App>, Json(search): Json<Search>) -> Result<Json<Vec<Crate>>, F> {
   let mut data = app.data.write().await;
-  let crates = data.crate_data.search_crates(search, &app.crates_io_client).await.map_err(|_| F)?;
+  let crates = app.crates.search(&mut data.crates, search).await.map_err(|_| F)?;
   Ok(Json(crates))
 }
 async fn get_crate(State(app): State<App>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
   let mut data = app.data.write().await;
-  let krate = data.crate_data.get_crate(crate_id, &app.crates_io_client).await.map_err(|_| F)?;
+  let krate = app.crates.get(&mut data.crates, &crate_id).await.map_err(|_| F)?;
   Ok(Json(krate))
 }
 
 async fn follow_crate(State(app): State<App>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
   let mut data = app.data.write().await;
-  let krate = data.crate_data.follow_crate(crate_id, &app.crates_io_client).await.map_err(|_| F)?;
+  let krate = app.crates.follow(&mut data.crates, &crate_id).await.map_err(|_| F)?;
   Ok(Json(krate))
 }
 async fn unfollow_crate(State(app): State<App>, Path(crate_id): Path<String>) {
   let mut data = app.data.write().await;
-  data.crate_data.unfollow_crate(crate_id);
+  app.crates.unfollow(&mut data.crates, crate_id);
 }
 
 async fn refresh_crate(State(app): State<App>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
   let mut data = app.data.write().await;
-  let krate = data.crate_data.refresh_one(crate_id, &app.crates_io_client).await.map_err(|_| F)?;
+  let krate = app.crates.refresh_one(&mut data.crates, crate_id).await.map_err(|_| F)?;
   Ok(Json(krate))
 }
 async fn refresh_outdated_crates(State(app): State<App>) -> Result<Json<Vec<Crate>>, F> {
   let mut data = app.data.write().await;
-  let crates = data.crate_data.refresh_outdated(&app.crates_io_client).await.map_err(|_| F)?;
+  let crates = app.crates.refresh_outdated(&mut data.crates).await.map_err(|_| F)?;
   Ok(Json(crates))
 }
 async fn refresh_all_crates(State(app): State<App>) -> Result<Json<Vec<Crate>>, F> {
   let mut data = app.data.write().await;
-  let crates = data.crate_data.refresh_all(&app.crates_io_client).await.map_err(|_| F)?;
+  let crates = app.crates.refresh_all(&mut data.crates).await.map_err(|_| F)?;
   Ok(Json(crates))
 }
 

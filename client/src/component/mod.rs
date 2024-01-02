@@ -2,9 +2,9 @@ use std::future::Future;
 
 use iced::Command;
 
-use crate::async_util::MaybeSend;
+use att_core::maybe_send::MaybeSend;
 
-pub mod add_crate;
+pub mod follow_crate;
 pub mod view_crates;
 
 /// Update received from components.
@@ -90,5 +90,24 @@ impl<A, M> Update<A, Command<M>> {
     MM: 'static
   {
     Update::new(self.action, self.command.map(f))
+  }
+}
+
+
+pub trait Perform<T, M> {
+  fn perform(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Command<M>;
+}
+impl<T, M, F: Future<Output=T> + MaybeSend + 'static> Perform<T, M> for F {
+  fn perform(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Command<M> {
+    Command::perform(self, f)
+  }
+}
+
+pub trait PerformResult<T, M> {
+  fn perform_or_default(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Command<M>;
+}
+impl<T, E, M: Default, F: Future<Output=Result<T, E>> + MaybeSend + 'static> PerformResult<T, M> for F {
+  fn perform_or_default(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Command<M> {
+    Command::perform(self, |r| r.map(f).unwrap_or_default())
   }
 }

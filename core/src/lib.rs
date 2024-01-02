@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "start")]
 pub mod start;
+pub mod maybe_send;
 
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct Search {

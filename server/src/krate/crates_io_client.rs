@@ -9,15 +9,27 @@ use futures::future::{BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
 use tokio::sync::{mpsc, oneshot};
 
-use crate::async_util::AsyncError;
-
 #[derive(Clone)]
 pub struct CratesIoClient {
   tx: mpsc::Sender<Request>
 }
 
-pub type SearchResponse = Result<CratesPage, crates_io_api::Error>;
-pub type RefreshResponse = Result<CrateResponse, crates_io_api::Error>;
+#[derive(Debug, thiserror::Error)]
+pub enum CratesIoClientError {
+  #[error("Failed to execute request: {0}")]
+  CratesIo(#[from] crates_io_api::Error),
+  #[error("Failed to send request; receiver was closed")]
+  Tx,
+  #[error("Failed to receive response; sender was closed")]
+  Rx,
+}
+impl<T> From<mpsc::error::SendError<T>> for CratesIoClientError {
+  fn from(_: mpsc::error::SendError<T>) -> Self { Self::Tx }
+}
+impl From<oneshot::error::RecvError> for CratesIoClientError {
+  fn from(_: oneshot::error::RecvError) -> Self { Self::Rx }
+}
+
 
 impl CratesIoClient {
   pub fn new(user_agent: &str) -> Result<Self, Box<dyn Error>> {
@@ -28,22 +40,25 @@ impl CratesIoClient {
     Ok(Self { tx })
   }
 
-  pub async fn search(self, search_term: String) -> Result<SearchResponse, AsyncError> {
-    Ok(self.send_receive(|tx| Request::Search(Search { search_term, tx })).await?)
+  pub async fn search(self, search_term: String) -> Result<CratesPage, CratesIoClientError> {
+    self.send_receive(|tx| Request::Search(Search { search_term, tx })).await
   }
-  pub async fn cancel_search(self) -> Result<(), AsyncError> {
+  pub async fn cancel_search(self) -> Result<(), CratesIoClientError> {
     self.send(Request::CancelSearch).await
   }
-  pub async fn refresh(self, id: String) -> Result<RefreshResponse, AsyncError> {
-    Ok(self.send_receive(|tx| Request::Refresh(Refresh { id, tx })).await?)
+
+  pub async fn refresh(self, crate_id: String) -> Result<CrateResponse, CratesIoClientError> {
+    self.send_receive(|tx| Request::Refresh(Refresh { crate_id, tx })).await
   }
 
-  async fn send_receive<T>(&self, make_request: impl FnOnce(oneshot::Sender<T>) -> Request) -> Result<T, AsyncError> {
+  async fn send_receive<T>(&self, make_request: impl FnOnce(oneshot::Sender<Result<T, crates_io_api::Error>>) -> Request) -> Result<T, CratesIoClientError> {
     let (tx, rx) = oneshot::channel();
-    self.tx.send(make_request(tx)).await?;
-    Ok(rx.await?)
+    let request = make_request(tx);
+    self.tx.send(request).await?;
+    let response = rx.await??;
+    Ok(response)
   }
-  async fn send(&self, request: Request) -> Result<(), AsyncError> {
+  async fn send(&self, request: Request) -> Result<(), CratesIoClientError> {
     self.tx.send(request).await?;
     Ok(())
   }
@@ -107,33 +122,35 @@ impl Task {
   }
 
   fn run_search(&mut self, search: Search) {
+    tracing::trace!(search_term = search.search_term, "starting crate search");
     self.search = search.run(self.client.clone()).boxed().fuse();
   }
   fn cancel_search(&mut self) {
-    tracing::info!("cancelling crate search");
+    tracing::trace!("cancelling crate search");
     self.search = Fuse::terminated();
   }
 
   fn queue_refresh(&mut self, refresh: Refresh) {
-    tracing::info!(id = refresh.id, "queueing crate refresh");
+    tracing::trace!(id = refresh.crate_id, "queueing crate refresh");
     self.queue.push_back(refresh);
   }
   fn try_run_queued_refresh(&mut self) {
     if self.search.is_terminated() && self.refresh.is_terminated() {
       if let Some(refresh) = self.queue.pop_front() {
-        tracing::info!(id = refresh.id, "dequeued crate refresh");
+        tracing::info!(id = refresh.crate_id, "dequeued crate refresh");
         self.run_refresh(refresh);
       }
     }
   }
   fn run_refresh(&mut self, refresh: Refresh) {
+    tracing::trace!(crate_id = refresh.crate_id, "starting crate refresh");
     self.refresh = refresh.run(self.client.clone()).boxed().fuse();
   }
 }
 
 struct Search {
   search_term: String,
-  tx: oneshot::Sender<SearchResponse>,
+  tx: oneshot::Sender<Result<CratesPage, crates_io_api::Error>>,
 }
 impl Search {
   async fn run(self, client: AsyncClient) {
@@ -148,13 +165,13 @@ impl Search {
 }
 
 struct Refresh {
-  id: String,
-  tx: oneshot::Sender<RefreshResponse>,
+  crate_id: String,
+  tx: oneshot::Sender<Result<CrateResponse, crates_io_api::Error>>,
 }
 impl Refresh {
   async fn run(self, client: AsyncClient) {
-    tracing::info!(id = self.id, "running crate refresh");
-    let response = client.get_crate(&self.id).await;
+    tracing::info!(crate_id = self.crate_id, "running crate refresh");
+    let response = client.get_crate(&self.crate_id).await;
     let _ = self.tx.send(response); // Ignore error ok: do nothing if receiver was dropped.
   }
 }

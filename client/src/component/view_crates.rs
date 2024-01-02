@@ -5,27 +5,28 @@ use iced::{Command, Element};
 use att_core::{Crate, Search};
 
 use crate::app::{Cache, Data};
-use crate::async_util::PerformFutureExt;
-use crate::client::{Client, ClientError};
-use crate::component::{add_crate, Update};
-use crate::component::add_crate::AddCrate;
+use crate::client::{AttHttpClient, AttHttpClientError};
+use crate::component::{follow_crate, Perform, Update};
+use crate::component::follow_crate::FollowCrate;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::modal::Modal;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
 
 pub struct ViewCrates {
-  add_crate: AddCrate,
-  adding_crate: bool,
+  follow_crate: FollowCrate,
+  follow_crate_overlay_open: bool,
+
   crates_being_refreshed: BTreeSet<String>,
   all_crates_being_refreshed: bool,
+
   id_to_crate: HashMap<String, Crate>,
-  client: Client,
+  client: AttHttpClient,
 }
 
 #[derive(Default, Debug)]
 pub enum Message {
-  ToAddCrate(add_crate::Message),
+  ToAddCrate(follow_crate::Message),
 
   OpenAddCrateModal,
   CloseAddCrateModal,
@@ -34,8 +35,8 @@ pub enum Message {
   RefreshOutdated,
   RefreshAll,
 
-  UpdateCrate(Result<Crate, ClientError>),
-  UpdateCrates(Result<Vec<Crate>, ClientError>),
+  UpdateCrate(Result<Crate, AttHttpClientError>),
+  UpdateCrates(Result<Vec<Crate>, AttHttpClientError>),
 
   RemoveCrate(String),
 
@@ -44,44 +45,39 @@ pub enum Message {
 }
 
 impl ViewCrates {
-  pub fn new(client: Client) -> (Self, Command<Message>) {
+  pub fn new(client: AttHttpClient, cache: &Cache) -> (Self, Command<Message>) {
     let command = client.clone().search_crates(Search::followed()).perform(Message::UpdateCrates);
     let view_crates = Self {
-      add_crate: Default::default(),
-      adding_crate: false,
+      follow_crate: Default::default(),
+      follow_crate_overlay_open: false,
       crates_being_refreshed: Default::default(),
       all_crates_being_refreshed: false,
-      id_to_crate: Default::default(),
+      id_to_crate: cache.id_to_crate.clone(),
       client,
     };
     (view_crates, command)
   }
 
   #[tracing::instrument(skip_all)]
-  pub fn update(
-    &mut self,
-    message: Message,
-    _data: &mut Data,
-    _cache: &mut Cache
-  ) -> Update<(), Command<Message>> {
+  pub fn update(&mut self, message: Message, ) -> Update<(), Command<Message>> {
     use Message::*;
     match message {
       ToAddCrate(message) => {
-        let (action, command) = self.add_crate.update(message, &self.client).into_action_command();
+        let (action, command) = self.follow_crate.update(message, &self.client).into_action_command();
         if let Some(krate) = action {
           self.id_to_crate.insert(krate.id.clone(), krate);
-          self.add_crate.clear_search_term();
-          self.adding_crate = false;
+          self.follow_crate.clear_search_term();
+          self.follow_crate_overlay_open = false;
         }
         return command.map(ToAddCrate).into();
       }
       OpenAddCrateModal => {
-        self.adding_crate = true;
-        return self.add_crate.focus_search_term_input().into();
+        self.follow_crate_overlay_open = true;
+        return self.follow_crate.focus_search_term_input().into();
       }
       CloseAddCrateModal => {
-        self.add_crate.clear_search_term();
-        self.adding_crate = false;
+        self.follow_crate.clear_search_term();
+        self.follow_crate_overlay_open = false;
       }
 
       RefreshCrate(crate_id) => {
@@ -173,7 +169,7 @@ impl ViewCrates {
 
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
-      .button("Add Crate").on_press(|| Message::OpenAddCrateModal).add()
+      .button("Add").positive_style().on_press(|| Message::OpenAddCrateModal).add()
       .button("Refresh Outdated").on_press(|| Message::RefreshOutdated).disabled(self.all_crates_being_refreshed || !self.crates_being_refreshed.is_empty()).add()
       .button("Refresh All").on_press(|| Message::RefreshAll).disabled(self.all_crates_being_refreshed || !self.crates_being_refreshed.is_empty()).add()
       .add_space_fill_width()
@@ -183,8 +179,8 @@ impl ViewCrates {
       .column().spacing(10.0).padding(10).fill().add()
       .take();
 
-    if self.adding_crate {
-      let overlay = self.add_crate
+    if self.follow_crate_overlay_open {
+      let overlay = self.follow_crate
         .view()
         .map(Message::ToAddCrate);
       let modal = Modal::with_container(overlay, content)
@@ -193,5 +189,9 @@ impl ViewCrates {
     } else {
       content.into()
     }
+  }
+
+  pub fn cache(&mut self, cache: &mut Cache) {
+    std::mem::swap(&mut self.id_to_crate, &mut cache.id_to_crate);
   }
 }

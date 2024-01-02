@@ -6,100 +6,113 @@ use serde::{Deserialize, Serialize};
 
 use att_core::{Crate, Search};
 
-use crate::krate::crates_io_client::CratesIoClient;
+use crate::krate::crates_io_client::{CratesIoClient, CratesIoClientError};
 
 pub mod crates_io_client;
 
-#[derive(Default, Serialize, Deserialize)]
-pub struct CrateData {
+#[derive(Default, Clone, Serialize, Deserialize, Debug)]
+pub struct CratesData {
   followed_crate_ids: BTreeSet<String>,
   #[serde(default)]
-  id_to_crate: BTreeMap<String, (Crate, DateTime<Utc>)>
+  id_to_crate: BTreeMap<String, (Crate, DateTime<Utc>)>,
 }
-impl CrateData {
-  pub async fn search_crates(&mut self, search: Search, crates_io_client: &CratesIoClient) -> Result<Vec<Crate>, Box<dyn Error>> {
+
+#[derive(Clone)]
+pub struct Crates {
+  crates_io_client: CratesIoClient,
+}
+impl Crates {
+  pub fn new(user_agent: &str) -> Result<Self, Box<dyn Error>> {
+    let crates_io_client = CratesIoClient::new(user_agent)?;
+    Ok(Self { crates_io_client })
+  }
+}
+
+impl Crates {
+  pub async fn search(&self, data: &mut CratesData, search: Search) -> Result<Vec<Crate>, CratesIoClientError> {
     let crates = match search {
       Search { followed: true, .. } => {
-        let mut crates = Vec::with_capacity(self.followed_crate_ids.len());
-        for crate_id in &self.followed_crate_ids {
-          if let Some((krate, _)) = self.id_to_crate.get(crate_id) {
+        let mut crates = Vec::with_capacity(data.followed_crate_ids.len());
+        for crate_id in &data.followed_crate_ids {
+          if let Some((krate, _)) = data.id_to_crate.get(crate_id) {
             crates.push(krate.clone());
-          } else {
-            // TODO: refresh?
-            crates.push(Crate::from_id(crate_id.clone()));
-          }
+          };
         }
         crates
       }
       Search { search_term: Some(search_term), .. } => {
-        let response = crates_io_client.clone().search(search_term).await??;
+        let response = self.crates_io_client.clone().search(search_term).await?;
         let now = Utc::now();
         for krate in &response.crates {
-          self.update(krate.into(), now);
+          let krate: Crate = krate.into();
+          data.id_to_crate.insert(krate.id.clone(), (krate, now));
         }
         let crates = response.crates.into_iter().map(|c| c.into()).collect();
         crates
       }
       _ => {
-        self.id_to_crate.values().map(|(krate, _)| krate.clone()).collect()
+        data.id_to_crate.values().map(|(krate, _)| krate.clone()).collect()
       }
     };
     Ok(crates)
   }
-  pub async fn get_crate(&mut self, crate_id: String, crates_io_client: &CratesIoClient) -> Result<Crate, Box<dyn Error>> {
-    let krate = if let Some((krate, _)) = self.id_to_crate.get(&crate_id) {
+  pub async fn get(&self, data: &mut CratesData, crate_id: &str) -> Result<Crate, CratesIoClientError> {
+    let krate = if let Some((krate, _)) = data.id_to_crate.get(crate_id) {
       krate.clone()
     } else {
-      self.refresh_one(crate_id.clone(), crates_io_client).await?
+      self.refresh_one(data, crate_id.to_string()).await?
     };
     Ok(krate)
   }
 
-  pub async fn follow_crate(&mut self, crate_id: String, crates_io_client: &CratesIoClient) -> Result<Crate, Box<dyn Error>> {
+  pub async fn follow(&self, data: &mut CratesData, crate_id: &str) -> Result<Crate, CratesIoClientError> {
     let now = Utc::now();
-    let krate = if let Some((krate, last_refreshed)) = self.id_to_crate.get_mut(&crate_id) {
+    let krate = if let Some((krate, last_refreshed)) = data.id_to_crate.get_mut(crate_id) {
       if Self::should_refresh(&now, last_refreshed) {
-        let response = crates_io_client.clone().refresh(crate_id.clone()).await??;
+        let response = self.crates_io_client.clone().refresh(crate_id.to_string()).await?;
         *krate = response.crate_data.into();
         *last_refreshed = now;
       }
       krate.clone()
     } else {
-      self.refresh_one(crate_id.clone(), crates_io_client).await?
+      self.refresh_one(data, crate_id.to_string()).await?
     };
-    self.followed_crate_ids.insert(crate_id);
+    data.followed_crate_ids.insert(crate_id.to_string());
     Ok(krate)
   }
-  pub fn unfollow_crate(&mut self, id: String) {
-    self.followed_crate_ids.remove(&id);
-    self.id_to_crate.remove(&id);
+  pub fn unfollow(&self, data: &mut CratesData, id: String) {
+    data.followed_crate_ids.remove(&id);
+    data.id_to_crate.remove(&id);
   }
 
-  pub async fn refresh_one(&mut self, crate_id: String, crates_io_client: &CratesIoClient) -> Result<Crate, Box<dyn Error>> {
-    let response = crates_io_client.clone().refresh(crate_id).await??;
+  pub async fn refresh_one(&self, data: &mut CratesData, crate_id: String) -> Result<Crate, CratesIoClientError> {
+    let response = self.crates_io_client.clone().refresh(crate_id).await?;
     let krate: Crate = response.crate_data.into();
-    self.update(krate.clone(), Utc::now());
+    let krate1 = krate.clone();
+    let now = Utc::now();
+    data.id_to_crate.insert(krate1.id.clone(), (krate1, now));
     Ok(krate)
   }
-  pub async fn refresh_outdated(&mut self, crates_io_client: &CratesIoClient) -> Result<Vec<Crate>, Box<dyn Error>> {
-    self.refresh_multiple(crates_io_client, Utc::now(), Self::should_refresh).await
+  pub async fn refresh_outdated(&self, data: &mut CratesData) -> Result<Vec<Crate>, CratesIoClientError> {
+    self.refresh_multiple(data, Utc::now(), Self::should_refresh).await
   }
-  pub async fn refresh_all(&mut self, crates_io_client: &CratesIoClient) -> Result<Vec<Crate>, Box<dyn Error>> {
-    self.refresh_multiple(crates_io_client, Utc::now(), |_, _| true).await
+  pub async fn refresh_all(&self, data: &mut CratesData) -> Result<Vec<Crate>, CratesIoClientError> {
+    self.refresh_multiple(data, Utc::now(), |_, _| true).await
   }
+
   async fn refresh_multiple(
-    &mut self,
-    crates_io_client: &CratesIoClient,
+    &self,
+    data: &mut CratesData,
     now: DateTime<Utc>,
     should_refresh: impl Fn(&DateTime<Utc>, &DateTime<Utc>) -> bool
-  ) -> Result<Vec<Crate>, Box<dyn Error>> {
+  ) -> Result<Vec<Crate>, CratesIoClientError> {
     let mut refreshed = Vec::new();
     // Refresh outdated cached crate data.
-    for (krate, last_refreshed) in self.id_to_crate.values_mut() {
-      let id = &krate.id;
-      if self.followed_crate_ids.contains(id) {
+    for (krate, last_refreshed) in data.id_to_crate.values_mut() {
+      let crate_id = &krate.id;
+      if data.followed_crate_ids.contains(crate_id) {
         if should_refresh(&now, last_refreshed) {
-          let response = crates_io_client.clone().refresh(id.clone()).await??;
+          let response = self.crates_io_client.clone().refresh(crate_id.clone()).await?;
           *krate = response.crate_data.into();
           *last_refreshed = now;
           refreshed.push(krate.clone());
@@ -107,19 +120,15 @@ impl CrateData {
       }
     }
     // Refresh missing cached crate data.
-    for id in &self.followed_crate_ids {
-      if !self.id_to_crate.contains_key(id) {
-        let response = crates_io_client.clone().refresh(id.clone()).await??;
+    for id in &data.followed_crate_ids {
+      if !data.id_to_crate.contains_key(id) {
+        let response = self.crates_io_client.clone().refresh(id.clone()).await?;
         let krate: Crate = response.crate_data.into();
-        self.id_to_crate.insert(id.clone(), (krate.clone(), now));
+        data.id_to_crate.insert(id.clone(), (krate.clone(), now));
         refreshed.push(krate);
       }
     }
     Ok(refreshed)
-  }
-
-  fn update(&mut self, krate: Crate, now: DateTime<Utc>) {
-    self.id_to_crate.insert(krate.id.clone(), (krate, now));
   }
   fn should_refresh(now: &DateTime<Utc>, last_refresh: &DateTime<Utc>) -> bool {
     now.signed_duration_since(last_refresh) > Duration::hours(1)
