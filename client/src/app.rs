@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 use std::error::Error;
 
 use iced::{Application, Command, Element, Event, event, executor, Renderer, Subscription, Theme, window};
@@ -17,7 +17,7 @@ pub struct Data {}
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Cache {
-  pub id_to_crate: HashMap<String, Crate>,
+  pub id_to_crate: BTreeMap<String, Crate>,
 }
 
 pub type SaveFn = Box<dyn FnMut(&Data, &Cache) -> Result<(), Box<dyn Error>> + 'static>;
@@ -106,7 +106,7 @@ impl Application for App {
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)
-      .add_element(self.view_crates.view(&self.data, &self.cache).map(Message::ToViewCrates))
+      .add_element(self.view_crates.view().map(Message::ToViewCrates))
       .column().spacing(10.0).padding(10).fill().add()
       .take();
 

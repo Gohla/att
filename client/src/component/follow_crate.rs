@@ -53,7 +53,7 @@ impl FollowCrate {
 }
 
 impl FollowCrate {
-  #[tracing::instrument(skip_all)]
+  #[tracing::instrument(skip(self, client))]
   pub fn update(&mut self, message: Message, client: &AttHttpClient) -> Update<Option<Crate>, Command<Message>> {
     use Message::*;
     match message {
@@ -88,14 +88,14 @@ impl FollowCrate {
     Update::default()
   }
 
-  #[tracing::instrument(skip_all)]
-  pub fn view<'a>(&'a self) -> Element<'a, Message> {
+  #[tracing::instrument(skip(self))]
+  pub fn view(&self) -> Element<Message> {
     let builder = WidgetBuilder::stack()
       .text_input("Crate search term", &self.search_term).id(self.search_id.clone()).on_input(Message::SetSearchTerm).add();
 
     let crates = match &self.crates {
       Ok(crates) => {
-        let cell_to_element = |row, col| -> Option<Element<'a, Message>> {
+        let cell_to_element = |row, col| -> Option<Element<Message>> {
           let Some(krate): Option<&Crate> = crates.get(row) else { return None; };
           let element = match col {
             0 => WidgetBuilder::once().add_text(&krate.id),

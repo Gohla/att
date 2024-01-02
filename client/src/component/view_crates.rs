@@ -1,10 +1,10 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet};
 
 use iced::{Command, Element};
 
 use att_core::{Crate, Search};
 
-use crate::app::{Cache, Data};
+use crate::app::Cache;
 use crate::client::{AttHttpClient, AttHttpClientError};
 use crate::component::{follow_crate, Perform, Update};
 use crate::component::follow_crate::FollowCrate;
@@ -20,7 +20,7 @@ pub struct ViewCrates {
   crates_being_refreshed: BTreeSet<String>,
   all_crates_being_refreshed: bool,
 
-  id_to_crate: HashMap<String, Crate>,
+  id_to_crate: BTreeMap<String, Crate>,
   client: AttHttpClient,
 }
 
@@ -35,8 +35,9 @@ pub enum Message {
   RefreshOutdated,
   RefreshAll,
 
-  UpdateCrate(Result<Crate, AttHttpClientError>),
+  UpdateCrate(String, Result<Crate, AttHttpClientError>),
   UpdateCrates(Result<Vec<Crate>, AttHttpClientError>),
+  SetCrates(Result<Vec<Crate>, AttHttpClientError>),
 
   RemoveCrate(String),
 
@@ -46,20 +47,20 @@ pub enum Message {
 
 impl ViewCrates {
   pub fn new(client: AttHttpClient, cache: &Cache) -> (Self, Command<Message>) {
-    let command = client.clone().search_crates(Search::followed()).perform(Message::UpdateCrates);
+    let command = client.clone().search_crates(Search::followed()).perform(Message::SetCrates);
     let view_crates = Self {
       follow_crate: Default::default(),
       follow_crate_overlay_open: false,
       crates_being_refreshed: Default::default(),
-      all_crates_being_refreshed: false,
+      all_crates_being_refreshed: true,
       id_to_crate: cache.id_to_crate.clone(),
       client,
     };
     (view_crates, command)
   }
 
-  #[tracing::instrument(skip_all)]
-  pub fn update(&mut self, message: Message, ) -> Update<(), Command<Message>> {
+  #[tracing::instrument(skip(self))]
+  pub fn update(&mut self, message: Message) -> Update<(), Command<Message>> {
     use Message::*;
     match message {
       ToAddCrate(message) => {
@@ -82,7 +83,8 @@ impl ViewCrates {
 
       RefreshCrate(crate_id) => {
         self.crates_being_refreshed.insert(crate_id.clone());
-        return self.client.clone().refresh_crate(crate_id).perform(UpdateCrate).into();
+        return self.client.clone().refresh_crate(crate_id.clone())
+          .perform(|r| UpdateCrate(crate_id, r)).into();
       }
       RefreshOutdated => {
         self.all_crates_being_refreshed = true;
@@ -90,32 +92,44 @@ impl ViewCrates {
       }
       RefreshAll => {
         self.all_crates_being_refreshed = true;
-        return self.client.clone().refresh_all_crates().perform(UpdateCrates).into();
+        return self.client.clone().refresh_all_crates().perform(SetCrates).into();
       }
 
-      UpdateCrate(Ok(krate)) => {
-        let id = krate.id.clone();
-        tracing::info!(id, "update crate");
-        self.crates_being_refreshed.remove(&id);
-        self.id_to_crate.insert(id, krate);
-      }
-      UpdateCrate(Err(cause)) => {
-        tracing::error!(?cause, "failed to update crate");
-        // TODO: remove crate id from `crates_being_refreshed`
-      },
-      UpdateCrates(Ok(crates)) => {
-        for krate in crates {
-          let id = krate.id.clone();
-          tracing::info!(id, "update crate");
-          self.crates_being_refreshed.remove(&id);
-          self.id_to_crate.insert(id, krate);
+      UpdateCrate(crate_id, result) => {
+        self.crates_being_refreshed.remove(&crate_id);
+        match result {
+          Ok(krate) => {
+            tracing::debug!(crate_id, "update crate");
+            self.id_to_crate.insert(crate_id, krate);
+          },
+          Err(cause) => tracing::error!(?cause, "failed to update crate"),
         }
-        self.all_crates_being_refreshed = false;
       }
-      UpdateCrates(Err(cause)) => {
-        tracing::error!(?cause, "failed to update crates");
+      UpdateCrates(result) => {
         self.all_crates_being_refreshed = false;
-      },
+        match result {
+          Ok(crates) => {
+            tracing::debug!(?crates, "update crates");
+            for krate in crates {
+              let crate_id = krate.id.clone();
+              tracing::trace!(crate_id, "update crate");
+              self.crates_being_refreshed.remove(&crate_id);
+              self.id_to_crate.insert(crate_id, krate);
+            }
+          }
+          Err(cause) => tracing::error!(?cause, "failed to update crates"),
+        }
+      }
+      SetCrates(result) => {
+        self.all_crates_being_refreshed = false;
+        match result {
+          Ok(crates) => {
+            tracing::debug!(?crates, "set crates");
+            self.id_to_crate = BTreeMap::from_iter(crates.into_iter().map(|c| (c.id.clone(), c)));
+          }
+          Err(cause) => tracing::error!(?cause, "failed to set crates"),
+        }
+      }
 
       RemoveCrate(id) => {
         self.crates_being_refreshed.remove(&id);
@@ -127,9 +141,9 @@ impl ViewCrates {
     Update::default()
   }
 
-  #[tracing::instrument(skip_all)]
-  pub fn view<'a>(&'a self, _data: &'a Data, _cache: &'a Cache) -> Element<'a, Message> {
-    let cell_to_element = |row, col| -> Option<Element<'a, Message>> {
+  #[tracing::instrument(skip(self))]
+  pub fn view(&self) -> Element<Message> {
+    let cell_to_element = |row, col| -> Option<Element<Message>> {
       let Some(krate) = self.id_to_crate.values().nth(row) else { return None; };
       match col {
         1 => return Some(WidgetBuilder::once().add_text(&krate.max_version)),
@@ -167,11 +181,12 @@ impl ViewCrates {
       .push(0.5, "")
       .into_element();
 
+    let disable_refresh = self.all_crates_being_refreshed || !self.crates_being_refreshed.is_empty();
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
       .button("Add").positive_style().on_press(|| Message::OpenAddCrateModal).add()
-      .button("Refresh Outdated").on_press(|| Message::RefreshOutdated).disabled(self.all_crates_being_refreshed || !self.crates_being_refreshed.is_empty()).add()
-      .button("Refresh All").on_press(|| Message::RefreshAll).disabled(self.all_crates_being_refreshed || !self.crates_being_refreshed.is_empty()).add()
+      .button("Refresh Outdated").on_press(|| Message::RefreshOutdated).disabled(disable_refresh).add()
+      .button("Refresh All").on_press(|| Message::RefreshAll).disabled(disable_refresh).add()
       .add_space_fill_width()
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)

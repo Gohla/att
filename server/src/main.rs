@@ -11,7 +11,6 @@ use crate::app::{App, run};
 use crate::krate::Crates;
 
 mod app;
-mod async_util;
 mod data;
 mod krate;
 
