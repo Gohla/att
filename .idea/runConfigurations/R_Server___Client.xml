@@ -1,0 +1,7 @@
+<component name="ProjectRunConfigurationManager">
+  <configuration default="false" name="R Server + Client" type="CompoundRunConfigurationType">
+    <toRun name="R client" type="CargoCommandRunConfiguration" />
+    <toRun name="R server" type="CargoCommandRunConfiguration" />
+    <method v="2" />
+  </configuration>
+</component>
