@@ -1,11 +1,18 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
+use std::str::FromStr;
+use std::sync::Arc;
 
+use apalis::cron::{CronStream, Schedule};
+use apalis::prelude::{Job, Monitor, TokioExecutor, WorkerBuilder, WorkerFactoryFn};
+use apalis::prelude::timer::TokioTimer;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use tokio::sync::RwLock;
 
 use att_core::{Crate, Search};
 
+use crate::data::Data;
 use crate::krate::crates_io_client::{CratesIoClient, CratesIoClientError};
 
 pub mod crates_io_client;
@@ -27,7 +34,6 @@ impl Crates {
     Ok(Self { crates_io_client })
   }
 }
-
 impl Crates {
   pub async fn search(&self, data: &mut CratesData, search: Search) -> Result<Vec<Crate>, CratesIoClientError> {
     let crates = match search {
@@ -131,6 +137,25 @@ impl Crates {
     Ok(refreshed)
   }
   fn should_refresh(now: &DateTime<Utc>, last_refresh: &DateTime<Utc>) -> bool {
-    now.signed_duration_since(last_refresh) > Duration::hours(1)
+    now.signed_duration_since(last_refresh) > Duration::minutes(59)
+  }
+}
+
+pub struct RefreshCrates;
+impl From<DateTime<Utc>> for RefreshCrates {
+  fn from(_: DateTime<Utc>) -> Self { Self }
+}
+impl Job for RefreshCrates {
+  const NAME: &'static str = "RefreshCrates";
+}
+impl RefreshCrates {
+  pub fn register_worker(monitor: Monitor<TokioExecutor>, crates: Crates, data: Arc<RwLock<Data>>) -> Monitor<TokioExecutor> {
+    let schedule = Schedule::from_str("0 0 * * * *").unwrap();
+    let worker = WorkerBuilder::new("crates-refresh-every-hour")
+      .stream(CronStream::new(schedule).timer(TokioTimer).to_stream())
+      .build_fn(move |_: RefreshCrates, _| async move {
+        let _ = crates.clone().refresh_outdated(&mut data.write().await.crates).await;
+      });
+    monitor.register(worker)
   }
 }

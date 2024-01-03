@@ -2,13 +2,14 @@ use std::error::Error;
 use std::ops::Deref;
 use std::sync::Arc;
 
+use apalis::prelude::Monitor;
 use tokio::signal;
 use tokio::sync::RwLock;
 
 use att_core::start::{DirectoryKind, Start};
 
 use crate::app::{App, run};
-use crate::krate::Crates;
+use crate::krate::{Crates, RefreshCrates};
 
 mod app;
 mod data;
@@ -27,6 +28,10 @@ fn main() -> Result<(), Box<dyn Error>> {
   let data_local = data.clone();
 
   let crates = Crates::new("Gohla (https://github.com/Gohla)")?;
+
+  let monitor = Monitor::new();
+  let monitor = RefreshCrates::register_worker(monitor, crates.clone(), data.clone());
+  runtime.spawn(monitor.run_with_signal(shutdown_signal_result()));
 
   let app = App::new(data, crates);
   runtime.block_on(run(app, shutdown_signal()))?;
@@ -61,4 +66,9 @@ async fn shutdown_signal() {
     _ = ctrl_c => {},
     _ = terminate => {},
   }
+}
+
+async fn shutdown_signal_result() -> Result<(), std::io::Error> {
+  shutdown_signal().await;
+  Ok(())
 }
