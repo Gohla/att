@@ -4,15 +4,18 @@ use std::sync::Arc;
 
 use tokio::signal;
 use tokio::sync::RwLock;
+use tokio::time::{Duration, interval};
 
 use att_core::start::{DirectoryKind, Start};
 
 use crate::app::{App, run};
-use crate::krate::Crates;
+use crate::job_scheduler::JobScheduler;
+use crate::krate::{Crates, RefreshJob};
 
 mod app;
 mod data;
 mod krate;
+mod job_scheduler;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let start = Start::new("Server");
@@ -24,14 +27,16 @@ fn main() -> Result<(), Box<dyn Error>> {
 
   let data = start.deserialize_json_file(DirectoryKind::Data, "data.json")?.unwrap_or_default();
   let data = Arc::new(RwLock::new(data));
-  let data_local = data.clone();
 
   let crates = Crates::new("Gohla (https://github.com/Gohla)")?;
 
-  let app = App::new(data, crates);
+  let job_scheduler = JobScheduler::new();
+  job_scheduler.schedule(interval(Duration::from_secs(60 * 60)), RefreshJob::new(crates.clone(), data.clone()));
+
+  let app = App::new(data.clone(), crates);
   runtime.block_on(run(app, shutdown_signal()))?;
 
-  start.serialize_json_file(DirectoryKind::Data, "data.json", data_local.blocking_read().deref())?;
+  start.serialize_json_file(DirectoryKind::Data, "data.json", data.blocking_read().deref())?;
 
   Ok(())
 }
