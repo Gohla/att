@@ -1,4 +1,3 @@
-use std::error::Error;
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{self, BufWriter};
 use std::path::Path;
@@ -10,18 +9,17 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 pub struct Start {
-  pub project_directories: Option<ProjectDirs>,
-  pub file_log_flush_guard: Option<WorkerGuard>,
+  project_directories: Option<ProjectDirs>,
 }
 impl Start {
-  pub fn new(application: &str) -> Self {
+  pub fn new(application: &str) -> (Self, Option<WorkerGuard>) {
     #[cfg(target_arch = "wasm32")] {
       std::panic::set_hook(Box::new(console_error_panic_hook::hook));
     }
 
     let _ = dotenvy::dotenv(); // Ignore error ok: .env file is not required.
 
-    let project_dirs = ProjectDirs::from("", "ATT", application);
+    let project_directories = ProjectDirs::from("", "ATT", application);
 
     let main_filter_layer = EnvFilter::from_env("MAIN_LOG");
     let layered = tracing_subscriber::registry();
@@ -32,8 +30,8 @@ impl Start {
           .with_writer(io::stderr)
           .with_filter(main_filter_layer)
       );
-      let guard = if let Some(project_dirs) = &project_dirs {
-        let log_dir = project_dirs.data_local_dir();
+      let guard = if let Some(project_directories) = &project_directories {
+        let log_dir = project_directories.data_local_dir();
         let log_file_path = log_dir.join("log.txt");
         create_dir_all(log_dir).unwrap();
         let log_file = File::create(log_file_path).unwrap();
@@ -60,7 +58,7 @@ impl Start {
         .init();
     }
 
-    Self { project_directories: project_dirs, file_log_flush_guard }
+    (Self { project_directories }, file_log_flush_guard)
   }
 }
 
@@ -70,6 +68,10 @@ pub enum DirectoryKind {
   Cache,
 }
 impl Start {
+  pub fn project_directories(&self) -> Option<&ProjectDirs> {
+    self.project_directories.as_ref()
+  }
+
   pub fn directory(&self, kind: DirectoryKind) -> Option<&Path> {
     if let Some(project_directories) = &self.project_directories {
       let path = match kind {
@@ -100,7 +102,7 @@ impl Start {
     &self,
     directory_kind: DirectoryKind,
     file_name: impl AsRef<Path>
-  ) -> Result<Option<T>, Box<dyn Error>> {
+  ) -> Result<Option<T>, io::Error> {
     let directory_path = self.directory(directory_kind);
     let file_path = directory_path.map(|p| p.join(file_name));
 
@@ -121,7 +123,7 @@ impl Start {
     directory_kind: DirectoryKind,
     file_name: impl AsRef<Path>,
     value: &T
-  ) -> Result<(), Box<dyn Error>> {
+  ) -> Result<(), io::Error> {
     let directory_path = self.directory(directory_kind);
     Self::create_directory_all_opt(directory_path)?;
     let file_path = directory_path.map(|p| p.join(file_name));

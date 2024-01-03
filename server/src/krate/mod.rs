@@ -8,7 +8,7 @@ use tokio::sync::RwLock;
 
 use att_core::{Crate, Search};
 
-use crate::data::Data;
+use crate::Data;
 use crate::job_scheduler::{Job, JobOutput};
 use crate::krate::crates_io_client::{CratesIoClient, CratesIoClientError};
 

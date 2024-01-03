@@ -15,7 +15,7 @@ pub mod component;
 pub mod client;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let start = Start::new("Client");
+  let (start, _file_log_flush_guard) = Start::new("Client");
   let data = start.deserialize_json_file(DirectoryKind::Data, "data.json")?;
   let cache = start.deserialize_json_file(DirectoryKind::Cache, "cache.json")?;
   let save_fn = Box::new(move |data: &_, cache: &_| {
