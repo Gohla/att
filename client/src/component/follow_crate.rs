@@ -53,7 +53,7 @@ impl FollowCrate {
 }
 
 impl FollowCrate {
-  #[tracing::instrument(skip(self, client))]
+  #[tracing::instrument(skip_all)]
   pub fn update(&mut self, message: Message, client: &AttHttpClient) -> Update<Option<Crate>, Command<Message>> {
     use Message::*;
     match message {

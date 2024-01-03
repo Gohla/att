@@ -1,6 +1,7 @@
 use std::fs::{create_dir_all, File, OpenOptions};
 use std::io::{self, BufWriter};
 use std::path::Path;
+use std::sync::Arc;
 
 use directories::ProjectDirs;
 use tracing_appender::non_blocking::WorkerGuard;
@@ -8,8 +9,9 @@ use tracing_subscriber::{EnvFilter, Layer};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
+#[derive(Default, Clone, Debug)]
 pub struct Start {
-  project_directories: Option<ProjectDirs>,
+  project_directories: Option<Arc<ProjectDirs>>,
 }
 impl Start {
   pub fn new(application: &str) -> (Self, Option<WorkerGuard>) {
@@ -58,6 +60,7 @@ impl Start {
         .init();
     }
 
+    let project_directories = project_directories.map(|pd| Arc::new(pd));
     (Self { project_directories }, file_log_flush_guard)
   }
 }
@@ -69,7 +72,7 @@ pub enum DirectoryKind {
 }
 impl Start {
   pub fn project_directories(&self) -> Option<&ProjectDirs> {
-    self.project_directories.as_ref()
+    self.project_directories.as_deref()
   }
 
   pub fn directory(&self, kind: DirectoryKind) -> Option<&Path> {

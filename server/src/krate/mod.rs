@@ -1,14 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
-use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
 
 use att_core::{Crate, Search};
 
-use crate::Data;
+use crate::data::Database;
 use crate::job_scheduler::{Job, JobOutput};
 use crate::krate::crates_io_client::{CratesIoClient, CratesIoClientError};
 
@@ -141,17 +139,17 @@ impl Crates {
 
 pub struct RefreshJob {
   crates: Crates,
-  data: Arc<RwLock<Data>>,
+  database: Database,
 }
 impl RefreshJob {
-  pub fn new(crates: Crates, data: Arc<RwLock<Data>>) -> Self {
-    Self { crates, data }
+  pub fn new(crates: Crates, database: Database) -> Self {
+    Self { crates, database }
   }
 }
 impl Job for RefreshJob {
   async fn run(&self) -> JobOutput {
     tracing::info!("running crate refresh job");
-    self.crates.refresh_outdated(&mut self.data.write().await.crates).await?;
+    self.crates.refresh_outdated(&mut self.database.write().await.crates).await?;
     Ok(())
   }
 }

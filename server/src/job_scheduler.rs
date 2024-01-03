@@ -22,10 +22,10 @@ impl JobScheduler {
     Self { tx }
   }
 
-  pub fn schedule(&self, interval: Interval, job: impl Job) {
+  pub fn blocking_schedule(&self, interval: Interval, job: impl Job) {
     let _ = self.tx.blocking_send(Request::Schedule(interval, Box::new(job)));
   }
-  pub async fn schedule_async(self, interval: Interval, job: impl Job) {
+  pub async fn schedule(self, interval: Interval, job: impl Job) {
     let _ = self.tx.send(Request::Schedule(interval, Box::new(job))).await;
   }
 }

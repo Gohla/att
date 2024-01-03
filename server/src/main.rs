@@ -1,49 +1,40 @@
 use std::error::Error;
-use std::ops::Deref;
-use std::sync::Arc;
 
-use serde::{Deserialize, Serialize};
 use tokio::signal;
-use tokio::sync::RwLock;
 use tokio::time::{Duration, interval};
 
-use att_core::start::{DirectoryKind, Start};
+use att_core::start::Start;
 
-use crate::job_scheduler::{Job, JobOutput, JobScheduler};
-use crate::krate::{Crates, CratesData, RefreshJob};
+use crate::data::{Database, SerializeDataJob};
+use crate::job_scheduler::JobScheduler;
+use crate::krate::{Crates, RefreshJob};
 use crate::server::Server;
 
 mod server;
 mod krate;
 mod job_scheduler;
-
-#[derive(Default, Serialize, Deserialize)]
-pub struct Data {
-  pub crates: CratesData,
-}
+mod data;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let (start, _file_log_flush_guard) = Start::new("Server");
-  let start = Arc::new(start);
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .enable_all()
     .build()?;
   let _runtime_guard = runtime.enter();
 
-  let data = start.deserialize_json_file(DirectoryKind::Data, "data.json")?.unwrap_or_default();
-  let data = Arc::new(RwLock::new(data));
+  let database = Database::blocking_deserialize(&start)?;
 
   let crates = Crates::new("Gohla (https://github.com/Gohla)")?;
 
   let job_scheduler = JobScheduler::new();
-  job_scheduler.schedule(interval(Duration::from_secs(60 * 60)), RefreshJob::new(crates.clone(), data.clone()));
-  job_scheduler.schedule(interval(Duration::from_secs(60 * 5)), SerializeDataJob::new(start.clone(), data.clone()));
+  job_scheduler.blocking_schedule(interval(Duration::from_secs(60 * 60)), RefreshJob::new(crates.clone(), database.clone()));
+  job_scheduler.blocking_schedule(interval(Duration::from_secs(60 * 5)), SerializeDataJob::new(start.clone(), database.clone()));
 
-  let server = Server::new(data.clone(), crates.clone());
+  let server = Server::new(database.clone(), crates.clone());
   runtime.block_on(server.run(shutdown_signal()))?;
 
-  start.serialize_json_file(DirectoryKind::Data, "data.json", data.blocking_read().deref())?;
+  database.blocking_serialize(&start)?;
 
   Ok(())
 }
@@ -72,22 +63,5 @@ async fn shutdown_signal() {
   tokio::select! {
     _ = ctrl_c => {},
     _ = terminate => {},
-  }
-}
-
-pub struct SerializeDataJob {
-  start: Arc<Start>,
-  data: Arc<RwLock<Data>>,
-}
-impl SerializeDataJob {
-  pub fn new(start: Arc<Start>, data: Arc<RwLock<Data>>) -> Self {
-    Self { start, data }
-  }
-}
-impl Job for SerializeDataJob {
-  async fn run(&self) -> JobOutput {
-    tracing::info!("running serialize data job");
-    self.start.serialize_json_file(DirectoryKind::Data, "data.json", self.data.read().await.deref())?;
-    Ok(())
   }
 }

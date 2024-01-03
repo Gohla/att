@@ -59,7 +59,7 @@ impl ViewCrates {
     (view_crates, command)
   }
 
-  #[tracing::instrument(skip(self))]
+  #[tracing::instrument(skip_all)]
   pub fn update(&mut self, message: Message) -> Update<(), Command<Message>> {
     use Message::*;
     match message {
