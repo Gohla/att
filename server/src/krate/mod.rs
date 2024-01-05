@@ -1,5 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
+use std::future::Future;
 
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -7,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use att_core::{Crate, Search};
 
 use crate::data::Database;
-use crate::job_scheduler::{Job, JobOutput};
+use crate::job_scheduler::{Job, JobAction, JobResult};
 use crate::krate::crates_io_client::{CratesIoClient, CratesIoClientError};
 
 pub mod crates_io_client;
@@ -24,9 +25,9 @@ pub struct Crates {
   crates_io_client: CratesIoClient,
 }
 impl Crates {
-  pub fn new(user_agent: &str) -> Result<Self, Box<dyn Error>> {
-    let crates_io_client = CratesIoClient::new(user_agent)?;
-    Ok(Self { crates_io_client })
+  pub fn new(user_agent: &str) -> Result<(Self, impl Future<Output=()>), Box<dyn Error>> {
+    let (crates_io_client, task) = CratesIoClient::new(user_agent)?;
+    Ok((Self { crates_io_client }, task))
   }
 }
 
@@ -43,7 +44,7 @@ impl Crates {
         crates
       }
       Search { search_term: Some(search_term), .. } => {
-        let response = self.crates_io_client.clone().search(search_term).await?;
+        let response = self.crates_io_client.search(search_term).await?;
         let now = Utc::now();
         for krate in &response.crates {
           let krate: Crate = krate.into();
@@ -71,7 +72,7 @@ impl Crates {
     let now = Utc::now();
     let krate = if let Some((krate, last_refreshed)) = data.id_to_crate.get_mut(crate_id) {
       if Self::should_refresh(&now, last_refreshed) {
-        let response = self.crates_io_client.clone().refresh(crate_id.to_string()).await?;
+        let response = self.crates_io_client.refresh(crate_id.to_string()).await?;
         *krate = response.crate_data.into();
         *last_refreshed = now;
       }
@@ -88,11 +89,10 @@ impl Crates {
   }
 
   pub async fn refresh_one(&self, data: &mut CratesData, crate_id: String) -> Result<Crate, CratesIoClientError> {
-    let response = self.crates_io_client.clone().refresh(crate_id).await?;
+    let response = self.crates_io_client.refresh(crate_id).await?;
     let krate: Crate = response.crate_data.into();
-    let krate1 = krate.clone();
     let now = Utc::now();
-    data.id_to_crate.insert(krate1.id.clone(), (krate1, now));
+    data.id_to_crate.insert(krate.id.clone(), (krate.clone(), now));
     Ok(krate)
   }
   pub async fn refresh_outdated(&self, data: &mut CratesData) -> Result<Vec<Crate>, CratesIoClientError> {
@@ -114,7 +114,7 @@ impl Crates {
       let crate_id = &krate.id;
       if data.followed_crate_ids.contains(crate_id) {
         if should_refresh(&now, last_refreshed) {
-          let response = self.crates_io_client.clone().refresh(crate_id.clone()).await?;
+          let response = self.crates_io_client.refresh(crate_id.clone()).await?;
           *krate = response.crate_data.into();
           *last_refreshed = now;
           refreshed.push(krate.clone());
@@ -122,11 +122,11 @@ impl Crates {
       }
     }
     // Refresh missing cached crate data.
-    for id in &data.followed_crate_ids {
-      if !data.id_to_crate.contains_key(id) {
-        let response = self.crates_io_client.clone().refresh(id.clone()).await?;
+    for crate_id in &data.followed_crate_ids {
+      if !data.id_to_crate.contains_key(crate_id) {
+        let response = self.crates_io_client.refresh(crate_id.clone()).await?;
         let krate: Crate = response.crate_data.into();
-        data.id_to_crate.insert(id.clone(), (krate.clone(), now));
+        data.id_to_crate.insert(crate_id.clone(), (krate.clone(), now));
         refreshed.push(krate);
       }
     }
@@ -147,9 +147,8 @@ impl RefreshJob {
   }
 }
 impl Job for RefreshJob {
-  async fn run(&self) -> JobOutput {
-    tracing::info!("running crate refresh job");
+  async fn run(&self) -> JobResult {
     self.crates.refresh_outdated(&mut self.database.write().await.crates).await?;
-    Ok(())
+    Ok(JobAction::Continue)
   }
 }

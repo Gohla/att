@@ -23,7 +23,7 @@ impl Start {
 
     let project_directories = ProjectDirs::from("", "ATT", application);
 
-    let main_filter_layer = EnvFilter::from_env("MAIN_LOG");
+    let main_filter_layer = EnvFilter::from_env("STDERR_LOG");
     let layered = tracing_subscriber::registry();
 
     #[cfg(not(target_arch = "wasm32"))] let file_log_flush_guard = {

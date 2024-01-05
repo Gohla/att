@@ -8,7 +8,7 @@ use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use att_core::start::{DirectoryKind, Start};
 
-use crate::job_scheduler::{Job, JobOutput};
+use crate::job_scheduler::{BlockingJob, JobAction, JobResult};
 use crate::krate::CratesData;
 
 #[derive(Default, Clone, Debug)]
@@ -57,19 +57,18 @@ impl Data {
   }
 }
 
-pub struct SerializeDataJob {
+pub struct StoreDatabaseJob {
   start: Start,
   database: Database,
 }
-impl SerializeDataJob {
+impl StoreDatabaseJob {
   pub fn new(start: Start, database: Database) -> Self {
     Self { start, database }
   }
 }
-impl Job for SerializeDataJob {
-  async fn run(&self) -> JobOutput {
-    tracing::info!("running serialize data job");
-    self.database.serialize(&self.start).await?;
-    Ok(())
+impl BlockingJob for StoreDatabaseJob {
+  fn run(&self) -> JobResult {
+    self.database.blocking_serialize(&self.start)?;
+    Ok(JobAction::Continue)
   }
 }
