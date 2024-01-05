@@ -16,6 +16,7 @@ mod server;
 mod krate;
 mod job_scheduler;
 mod data;
+mod auth;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let (start, _file_log_flush_guard) = Start::new("Server");

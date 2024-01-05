@@ -6,8 +6,12 @@ use axum::{Json, Router};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
+use axum_login::AuthManagerLayerBuilder;
+use tower_sessions::{Expiry, MemoryStore, SessionManagerLayer};
+use tower_sessions::cookie::time::Duration;
 
 use att_core::{Crate, Search};
+use crate::auth::Authenticator;
 
 use crate::data::Database;
 use crate::krate::Crates;
@@ -24,8 +28,14 @@ impl Server {
   }
 
   pub async fn run(self, shutdown_signal: impl Future<Output=()> + Send + 'static) -> Result<(), Box<dyn Error>> {
-    let addr = SocketAddr::from(([127, 0, 0, 1], 1337));
-    let listener = tokio::net::TcpListener::bind(addr).await?;
+    let session_store = MemoryStore::default();
+    let session_layer = SessionManagerLayer::new(session_store)
+      .with_expiry(Expiry::OnInactivity(Duration::days(30)))
+      ;
+
+    let authenticator = Authenticator::new(self.database.clone());
+    let auth_layer = AuthManagerLayerBuilder::new(authenticator, session_layer.clone())
+      .build();
 
     use axum::routing::{get, post};
     let router = Router::new()
@@ -36,8 +46,12 @@ impl Server {
       .route("/api/v1/crates/refresh_outdated", post(refresh_outdated_crates))
       .route("/api/v1/crates/refresh_all", post(refresh_all_crates))
       .with_state(self)
+      .layer(session_layer)
+      .layer(auth_layer)
       ;
 
+    let addr = SocketAddr::from(([127, 0, 0, 1], 1337));
+    let listener = tokio::net::TcpListener::bind(addr).await?;
     axum::serve(listener, router)
       .with_graceful_shutdown(shutdown_signal)
       .await?;

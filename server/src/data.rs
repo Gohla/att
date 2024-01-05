@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use att_core::start::{DirectoryKind, Start};
+use crate::auth::Users;
 
 use crate::job_scheduler::{BlockingJob, JobAction, JobResult};
 use crate::krate::CratesData;
@@ -42,8 +43,11 @@ impl Database {
   }
 }
 
-#[derive(Default, Clone, Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 pub struct Data {
+  #[serde(default)]
+  pub users: Users,
+  #[serde(default)]
   pub crates: CratesData,
 }
 
