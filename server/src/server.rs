@@ -11,8 +11,9 @@ use tower_sessions::{Expiry, MemoryStore, SessionManagerLayer};
 use tower_sessions::cookie::time::Duration;
 
 use att_core::{Crate, Search};
-use crate::auth::Authenticator;
 
+use crate::auth;
+use crate::auth::Authenticator;
 use crate::data::Database;
 use crate::krate::Crates;
 
@@ -37,14 +38,20 @@ impl Server {
     let auth_layer = AuthManagerLayerBuilder::new(authenticator, session_layer.clone())
       .build();
 
+
     use axum::routing::{get, post};
+    let api_routes = Router::new()
+      .route("/crates", get(search_crates))
+      .route("/crates/:crate_id", get(get_crate))
+      .route("/crates/:crate_id/follow", post(follow_crate).delete(unfollow_crate))
+      .route("/crates/:crate_id/refresh", post(refresh_crate))
+      .route("/crates/refresh_outdated", post(refresh_outdated_crates))
+      .route("/crates/refresh_all", post(refresh_all_crates))
+      .nest("/users", auth::router().with_state(()))
+      ;
+
     let router = Router::new()
-      .route("/api/v1/crates", get(search_crates))
-      .route("/api/v1/crates/:crate_id", get(get_crate))
-      .route("/api/v1/crates/:crate_id/follow", post(follow_crate).delete(unfollow_crate))
-      .route("/api/v1/crates/:crate_id/refresh", post(refresh_crate))
-      .route("/api/v1/crates/refresh_outdated", post(refresh_outdated_crates))
-      .route("/api/v1/crates/refresh_all", post(refresh_all_crates))
+      .nest("/api/v1/", api_routes)
       .with_state(self)
       .layer(session_layer)
       .layer(auth_layer)
