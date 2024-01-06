@@ -5,7 +5,7 @@ use iced::{Application, Command, Element, Event, event, executor, Renderer, Subs
 use serde::{Deserialize, Serialize};
 use tracing::error;
 
-use att_core::Crate;
+use att_core::crates::Crate;
 
 use crate::client::AttHttpClient;
 use crate::component::view_crates::{self, ViewCrates};

@@ -2,23 +2,32 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::error::Error;
 use std::future::Future;
 
+use axum::{Json, Router};
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::response::{IntoResponse, Response};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 
-use att_core::{Crate, Search};
+use att_core::crates::{Crate, CrateSearch};
+use crates_io_client::{CratesIoClient, CratesIoClientError};
 
 use crate::data::Database;
 use crate::job_scheduler::{Job, JobAction, JobResult};
-use crate::krate::crates_io_client::{CratesIoClient, CratesIoClientError};
 
 pub mod crates_io_client;
 
+// Data
+
 #[derive(Default, Clone, Serialize, Deserialize, Debug)]
+#[serde(default)]
 pub struct CratesData {
   followed_crate_ids: BTreeSet<String>,
-  #[serde(default)]
   id_to_crate: BTreeMap<String, (Crate, DateTime<Utc>)>,
 }
+
+
+// Implementation
 
 #[derive(Clone)]
 pub struct Crates {
@@ -32,9 +41,9 @@ impl Crates {
 }
 
 impl Crates {
-  pub async fn search(&self, data: &mut CratesData, search: Search) -> Result<Vec<Crate>, CratesIoClientError> {
+  pub async fn search(&self, data: &mut CratesData, search: CrateSearch) -> Result<Vec<Crate>, CratesIoClientError> {
     let crates = match search {
-      Search { followed: true, .. } => {
+      CrateSearch { followed: true, .. } => {
         let mut crates = Vec::with_capacity(data.followed_crate_ids.len());
         for crate_id in &data.followed_crate_ids {
           if let Some((krate, _)) = data.id_to_crate.get(crate_id) {
@@ -43,7 +52,7 @@ impl Crates {
         }
         crates
       }
-      Search { search_term: Some(search_term), .. } => {
+      CrateSearch { search_term: Some(search_term), .. } => {
         let response = self.crates_io_client.search(search_term).await?;
         let now = Utc::now();
         for krate in &response.crates {
@@ -136,6 +145,74 @@ impl Crates {
     now.signed_duration_since(last_refresh) > Duration::hours(1)
   }
 }
+
+
+// Routing
+
+#[derive(Clone)]
+pub struct CratesRoutingState {
+  database: Database,
+  crates: Crates,
+}
+impl CratesRoutingState {
+  pub fn new(database: Database, crates: Crates) -> Self {
+    Self { database, crates }
+  }
+}
+pub fn router() -> Router<CratesRoutingState> {
+  use axum::routing::{get, post};
+  Router::new()
+    .route("/", get(search_crates))
+    .route("/:crate_id", get(get_crate))
+    .route("/:crate_id/follow", post(follow_crate).delete(unfollow_crate))
+    .route("/:crate_id/refresh", post(refresh_crate))
+    .route("/refresh_outdated", post(refresh_outdated_crates))
+    .route("/refresh_all", post(refresh_all_crates))
+}
+async fn search_crates(State(state): State<CratesRoutingState>, Json(search): Json<CrateSearch>) -> Result<Json<Vec<Crate>>, F> {
+  let mut data = state.database.write().await;
+  let crates = state.crates.search(&mut data.crates, search).await.map_err(|_| F)?;
+  Ok(Json(crates))
+}
+async fn get_crate(State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
+  let mut data = state.database.write().await;
+  let krate = state.crates.get(&mut data.crates, &crate_id).await.map_err(|_| F)?;
+  Ok(Json(krate))
+}
+
+async fn follow_crate(State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
+  let mut data = state.database.write().await;
+  let krate = state.crates.follow(&mut data.crates, &crate_id).await.map_err(|_| F)?;
+  Ok(Json(krate))
+}
+async fn unfollow_crate(State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) {
+  let mut data = state.database.write().await;
+  state.crates.unfollow(&mut data.crates, crate_id);
+}
+
+async fn refresh_crate(State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
+  let mut data = state.database.write().await;
+  let krate = state.crates.refresh_one(&mut data.crates, crate_id).await.map_err(|_| F)?;
+  Ok(Json(krate))
+}
+async fn refresh_outdated_crates(State(state): State<CratesRoutingState>) -> Result<Json<Vec<Crate>>, F> {
+  let mut data = state.database.write().await;
+  let crates = state.crates.refresh_outdated(&mut data.crates).await.map_err(|_| F)?;
+  Ok(Json(crates))
+}
+async fn refresh_all_crates(State(state): State<CratesRoutingState>) -> Result<Json<Vec<Crate>>, F> {
+  let mut data = state.database.write().await;
+  let crates = state.crates.refresh_all(&mut data.crates).await.map_err(|_| F)?;
+  Ok(Json(crates))
+}
+
+struct F;
+impl IntoResponse for F {
+  fn into_response(self) -> Response { StatusCode::INTERNAL_SERVER_ERROR.into_response() }
+}
+
+
+// Scheduled Jobs
 
 pub struct RefreshJob {
   crates: Crates,

@@ -4,7 +4,7 @@ use iced::{Command, Element};
 use iced::widget::text_input;
 use tokio::task::AbortHandle;
 
-use att_core::{Crate, Search};
+use att_core::crates::{Crate, CrateSearch};
 
 use crate::client::{AttHttpClient, AttHttpClientError};
 use crate::component::{Perform, PerformResult, Update};
@@ -67,7 +67,7 @@ impl FollowCrate {
           let client = client.clone();
           let task = tokio::spawn(async move {
             tokio::time::sleep_until(wait_until.into()).await;
-            client.search_crates(Search::from_term(search_term)).await
+            client.search_crates(CrateSearch::from_term(search_term)).await
           });
           self.search_abort_handle = Some(task.abort_handle());
           task.perform_or_default(ReceiveCrates).into()

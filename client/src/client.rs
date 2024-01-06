@@ -1,7 +1,7 @@
 use tracing::debug;
 use url::Url;
 
-use att_core::{Crate, Search};
+use att_core::crates::{Crate, CrateSearch};
 
 #[derive(Clone)]
 pub struct AttHttpClient {
@@ -18,10 +18,10 @@ impl AttHttpClient {
     Ok(Self::new(http_client, base_url))
   }
 
-  pub async fn search_crates(self, search: Search) -> Result<Vec<Crate>, AttHttpClientError> {
+  pub async fn search_crates(self, crate_search: CrateSearch) -> Result<Vec<Crate>, AttHttpClientError> {
     let url = self.base_url.join("crates")?;
-    debug!(?search, %url, "sending search crates request");
-    let request = self.http_client.get(url).json(&search).build()?;
+    debug!(?crate_search, %url, "sending search crates request");
+    let request = self.http_client.get(url).json(&crate_search).build()?;
     let response = self.http_client.execute(request).await?;
     let crates = response.json().await?;
     Ok(crates)

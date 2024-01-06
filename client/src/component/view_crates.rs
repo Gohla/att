@@ -2,7 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use iced::{Command, Element};
 
-use att_core::{Crate, Search};
+use att_core::crates::{Crate, CrateSearch};
 
 use crate::app::Cache;
 use crate::client::{AttHttpClient, AttHttpClientError};
@@ -47,7 +47,7 @@ pub enum Message {
 
 impl ViewCrates {
   pub fn new(client: AttHttpClient, cache: &Cache) -> (Self, Command<Message>) {
-    let command = client.clone().search_crates(Search::followed()).perform(Message::SetCrates);
+    let command = client.clone().search_crates(CrateSearch::followed()).perform(Message::SetCrates);
     let view_crates = Self {
       follow_crate: Default::default(),
       follow_crate_overlay_open: false,
