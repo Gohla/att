@@ -343,6 +343,8 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
+ "wasm-bindgen",
+ "web-sys",
  "web-time",
 ]
 

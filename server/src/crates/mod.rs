@@ -3,7 +3,7 @@ use std::error::Error;
 use std::future::Future;
 
 use axum::{Json, Router};
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum_login::AuthUser;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
@@ -163,7 +163,7 @@ pub fn router() -> Router<CratesRoutingState> {
     .route("/refresh_outdated", post(refresh_outdated_crates))
     .route("/refresh_all", post(refresh_all_crates))
 }
-async fn search_crates(auth_session: AuthSession, State(state): State<CratesRoutingState>, Json(search): Json<CrateSearch>) -> Result<Json<Vec<Crate>>, F> {
+async fn search_crates(auth_session: AuthSession, State(state): State<CratesRoutingState>, Query(search): Query<CrateSearch>) -> Result<Json<Vec<Crate>>, F> {
   let data = state.database.read().await;
   let crates = match search {
     CrateSearch { followed: true, .. } => {

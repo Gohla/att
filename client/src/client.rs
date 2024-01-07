@@ -31,23 +31,39 @@ impl AttHttpClient {
     let url = self.base_url.join("users/login")?;
     debug!(?user_credentials, url = url.to_string(), "sending login request");
     let request = self.http_client.post(url).json(&user_credentials).build()?;
-    let response = self.http_client.execute(request).await?;
-    response.error_for_status()?;
+    let _response = self.http_client.execute(request).await?.error_for_status()?;
+    #[cfg(target_arch = "wasm32")]
+    if let Some(cookie) = _response.headers().get(reqwest::header::SET_COOKIE) {
+      match cookie.to_str() {
+        Ok(cookie_string) => {
+          use wasm_bindgen::JsCast;
+          let document = web_sys::window()
+            .unwrap()
+            .document()
+            .unwrap()
+            .dyn_into::<web_sys::HtmlDocument>()
+            .unwrap();
+          document.set_cookie(cookie_string).unwrap();
+        }
+        Err(cause) => tracing::error!(?cause, "failed to convert cookie header value to a string"),
+      }
+    } else {
+      tracing::warn!("no '{}' header found in login response", reqwest::header::SET_COOKIE);
+    }
     Ok(())
   }
   pub async fn logout(self) -> Result<(), AttHttpClientError> {
     let url = self.base_url.join("users/login")?;
     debug!(%url, "sending logout request");
     let request = self.http_client.delete(url).build()?;
-    let response = self.http_client.execute(request).await?;
-    response.error_for_status()?;
+    self.http_client.execute(request).await?.error_for_status()?;
     Ok(())
   }
 
   pub async fn search_crates(self, crate_search: CrateSearch) -> Result<Vec<Crate>, AttHttpClientError> {
     let url = self.base_url.join("crates")?;
     debug!(?crate_search, %url, "sending search crates request");
-    let request = self.http_client.get(url).json(&crate_search).build()?;
+    let request = self.http_client.get(url).query(&crate_search).build()?;
     let response = self.http_client.execute(request).await?.error_for_status()?;
     let crates = response.json().await?;
     Ok(crates)
