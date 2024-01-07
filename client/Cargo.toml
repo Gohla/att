@@ -8,7 +8,7 @@ publish.workspace = true
 att_core = { workspace = true, features = ["start", "serde", "start_serde_json"] }
 iced = { features = ["advanced", "lazy", "tokio"], git = "https://github.com/iced-rs/iced.git", rev = "dd249a1d11c68b8fee1828d58bae158946ee2ebd" }
 tokio = { workspace = true, features = ["time", "macros"] }
-reqwest = { workspace = true, features = ["json"] }
+reqwest = { workspace = true, features = ["json", "cookies"] }
 url.workspace = true
 dark-light = "1"
 serde = { workspace = true, features = ["derive"] }

@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::collections::HashMap;
-use std::error::Error;
 use std::fmt::{self, Debug, Formatter};
 
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
@@ -18,17 +17,12 @@ use crate::util::F;
 
 // Data
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Default, Serialize, Deserialize, Debug)]
 #[serde(default)]
 pub struct UsersData {
   next_id: u64,
   id_to_user: HashMap<u64, User>,
   name_to_id: HashMap<String, u64>,
-}
-impl Default for UsersData {
-  fn default() -> Self {
-    Self { next_id: 1, id_to_user: Default::default(), name_to_id: Default::default() }
-  }
 }
 impl UsersData {
   fn contains_user_by_name(&self, user_name: &str) -> bool {
@@ -91,19 +85,14 @@ impl Users {
     Self { argon2 }
   }
 
-  pub fn ensure_default_user_exists(&self, data: &mut UsersData) -> Result<(), Box<dyn Error>> {
-    let default_user_name = std::env::var("ATT_DEFAULT_USER_NAME")?;
-    let default_password = std::env::var("ATT_DEFAULT_PASSWORD")?;
-    let password_hash = self.hash_password(default_password.as_bytes())?;
-    if let Some(user) = data.get_user_by_id_mut(&0) {
-      user.name = default_user_name;
-      user.password_hash = password_hash;
-      // TODO: update `data.name_to_id` if the user name has changed
+  pub fn ensure_default_user_exists(&self, data: &mut UsersData) -> Result<bool, password_hash::Error> {
+    let user_credentials = UserCredentials::default();
+    let created = if !data.contains_user_by_name(&user_credentials.name) {
+      self.create_user(data, user_credentials)?
     } else {
-      data.create_user_with_id(0, default_user_name, password_hash);
-      // TODO: update `data.name_to_id` if the user name already exists
-    }
-    Ok(())
+      false
+    };
+    Ok(created)
   }
 
   fn authenticate_user<'u>(

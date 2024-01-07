@@ -8,9 +8,14 @@ pub struct UserCredentials {
   pub name: String,
   pub password: String,
 }
+impl Default for UserCredentials {
+  fn default() -> Self {
+    UserCredentials::new("default", "hunter2")
+  }
+}
 impl UserCredentials {
-  pub fn new(name: String, password: String) -> Self {
-    Self { name, password }
+  pub fn new(name: impl Into<String>, password: impl Into<String>) -> Self {
+    Self { name: name.into(), password: password.into() }
   }
 }
 impl Debug for UserCredentials {

@@ -1,13 +1,15 @@
 use std::collections::BTreeMap;
 use std::error::Error;
 
-use iced::{Application, Command, Element, Event, event, executor, Renderer, Subscription, Theme, window};
+use iced::{Command, Element, Event, event, executor, Renderer, Subscription, Theme, window};
 use serde::{Deserialize, Serialize};
-use tracing::error;
+use tracing::{error, info};
 
 use att_core::crates::Crate;
+use att_core::users::UserCredentials;
 
-use crate::client::AttHttpClient;
+use crate::client::{AttHttpClient, AttHttpClientError};
+use crate::component::Perform;
 use crate::component::view_crates::{self, ViewCrates};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
@@ -43,12 +45,14 @@ pub struct App {
 pub enum Message {
   ToViewCrates(view_crates::Message),
 
+  LoginResponse(Result<(), AttHttpClientError>),
+
   ToggleLightDarkMode,
 
   Exit(window::Id),
 }
 
-impl Application for App {
+impl iced::Application for App {
   type Executor = executor::Default;
   type Message = Message;
   type Theme = Theme;
@@ -58,8 +62,10 @@ impl Application for App {
     let data = flags.data.unwrap_or_default();
     let cache = flags.cache.unwrap_or_default();
 
-    let (view_crates, view_crates_command) = ViewCrates::new(flags.client, &cache);
-    let view_crates_command = view_crates_command.map(Message::ToViewCrates);
+    let login_command = flags.client.clone().login(UserCredentials::default())
+      .perform(Message::LoginResponse);
+
+    let view_crates = ViewCrates::new(flags.client, &cache);
 
     let app = App {
       data,
@@ -70,7 +76,7 @@ impl Application for App {
       dark_mode: flags.dark_mode,
     };
 
-    let command = Command::batch([view_crates_command]);
+    let command = Command::batch([login_command]);
 
     (app, command)
   }
@@ -82,6 +88,16 @@ impl Application for App {
         return self.view_crates.update(message)
           .into_command()
           .map(|m| Message::ToViewCrates(m));
+      }
+
+      Message::LoginResponse(result) => {
+        match result {
+          Ok(_) => {
+            info!("logged in");
+            return self.view_crates.request_followed_crates().map(Message::ToViewCrates);
+          }
+          Err(cause) => error!(?cause, "failed to login"),
+        }
       }
 
       Message::ToggleLightDarkMode => {
