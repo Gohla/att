@@ -24,7 +24,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
   });
 
-  let base_url = std::env::var("ATT_CLIENT_BASE_URL").expect("ATT_CLIENT_BASE_URL env variable is not set");
+  let base_url = std::env::var("ATT_CLIENT_BASE_URL").unwrap_or("http://localhost:1337/api/v1/".to_string());
   let client = AttHttpClient::from_base_url(base_url)?;
 
   let dark_mode = match dark_light::detect() {

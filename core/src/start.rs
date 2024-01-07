@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use directories::ProjectDirs;
 use tracing_appender::non_blocking::WorkerGuard;
-use tracing_subscriber::{EnvFilter, Layer};
+use tracing_subscriber::EnvFilter;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -27,6 +27,7 @@ impl Start {
     let layered = tracing_subscriber::registry();
 
     #[cfg(not(target_arch = "wasm32"))] let file_log_flush_guard = {
+      use tracing_subscriber::Layer;
       let layered = layered.with(
         tracing_subscriber::fmt::layer()
           .with_writer(io::stderr)
@@ -53,12 +54,13 @@ impl Start {
       };
       guard
     };
-    #[cfg(target_arch = "wasm32")] {
+    #[cfg(target_arch = "wasm32")] let file_log_flush_guard = {
       layered
         .with(main_filter_layer)
         .with(tracing_wasm::WASMLayer::new(tracing_wasm::WASMLayerConfig::default()))
         .init();
-    }
+      None
+    };
 
     let project_directories = project_directories.map(|pd| Arc::new(pd));
     (Self { project_directories }, file_log_flush_guard)

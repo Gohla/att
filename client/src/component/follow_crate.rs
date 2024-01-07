@@ -2,12 +2,11 @@ use std::time::{Duration, Instant};
 
 use iced::{Command, Element};
 use iced::widget::text_input;
-use tokio::task::AbortHandle;
 
 use att_core::crates::{Crate, CrateSearch};
 
 use crate::client::{AttHttpClient, AttHttpClientError};
-use crate::component::{Perform, PerformResult, Update};
+use crate::component::{Perform, Update};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
@@ -16,13 +15,14 @@ use crate::widget::WidgetExt;
 pub struct FollowCrate {
   search_id: text_input::Id,
   search_term: String,
-  search_abort_handle: Option<AbortHandle>,
+  search_wait_until: Option<Instant>,
   crates: Result<Vec<Crate>, AttHttpClientError>,
 }
 
 #[derive(Default, Debug)]
 pub enum Message {
   SetSearchTerm(String),
+  RequestCrates,
   ReceiveCrates(Result<Vec<Crate>, AttHttpClientError>),
   FollowCrate(String),
   ReceiveFollowedCrate(Result<Crate, AttHttpClientError>),
@@ -35,7 +35,7 @@ impl Default for FollowCrate {
     Self {
       search_id: text_input::Id::unique(),
       search_term: String::new(),
-      search_abort_handle: Default::default(),
+      search_wait_until: None,
       crates: Ok(vec![]),
     }
   }
@@ -60,24 +60,27 @@ impl FollowCrate {
       SetSearchTerm(search_term) => {
         self.search_term = search_term.clone();
         return if !search_term.is_empty() {
-          if let Some(abort_handle) = self.search_abort_handle.take() {
-            abort_handle.abort();
-          }
-          let wait_until = Instant::now() + Duration::from_millis(300);
-          let client = client.clone();
-          let task = tokio::spawn(async move {
-            tokio::time::sleep_until(wait_until.into()).await;
-            client.search_crates(CrateSearch::from_term(search_term)).await
-          });
-          self.search_abort_handle = Some(task.abort_handle());
-          task.perform_or_default(ReceiveCrates).into()
+          let wait_duration = Duration::from_millis(300);
+          let wait_until = Instant::now() + wait_duration;
+          self.search_wait_until = Some(wait_until);
+          let task = async move {
+            #[cfg(not(target_arch = "wasm32"))]
+            tokio::time::sleep(wait_duration.into()).await;
+            #[cfg(target_arch = "wasm32")]
+            gloo_timers::future::sleep(wait_duration).await;
+          };
+          task.perform(|_| RequestCrates).into()
         } else {
+          self.search_wait_until = None;
           self.crates = Ok(vec![]);
-          if let Some(abort_handle) = self.search_abort_handle.take() {
-            abort_handle.abort();
-          }
           Update::empty()
         };
+      }
+      RequestCrates => if let Some(search_wait_until) = self.search_wait_until {
+        if Instant::now() > search_wait_until {
+          return client.clone().search_crates(CrateSearch::from_term(self.search_term.clone()))
+            .perform(ReceiveCrates).into();
+        }
       }
       ReceiveCrates(crates) => self.crates = crates,
       FollowCrate(crate_id) => return client.clone().follow_crate(crate_id).perform(ReceiveFollowedCrate).into(),

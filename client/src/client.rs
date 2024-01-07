@@ -14,9 +14,15 @@ impl AttHttpClient {
     Self { http_client, base_url }
   }
   pub fn from_base_url(base_url: impl reqwest::IntoUrl) -> Result<Self, AttHttpClientError> {
-    let http_client = reqwest::Client::builder()
-      .cookie_store(true)
-      .build()?;
+    #[cfg(not(target_arch = "wasm32"))] let http_client = {
+      reqwest::Client::builder()
+        .cookie_store(true)
+        .build()?
+    };
+    #[cfg(target_arch = "wasm32")] let http_client = {
+      reqwest::Client::builder()
+        .build()?
+    };
     let base_url = base_url.into_url()?;
     Ok(Self::new(http_client, base_url))
   }
