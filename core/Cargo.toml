@@ -18,10 +18,10 @@ tracing-log = { workspace = true, optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 console_error_panic_hook = { version = "0.1", optional = true }
-tracing-wasm = { version = "0.2", optional = true }
+tracing-web = { version = "0.1", optional = true }
 
 [features]
-start = ["dep:dotenvy", "dep:directories", "dep:tracing", "dep:tracing-subscriber", "dep:tracing-appender", "dep:tracing-log", "dep:console_error_panic_hook", "dep:tracing-wasm"]
+start = ["dep:dotenvy", "dep:directories", "dep:tracing", "dep:tracing-subscriber", "dep:tracing-appender", "dep:tracing-log", "dep:console_error_panic_hook", "dep:tracing-web"]
 serde = ["dep:serde", "chrono/serde"]
 start_serde_json = ["serde", "dep:serde_json"]
 crates_io = ["dep:crates_io_api"]

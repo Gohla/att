@@ -1,4 +1,4 @@
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use iced::{Command, Element};
 use iced::widget::text_input;
@@ -7,6 +7,7 @@ use att_core::crates::{Crate, CrateSearch};
 
 use crate::client::{AttHttpClient, AttHttpClientError};
 use crate::component::{Perform, Update};
+use crate::time::{Instant, sleep};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
@@ -63,13 +64,7 @@ impl FollowCrate {
           let wait_duration = Duration::from_millis(300);
           let wait_until = Instant::now() + wait_duration;
           self.search_wait_until = Some(wait_until);
-          let task = async move {
-            #[cfg(not(target_arch = "wasm32"))]
-            tokio::time::sleep(wait_duration.into()).await;
-            #[cfg(target_arch = "wasm32")]
-            gloo_timers::future::sleep(wait_duration).await;
-          };
-          task.perform(|_| RequestCrates).into()
+          sleep(wait_duration).perform(|_| RequestCrates).into()
         } else {
           self.search_wait_until = None;
           self.crates = Ok(vec![]);

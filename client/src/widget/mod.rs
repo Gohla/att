@@ -1,5 +1,5 @@
-use iced::{Element, Font};
 use iced::advanced::Renderer;
+use iced::Element;
 
 pub mod builder;
 
@@ -9,6 +9,7 @@ pub mod constrained_row;
 pub mod modal;
 pub mod table;
 pub mod dark_light_toggle;
+pub mod font;
 
 /// Widget extensions
 pub trait WidgetExt<'a, M, R> {
@@ -21,7 +22,4 @@ impl<'a, M: 'a, R: Renderer + 'a, W: Into<Element<'a, M, R>>> WidgetExt<'a, M, R
   }
 }
 
-/// [Bootstrap icon](https://icons.getbootstrap.com/) font bytes.
-pub const ICON_FONT_BYTES: &[u8] = include_bytes!("../../font/bootstrap-icons.ttf");
-/// [Bootstrap icon](https://icons.getbootstrap.com/) font.
-pub const ICON_FONT: Font = Font::with_name("bootstrap-icons");
+

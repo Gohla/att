@@ -7,12 +7,13 @@ use att_core::start::{DirectoryKind, Start};
 
 use crate::app::{App, Flags};
 use crate::client::AttHttpClient;
-use crate::widget::ICON_FONT_BYTES;
+use crate::widget::font::ICON_FONT_BYTES;
 
 pub mod app;
 pub mod widget;
 pub mod component;
 pub mod client;
+mod time;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let (start, _file_log_flush_guard) = Start::new("Client");
@@ -38,8 +39,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     ..Default::default()
   };
   let fonts = vec![
-    Cow::Borrowed(ICON_FONT_BYTES)
+    Cow::Borrowed(ICON_FONT_BYTES),
+    #[cfg(target_arch = "wasm32")] Cow::Borrowed(crate::widget::font::FIRA_SANS_FONT_BYTES)
   ];
+
   let flags = Flags {
     data,
     cache,

@@ -343,7 +343,7 @@ dependencies = [
  "tokio",
  "tracing",
  "url",
- "wgpu",
+ "web-time",
 ]
 
 [[package]]
@@ -361,7 +361,7 @@ dependencies = [
  "tracing-appender",
  "tracing-log",
  "tracing-subscriber",
- "tracing-wasm",
+ "tracing-web",
 ]
 
 [[package]]
@@ -1882,7 +1882,7 @@ dependencies = [
 [[package]]
 name = "iced"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "iced_core",
  "iced_futures",
@@ -1895,7 +1895,7 @@ dependencies = [
 [[package]]
 name = "iced_core"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "bitflags 1.3.2",
  "instant",
@@ -1910,7 +1910,7 @@ dependencies = [
 [[package]]
 name = "iced_futures"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "futures",
  "iced_core",
@@ -1923,7 +1923,7 @@ dependencies = [
 [[package]]
 name = "iced_graphics"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "bitflags 1.3.2",
  "bytemuck",
@@ -1943,7 +1943,7 @@ dependencies = [
 [[package]]
 name = "iced_renderer"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "iced_graphics",
  "iced_tiny_skia",
@@ -1956,7 +1956,7 @@ dependencies = [
 [[package]]
 name = "iced_runtime"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "iced_core",
  "iced_futures",
@@ -1966,7 +1966,7 @@ dependencies = [
 [[package]]
 name = "iced_style"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "iced_core",
  "once_cell",
@@ -1976,7 +1976,7 @@ dependencies = [
 [[package]]
 name = "iced_tiny_skia"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "bytemuck",
  "cosmic-text",
@@ -1993,7 +1993,7 @@ dependencies = [
 [[package]]
 name = "iced_wgpu"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "bitflags 1.3.2",
  "bytemuck",
@@ -2011,7 +2011,7 @@ dependencies = [
 [[package]]
 name = "iced_widget"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "iced_renderer",
  "iced_runtime",
@@ -2024,7 +2024,7 @@ dependencies = [
 [[package]]
 name = "iced_winit"
 version = "0.12.0"
-source = "git+https://github.com/iced-rs/iced.git?rev=dd249a1d11c68b8fee1828d58bae158946ee2ebd#dd249a1d11c68b8fee1828d58bae158946ee2ebd"
+source = "git+https://github.com/iced-rs/iced.git?rev=f5c6fa7338713a0430dcdfc5bd53f72103144f22#f5c6fa7338713a0430dcdfc5bd53f72103144f22"
 dependencies = [
  "iced_graphics",
  "iced_runtime",
@@ -4114,14 +4114,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "tracing-wasm"
-version = "0.2.1"
+name = "tracing-web"
+version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4575c663a174420fa2d78f4108ff68f65bf2fbb7dd89f33749b6e826b3626e07"
+checksum = "b9e6a141feebd51f8d91ebfd785af50fca223c570b86852166caa3b141defe7c"
 dependencies = [
- "tracing",
+ "js-sys",
+ "tracing-core",
  "tracing-subscriber",
  "wasm-bindgen",
+ "web-sys",
 ]
 
 [[package]]
@@ -4515,6 +4517,16 @@ name = "web-sys"
 version = "0.3.64"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b85cbef8c220a6abc02aefd892dfc0fc23afb1c6a426316ec33253a3877249b"
+dependencies = [
+ "js-sys",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "web-time"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aa30049b1c872b72c89866d458eae9f20380ab280ffd1b1e18df2d3e2d98cfe0"
 dependencies = [
  "js-sys",
  "wasm-bindgen",

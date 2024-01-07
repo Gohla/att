@@ -6,6 +6,7 @@ use std::sync::Arc;
 use directories::ProjectDirs;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -23,15 +24,13 @@ impl Start {
 
     let project_directories = ProjectDirs::from("", "ATT", application);
 
-    let main_filter_layer = EnvFilter::from_env("STDERR_LOG");
     let layered = tracing_subscriber::registry();
 
     #[cfg(not(target_arch = "wasm32"))] let file_log_flush_guard = {
-      use tracing_subscriber::Layer;
       let layered = layered.with(
         tracing_subscriber::fmt::layer()
           .with_writer(io::stderr)
-          .with_filter(main_filter_layer)
+          .with_filter(EnvFilter::from_env("STDERR_LOG"))
       );
       let guard = if let Some(project_directories) = &project_directories {
         let log_dir = project_directories.data_local_dir();
@@ -55,10 +54,14 @@ impl Start {
       guard
     };
     #[cfg(target_arch = "wasm32")] let file_log_flush_guard = {
-      layered
-        .with(main_filter_layer)
-        .with(tracing_wasm::WASMLayer::new(tracing_wasm::WASMLayerConfig::default()))
-        .init();
+      let layered = layered.with(
+        tracing_subscriber::fmt::layer()
+          .with_writer(tracing_web::MakeWebConsoleWriter::new())
+          .with_ansi(false)
+          .without_time()
+          .with_filter(EnvFilter::new("info,att=debug"))
+      );
+      layered.init();
       None
     };
 
