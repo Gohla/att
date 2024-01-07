@@ -18,6 +18,7 @@ mod crates;
 mod job_scheduler;
 mod data;
 mod users;
+mod util;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let (start, _file_log_flush_guard) = Start::new("Server");

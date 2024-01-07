@@ -7,8 +7,6 @@ use std::fmt::{self, Debug, Formatter};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use argon2::password_hash::{self, SaltString};
 use axum::{async_trait, Json, Router};
-use axum::http::StatusCode;
-use axum::response::IntoResponse;
 use axum_login::{AuthnBackend, AuthUser, UserId};
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
@@ -16,6 +14,7 @@ use serde::{Deserialize, Serialize};
 use att_core::users::UserCredentials;
 
 use crate::data::Database;
+use crate::util::F;
 
 // Data
 
@@ -190,25 +189,12 @@ pub fn router() -> Router<()> {
   Router::new()
     .route("/login", post(login).delete(logout))
 }
-async fn login(mut auth_session: AuthSession, Json(credentials): Json<UserCredentials>) -> impl IntoResponse {
-  let user = match auth_session.authenticate(credentials.clone()).await {
-    Ok(Some(user)) => user,
-    Ok(None) => {
-      // TODO: return actual error
-      return StatusCode::INTERNAL_SERVER_ERROR.into_response()
-    }
-    Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-  };
-
-  if auth_session.login(&user).await.is_err() {
-    return StatusCode::INTERNAL_SERVER_ERROR.into_response();
-  }
-
-  StatusCode::OK.into_response()
+async fn login(mut auth_session: AuthSession, Json(credentials): Json<UserCredentials>) -> Result<(), F> {
+  let user = auth_session.authenticate(credentials.clone()).await?.ok_or(F::forbidden())?;
+  auth_session.login(&user).await?;
+  Ok(())
 }
-async fn logout(mut auth_session: AuthSession) -> impl IntoResponse {
-  match auth_session.logout().await {
-    Ok(_) => StatusCode::OK.into_response(),
-    Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
-  }
+async fn logout(mut auth_session: AuthSession) -> Result<(), F> {
+  auth_session.logout().await?;
+  Ok(())
 }
