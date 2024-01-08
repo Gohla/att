@@ -1,5 +1,6 @@
 use std::fmt::{Debug, Formatter};
 use std::fmt;
+use dotenvy_macro::dotenv;
 
 use serde::{Deserialize, Serialize};
 
@@ -10,7 +11,7 @@ pub struct UserCredentials {
 }
 impl Default for UserCredentials {
   fn default() -> Self {
-    UserCredentials::new("default", "hunter2")
+    UserCredentials::new(dotenv!("ATT_DEFAULT_USER_NAME"), dotenv!("ATT_DEFAULT_USER_PASSWORD"))
   }
 }
 impl UserCredentials {

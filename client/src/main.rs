@@ -3,7 +3,8 @@ use std::error::Error;
 
 use iced::{Application, Settings, window};
 
-use att_core::start::{DirectoryKind, dotenv, Start};
+use att_core::dotenv;
+use att_core::start::{DirectoryKind, Start};
 
 use crate::app::{App, Flags};
 use crate::client::AttHttpClient;

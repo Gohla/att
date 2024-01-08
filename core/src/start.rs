@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use directories::ProjectDirs;
-pub use dotenvy_macro::dotenv;
+use dotenvy_macro::dotenv;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;
@@ -25,13 +25,15 @@ impl Start {
 
     let project_directories = ProjectDirs::from("", "ATT", application);
 
-    let layered = tracing_subscriber::registry();
+    let console_filter = EnvFilter::try_from_env("CONSOLE_LOG")
+      .unwrap_or_else(|_| EnvFilter::new(dotenv!("CONSOLE_LOG")));
 
     #[cfg(not(target_arch = "wasm32"))] let file_log_flush_guard = {
+      let layered = tracing_subscriber::registry();
       let layered = layered.with(
         tracing_subscriber::fmt::layer()
           .with_writer(io::stderr)
-          .with_filter(EnvFilter::from_env("STDERR_LOG"))
+          .with_filter(console_filter)
       );
       let guard = if let Some(project_directories) = &project_directories {
         let log_dir = project_directories.data_local_dir();
@@ -55,12 +57,13 @@ impl Start {
       guard
     };
     #[cfg(target_arch = "wasm32")] let file_log_flush_guard = {
+      let layered = tracing_subscriber::registry();
       let layered = layered.with(
         tracing_subscriber::fmt::layer()
           .with_writer(tracing_web::MakeWebConsoleWriter::new())
           .with_ansi(false)
           .without_time()
-          .with_filter(EnvFilter::new("info,att=debug"))
+          .with_filter(console_filter)
       );
       layered.init();
       None
