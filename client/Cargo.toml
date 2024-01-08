@@ -19,7 +19,6 @@ tokio = { workspace = true, features = ["time"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 iced = { default-features = false, features = ["advanced", "webgl"], git = "https://github.com/iced-rs/iced.git", rev = "f5c6fa7338713a0430dcdfc5bd53f72103144f22" }
-#wgpu = { version = "0.18", features = ["webgl"] }
 gloo-timers = { version = "0.3", features = ["futures"] }
 web-time = "0.2"
 wasm-bindgen = "0.2"

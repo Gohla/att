@@ -3,7 +3,7 @@ use std::error::Error;
 
 use iced::{Application, Settings, window};
 
-use att_core::start::{DirectoryKind, Start};
+use att_core::start::{DirectoryKind, dotenv, Start};
 
 use crate::app::{App, Flags};
 use crate::client::AttHttpClient;
@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
   });
 
-  let base_url = std::env::var("ATT_CLIENT_BASE_URL").unwrap_or("http://localhost:1337/api/v1/".to_string());
+  let base_url = std::env::var("ATT_CLIENT_BASE_URL").unwrap_or_else(|_| dotenv!("ATT_CLIENT_BASE_URL").to_string());
   let client = AttHttpClient::from_base_url(base_url)?;
 
   let dark_mode = match dark_light::detect() {
@@ -40,7 +40,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   };
   let fonts = vec![
     Cow::Borrowed(ICON_FONT_BYTES),
-    #[cfg(target_arch = "wasm32")] Cow::Borrowed(crate::widget::font::FIRA_SANS_FONT_BYTES)
+    #[cfg(target_arch = "wasm32")] Cow::Borrowed(widget::font::FIRA_SANS_FONT_BYTES)
   ];
 
   let flags = Flags {
