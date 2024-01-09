@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="R client" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="run --bin att_client --profile=dev --target=x86_64-pc-windows-msvc" />
+  <configuration default="false" name="B client @wasm" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+    <option name="command" value="build --bin att_client -p att_client -p att_core --profile=dev --target=wasm32-unknown-unknown" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <option name="emulateTerminal" value="false" />
     <option name="channel" value="DEFAULT" />
