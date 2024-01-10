@@ -2,6 +2,7 @@ use std::borrow::Cow;
 use std::error::Error;
 
 use iced::{Application, Settings, window};
+use iced::window::settings::PlatformSpecific;
 
 use att_core::dotenv;
 use att_core::start::{DirectoryKind, Start};
@@ -34,11 +35,19 @@ fn main() -> Result<(), Box<dyn Error>> {
     dark_light::Mode::Light | dark_light::Mode::Default => false,
   };
 
-  let id = Some("att".to_string());
+  let platform_specific: PlatformSpecific;
+  #[cfg(not(target_arch = "wasm32"))] {
+    platform_specific = Default::default();
+  }
+  #[cfg(target_arch = "wasm32")]{
+    platform_specific = PlatformSpecific { target: Some("canvas".to_string()), ..Default::default() };
+  }
   let window = window::Settings {
+    platform_specific,
     exit_on_close_request: false,
     ..Default::default()
   };
+
   let fonts = vec![
     Cow::Borrowed(ICON_FONT_BYTES),
     #[cfg(target_arch = "wasm32")] Cow::Borrowed(widget::font::FIRA_SANS_FONT_BYTES)
@@ -52,7 +61,7 @@ fn main() -> Result<(), Box<dyn Error>> {
     dark_mode,
   };
   let settings = Settings {
-    id,
+    id: Some("att".to_string()),
     window,
     fonts,
     ..Settings::with_flags(flags)

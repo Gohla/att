@@ -7,8 +7,9 @@ publish.workspace = true
 [dependencies]
 att_core = { workspace = true, features = ["start", "start_serde_json", "serde", "crates_io"] }
 axum = "0.7"
-tower-sessions = "0.9"
 axum-login = "0.12"
+tower-sessions = "0.9"
+tower-http = { version = "0.5", features = ["trace"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "macros", "signal"] }
 futures.workspace = true
 argon2 = { version = "0.5", features = ["std"] }

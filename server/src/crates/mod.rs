@@ -7,10 +7,12 @@ use axum::extract::{Path, Query, State};
 use axum_login::AuthUser;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 
 use att_core::crates::{Crate, CrateSearch};
-use crates_io_client::{CratesIoClient, CratesIoClientError};
+use crates_io_client::CratesIoClient;
 
+use crate::crates::crates_io_client::CratesIoClientError;
 use crate::data::Database;
 use crate::job_scheduler::{Job, JobAction, JobResult};
 use crate::users::AuthSession;
@@ -42,11 +44,13 @@ impl Crates {
 }
 
 impl Crates {
-  pub async fn search(&self, search_term: String) -> Result<Vec<Crate>, CratesIoClientError> {
+  #[instrument(skip(self), err)]
+  pub async fn search(&self, search_term: String) -> Result<Option<Vec<Crate>>, CratesIoClientError> {
     let response = self.crates_io_client.search(search_term).await?;
-    let crates = response.crates.into_iter().map(|c| c.into()).collect();
+    let crates = response.map(|crates_page| crates_page.crates.into_iter().map(|c| c.into()).collect());
     Ok(crates)
   }
+  #[instrument(skip(self, data), err)]
   pub async fn get_followed_crates(&self, data: &CratesData, user_id: u64) -> Result<Vec<Crate>, CratesIoClientError> {
     let crates = if let Some(followed_crate_ids) = data.followed_crate_ids.get(&user_id) {
       let mut crates = Vec::with_capacity(followed_crate_ids.len());
@@ -61,6 +65,7 @@ impl Crates {
     };
     Ok(crates)
   }
+  #[instrument(skip(self, data), err)]
   pub async fn get(&self, data: &mut CratesData, crate_id: &str) -> Result<Crate, CratesIoClientError> {
     let krate = if let Some((krate, _)) = data.id_to_crate.get(crate_id) {
       krate.clone()
@@ -70,6 +75,7 @@ impl Crates {
     Ok(krate)
   }
 
+  #[instrument(skip(self, data), err)]
   pub async fn follow(&self, data: &mut CratesData, crate_id: &str, user_id: u64) -> Result<Crate, CratesIoClientError> {
     let now = Utc::now();
     let krate = if let Some((krate, last_refreshed)) = data.id_to_crate.get_mut(crate_id) {
@@ -92,6 +98,7 @@ impl Crates {
     // Note: this does not remove the crate from `data.id_to_crate`, as there could be other followers of the crate.
   }
 
+  #[instrument(skip(self, data), err)]
   pub async fn refresh_one(&self, data: &mut CratesData, crate_id: String) -> Result<Crate, CratesIoClientError> {
     let response = self.crates_io_client.refresh(crate_id).await?;
     let krate: Crate = response.crate_data.into();
@@ -99,13 +106,16 @@ impl Crates {
     data.id_to_crate.insert(krate.id.clone(), (krate.clone(), now));
     Ok(krate)
   }
+  #[instrument(skip(self, data), err)]
   pub async fn refresh_outdated(&self, data: &mut CratesData) -> Result<Vec<Crate>, CratesIoClientError> {
     self.refresh_multiple(data, Utc::now(), Self::should_refresh).await
   }
+  #[instrument(skip(self, data), err)]
   pub async fn refresh_all(&self, data: &mut CratesData) -> Result<Vec<Crate>, CratesIoClientError> {
     self.refresh_multiple(data, Utc::now(), |_, _| true).await
   }
 
+  #[instrument(skip_all, err)]
   async fn refresh_multiple(
     &self,
     data: &mut CratesData,
@@ -163,7 +173,11 @@ pub fn router() -> Router<CratesRoutingState> {
     .route("/refresh_outdated", post(refresh_outdated_crates))
     .route("/refresh_all", post(refresh_all_crates))
 }
-async fn search_crates(auth_session: AuthSession, State(state): State<CratesRoutingState>, Query(search): Query<CrateSearch>) -> Result<Json<Vec<Crate>>, F> {
+async fn search_crates(
+  auth_session: AuthSession,
+  State(state): State<CratesRoutingState>,
+  Query(search): Query<CrateSearch>
+) -> Result<Json<Vec<Crate>>, F> {
   let data = state.database.read().await;
   let crates = match search {
     CrateSearch { followed: true, .. } => {
@@ -173,7 +187,7 @@ async fn search_crates(auth_session: AuthSession, State(state): State<CratesRout
         return Err(F::unauthorized())
       }
     }
-    CrateSearch { search_term: Some(search_term), .. } => state.crates.search(search_term).await?,
+    CrateSearch { search_term: Some(search_term), .. } => state.crates.search(search_term).await?.unwrap_or_default(),
     _ => Vec::default()
   };
   Ok(Json(crates))

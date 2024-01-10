@@ -4,6 +4,7 @@ use std::net::SocketAddr;
 
 use axum::Router;
 use axum_login::AuthManagerLayerBuilder;
+use tower_http::trace::TraceLayer;
 use tower_sessions::{Expiry, MemoryStore, SessionManagerLayer};
 use tower_sessions::cookie::time::Duration;
 
@@ -47,6 +48,7 @@ impl Server {
       .nest("/api/v1", api_routes)
       .layer(session_layer)
       .layer(authentication_layer)
+      .layer(TraceLayer::new_for_http())
       ;
 
     let addr = SocketAddr::from(([127, 0, 0, 1], 1337));

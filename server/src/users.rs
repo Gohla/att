@@ -9,6 +9,7 @@ use axum::{async_trait, Json, Router};
 use axum_login::{AuthnBackend, AuthUser, UserId};
 use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
+use tracing::instrument;
 
 use att_core::users::UserCredentials;
 
@@ -85,6 +86,7 @@ impl Users {
     Self { argon2 }
   }
 
+  #[instrument(skip_all, err)]
   pub fn ensure_default_user_exists(&self, data: &mut UsersData) -> Result<bool, password_hash::Error> {
     let user_credentials = UserCredentials::default();
     let created = if !data.contains_user_by_name(&user_credentials.name) {
@@ -95,6 +97,7 @@ impl Users {
     Ok(created)
   }
 
+  #[instrument(skip_all, fields(user_credentials.name = user_credentials.name), err)]
   fn authenticate_user<'u>(
     &self,
     data: &'u UsersData,
@@ -113,6 +116,7 @@ impl Users {
     Ok(user)
   }
 
+  #[instrument(skip(self, data), err)]
   fn create_user(
     &self,
     data: &mut UsersData,

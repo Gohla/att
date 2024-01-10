@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::error::Error;
 
 use iced::{Command, Element, Event, event, executor, Renderer, Subscription, Theme, window};
+use iced::window::Id;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
@@ -49,7 +50,7 @@ pub enum Message {
 
   ToggleLightDarkMode,
 
-  Exit(window::Id),
+  Exit(Id),
 }
 
 impl iced::Application for App {

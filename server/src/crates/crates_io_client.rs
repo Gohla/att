@@ -9,7 +9,7 @@ use crates_io_api::{AsyncClient, CrateResponse, CratesPage, CratesQuery, Sort};
 use futures::future::{BoxFuture, Fuse, FusedFuture};
 use futures::FutureExt;
 use tokio::sync::{mpsc, oneshot};
-use tracing::{debug, info, trace};
+use tracing::{debug, info, instrument, trace};
 
 // Public API
 
@@ -29,27 +29,40 @@ impl CratesIoClient {
 #[derive(Debug, thiserror::Error)]
 pub enum CratesIoClientError {
   #[error("Failed to execute request: {0}")]
-  CratesIo(#[from] crates_io_api::Error),
-  #[error("Failed to send request; receiver was closed")]
-  Tx,
-  #[error("Failed to receive response; sender was closed")]
-  Rx,
+  CratesIoFail(#[from] crates_io_api::Error),
+  #[error("Failed to receive response; request was cancelled or crates.io client is shutting down")]
+  Cancelled,
+  #[error("Failed to send request; crates.io client is shutting down")]
+  ShuttingDown,
 }
-impl<T> From<mpsc::error::SendError<T>> for CratesIoClientError {
-  fn from(_: mpsc::error::SendError<T>) -> Self { Self::Tx }
+impl CratesIoClientError {
+  fn cancel_ok<T>(result: Result<T, CratesIoClientError>) -> Result<Option<T>, CratesIoClientError> {
+    match result {
+      Err(Self::Cancelled) => Ok(None),
+      Err(e) => Err(e),
+      Ok(v) => Ok(Some(v))
+    }
+  }
 }
 impl From<oneshot::error::RecvError> for CratesIoClientError {
-  fn from(_: oneshot::error::RecvError) -> Self { Self::Rx }
+  fn from(_: oneshot::error::RecvError) -> Self { Self::Cancelled }
+}
+impl<T> From<mpsc::error::SendError<T>> for CratesIoClientError {
+  fn from(_: mpsc::error::SendError<T>) -> Self { Self::ShuttingDown }
 }
 
 impl CratesIoClient {
-  pub async fn search(&self, search_term: String) -> Result<CratesPage, CratesIoClientError> {
-    self.send_receive(|tx| Request::Search(Search { search_term, tx })).await
+  #[instrument(skip(self))]
+  pub async fn search(&self, search_term: String) -> Result<Option<CratesPage>, CratesIoClientError> {
+    let result = self.send_receive::<CratesPage>(|tx| Request::Search(Search { search_term, tx })).await;
+    CratesIoClientError::cancel_ok(result)
   }
-  pub async fn cancel_search(&self) -> Result<(), CratesIoClientError> {
-    self.send(Request::CancelSearch).await
+  #[instrument(skip(self))]
+  pub async fn cancel_search(&self) {
+    let _ = self.send(Request::CancelSearch).await; // Ignore ShuttingDown errors.
   }
 
+  #[instrument(skip(self))]
   pub async fn refresh(&self, crate_id: String) -> Result<CrateResponse, CratesIoClientError> {
     self.send_receive(|tx| Request::Refresh(Refresh { crate_id, tx })).await
   }
@@ -57,7 +70,7 @@ impl CratesIoClient {
   async fn send_receive<T>(&self, make_request: impl FnOnce(oneshot::Sender<Result<T, crates_io_api::Error>>) -> Request) -> Result<T, CratesIoClientError> {
     let (tx, rx) = oneshot::channel();
     let request = make_request(tx);
-    self.tx.send(request).await?;
+    self.send(request).await?;
     let response = rx.await??;
     Ok(response)
   }

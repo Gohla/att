@@ -2,6 +2,7 @@ use std::time::Duration;
 
 use iced::{Command, Element};
 use iced::widget::text_input;
+use tracing::{error, instrument};
 
 use att_core::crates::{Crate, CrateSearch};
 
@@ -23,8 +24,8 @@ pub struct FollowCrate {
 #[derive(Default, Debug)]
 pub enum Message {
   SetSearchTerm(String),
-  RequestCrates,
-  ReceiveCrates(Result<Vec<Crate>, AttHttpClientError>),
+  SearchCrates,
+  SetCrates(Result<Vec<Crate>, AttHttpClientError>),
   FollowCrate(String),
   ReceiveFollowedCrate(Result<Crate, AttHttpClientError>),
   #[default]
@@ -54,7 +55,7 @@ impl FollowCrate {
 }
 
 impl FollowCrate {
-  #[tracing::instrument(skip_all)]
+  #[instrument(skip_all)]
   pub fn update(&mut self, message: Message, client: &AttHttpClient) -> Update<Option<Crate>, Command<Message>> {
     use Message::*;
     match message {
@@ -64,29 +65,33 @@ impl FollowCrate {
           let wait_duration = Duration::from_millis(300);
           let wait_until = Instant::now() + wait_duration;
           self.search_wait_until = Some(wait_until);
-          sleep(wait_duration).perform(|_| RequestCrates).into()
+          sleep(wait_duration).perform(|_| SearchCrates).into()
         } else {
           self.search_wait_until = None;
           self.crates = Ok(vec![]);
           Update::empty()
         };
       }
-      RequestCrates => if let Some(search_wait_until) = self.search_wait_until {
+      SearchCrates => if let Some(search_wait_until) = self.search_wait_until {
         if Instant::now() > search_wait_until {
           return client.clone().search_crates(CrateSearch::from_term(self.search_term.clone()))
-            .perform(ReceiveCrates).into();
+            .perform(SetCrates).into();
         }
       }
-      ReceiveCrates(crates) => self.crates = crates,
+      SetCrates(crates) => {
+        if let Err(cause) = &crates {
+          error!(?cause, "failed to search for crates");
+        }
+        self.crates = crates
+      },
       FollowCrate(crate_id) => return client.clone().follow_crate(crate_id).perform(ReceiveFollowedCrate).into(),
       ReceiveFollowedCrate(Ok(krate)) => return Update::from_action(Some(krate)),
-      ReceiveFollowedCrate(Err(cause)) => tracing::error!(?cause, "failed to follow crate"),
+      ReceiveFollowedCrate(Err(cause)) => error!(?cause, "failed to follow crate"),
       Ignore => {},
     }
     Update::default()
   }
 
-  #[tracing::instrument(skip(self))]
   pub fn view(&self) -> Element<Message> {
     let builder = WidgetBuilder::stack()
       .text_input("Crate search term", &self.search_term).id(self.search_id.clone()).on_input(Message::SetSearchTerm).add();

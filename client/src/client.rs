@@ -1,6 +1,6 @@
 use reqwest::RequestBuilder;
 use thiserror::Error;
-use tracing::debug;
+use tracing::{debug, instrument};
 use url::Url;
 
 use att_core::crates::{Crate, CrateSearch};
@@ -40,6 +40,7 @@ pub enum AttHttpClientError {
 }
 
 impl AttHttpClient {
+  #[instrument(skip_all, fields(user_credentials.name = user_credentials.name), err)]
   pub async fn login(self, user_credentials: UserCredentials) -> Result<(), AttHttpClientError> {
     let url = self.base_url.join("users/login")?;
     debug!(?user_credentials, url = url.to_string(), "sending login request");
@@ -51,6 +52,7 @@ impl AttHttpClient {
 
     Ok(())
   }
+  #[instrument(skip_all, err)]
   pub async fn logout(self) -> Result<(), AttHttpClientError> {
     let url = self.base_url.join("users/login")?;
     debug!(%url, "sending logout request");
@@ -62,6 +64,7 @@ impl AttHttpClient {
     Ok(())
   }
 
+  #[instrument(skip(self), err)]
   pub async fn search_crates(self, crate_search: CrateSearch) -> Result<Vec<Crate>, AttHttpClientError> {
     let url = self.base_url.join("crates")?;
     debug!(?crate_search, %url, "sending search crates request");
@@ -74,6 +77,7 @@ impl AttHttpClient {
     Ok(crates)
   }
 
+  #[instrument(skip(self), err)]
   pub async fn follow_crate(self, crate_id: String) -> Result<Crate, AttHttpClientError> {
     let url = self.base_url.join(&format!("crates/{crate_id}/follow"))?;
     debug!(crate_id, %url, "sending follow crate request");
@@ -85,6 +89,7 @@ impl AttHttpClient {
     let krate = response.json().await?;
     Ok(krate)
   }
+  #[instrument(skip(self), err)]
   pub async fn unfollow_crate(self, crate_id: String) -> Result<(), AttHttpClientError> {
     let url = self.base_url.join(&format!("crates/{crate_id}/follow"))?;
     debug!(crate_id, %url, "sending unfollow crate request");
@@ -96,6 +101,7 @@ impl AttHttpClient {
     Ok(())
   }
 
+  #[instrument(skip(self), err)]
   pub async fn refresh_crate(self, crate_id: String) -> Result<Crate, AttHttpClientError> {
     let url = self.base_url.join(&format!("crates/{crate_id}/refresh"))?;
     debug!(crate_id, %url, "sending refresh crate request");
@@ -107,6 +113,7 @@ impl AttHttpClient {
     let krate = response.json().await?;
     Ok(krate)
   }
+  #[instrument(skip(self), err)]
   pub async fn refresh_outdated_crates(self) -> Result<Vec<Crate>, AttHttpClientError> {
     let url = self.base_url.join("crates/refresh_outdated")?;
     debug!(%url, "sending refresh outdated crates request");
@@ -118,6 +125,7 @@ impl AttHttpClient {
     let crates: Vec<Crate> = response.json().await?;
     Ok(crates)
   }
+  #[instrument(skip(self), err)]
   pub async fn refresh_all_crates(self) -> Result<Vec<Crate>, AttHttpClientError> {
     let url = self.base_url.join("crates/refresh_all")?;
     debug!(%url, "sending refresh all crates request");

@@ -1,8 +1,8 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="R server" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="run --bin att_server --profile=dev --target=x86_64-pc-windows-msvc" />
+    <option name="command" value="run --bin att_server --profile=dev" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
-    <option name="emulateTerminal" value="true" />
+    <option name="emulateTerminal" value="false" />
     <option name="channel" value="DEFAULT" />
     <option name="requiredFeatures" value="false" />
     <option name="allFeatures" value="false" />

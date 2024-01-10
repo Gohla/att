@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="B all" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="build --workspace --profile=dev --target=x86_64-pc-windows-msvc" />
+    <option name="command" value="build --workspace --profile=dev" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <option name="emulateTerminal" value="false" />
     <option name="channel" value="DEFAULT" />

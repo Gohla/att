@@ -1,6 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use iced::{Command, Element};
+use tracing::{debug, error, instrument, trace};
 
 use att_core::crates::{Crate, CrateSearch};
 
@@ -61,7 +62,7 @@ impl ViewCrates {
     self.client.clone().search_crates(CrateSearch::followed()).perform(Message::SetCrates)
   }
 
-  #[tracing::instrument(skip_all)]
+  #[instrument(skip_all)]
   pub fn update(&mut self, message: Message) -> Update<(), Command<Message>> {
     use Message::*;
     match message {
@@ -101,35 +102,35 @@ impl ViewCrates {
         self.crates_being_refreshed.remove(&crate_id);
         match result {
           Ok(krate) => {
-            tracing::debug!(crate_id, "update crate");
+            debug!(crate_id, "update crate");
             self.id_to_crate.insert(crate_id, krate);
           },
-          Err(cause) => tracing::error!(?cause, "failed to update crate"),
+          Err(cause) => error!(?cause, "failed to update crate"),
         }
       }
       UpdateCrates(result) => {
         self.all_crates_being_refreshed = false;
         match result {
           Ok(crates) => {
-            tracing::debug!(?crates, "update crates");
+            debug!(?crates, "update crates");
             for krate in crates {
               let crate_id = krate.id.clone();
-              tracing::trace!(crate_id, "update crate");
+              trace!(crate_id, "update crate");
               self.crates_being_refreshed.remove(&crate_id);
               self.id_to_crate.insert(crate_id, krate);
             }
           }
-          Err(cause) => tracing::error!(?cause, "failed to update crates"),
+          Err(cause) => error!(?cause, "failed to update crates"),
         }
       }
       SetCrates(result) => {
         self.all_crates_being_refreshed = false;
         match result {
           Ok(crates) => {
-            tracing::debug!(?crates, "set crates");
+            debug!(?crates, "set crates");
             self.id_to_crate = BTreeMap::from_iter(crates.into_iter().map(|c| (c.id.clone(), c)));
           }
-          Err(cause) => tracing::error!(?cause, "failed to set crates"),
+          Err(cause) => error!(?cause, "failed to set crates"),
         }
       }
 
@@ -143,7 +144,6 @@ impl ViewCrates {
     Update::default()
   }
 
-  #[tracing::instrument(skip(self))]
   pub fn view(&self) -> Element<Message> {
     let cell_to_element = |row, col| -> Option<Element<Message>> {
       let Some(krate) = self.id_to_crate.values().nth(row) else { return None; };
