@@ -98,8 +98,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for Body<'a, M, R, F> where
     tree.diff_children(std::slice::from_ref(&self.phantom_row))
   }
 
-  fn width(&self) -> Length { Length::Fill }
-  fn height(&self) -> Length { Length::Fill }
+  fn size(&self) -> Size<Length> { Size::new(Length::Fill, Length::Fill) }
   fn layout(&self, tree: &mut Tree, renderer: &R, limits: &Limits) -> Node {
     let max_height = self.row_count as f32 * self.row_height + self.row_count.saturating_sub(1) as f32 * self.spacing;
     let limits = limits.max_height(max_height);
@@ -300,11 +299,12 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
     let tree = tree_state.get_or_insert(row, col, element);
     tree.diff(element.as_widget());
     let limits = Limits::new(Size::ZERO, cell_bounds.size());
-    let mut node = element.as_widget().layout(tree, renderer, &limits);
     // Since `cell_bounds` is from the layout of the phantom row, it always has a y-position of 0.0. We move the node to
     // its correct y-position here.
     let y = absolute_y + row as f32 * self.row_height_plus_spacing;
-    node.move_to(Point::new(cell_bounds.x, y));
+    let node = element.as_widget()
+      .layout(tree, renderer, &limits)
+      .move_to(Point::new(cell_bounds.x, y));
     Cell { element, tree, node }
   }
   /// Gets the cell at `position` relative to this table, or `None` if there is no cell at `position`.

@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use iced::{Background, Color, Element, Event, keyboard, Length, Point, Rectangle, Size, Theme, Vector};
+use iced::{Background, Border, Color, Element, Event, keyboard, Length, Point, Rectangle, Size, Theme, Vector};
 use iced::advanced::{Clipboard, Renderer, Shell};
 use iced::advanced::graphics::core::touch;
 use iced::advanced::layout::{Layout, Limits, Node};
@@ -9,6 +9,7 @@ use iced::advanced::renderer::{self, Style};
 use iced::advanced::widget::{Operation, Tree, Widget};
 use iced::alignment::{Horizontal, Vertical};
 use iced::event;
+use iced::keyboard::key::Named;
 use iced::mouse::{self, Cursor};
 use iced::widget::container;
 
@@ -58,9 +59,11 @@ impl<'a, M, R> Modal<'a, M, R> where
         container::Appearance {
           text_color: Some(background.text),
           background: Some(background.color.into()),
-          border_radius: 10.0.into(),
-          border_width: 2.0,
-          border_color: palette.primary.weak.color,
+          border: Border {
+            radius: 10.0.into(),
+            width: 2.0,
+            color: palette.primary.weak.color,
+          },
           ..container::Appearance::default()
         }
       });
@@ -148,8 +151,7 @@ impl<M, R> Widget<M, R> for Modal<'_, M, R> where
     tree.diff_children(&[&self.underlay, &self.overlay]);
   }
 
-  fn width(&self) -> Length { self.underlay.as_widget().width() }
-  fn height(&self) -> Length { self.underlay.as_widget().height() }
+  fn size(&self) -> Size<Length> { self.underlay.as_widget().size() }
   fn layout(
     &self,
     tree: &mut Tree,
@@ -225,13 +227,14 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
     _translation: Vector,
   ) -> Node {
     let limits = Limits::new(Size::ZERO, bounds);
-    let mut overlay_node = self.overlay.as_widget().layout(self.overlay_tree, renderer, &limits);
     let max_size = limits.max();
-    overlay_node.align(
-      self.horizontal_alignment.into(),
-      self.vertical_alignment.into(),
-      max_size,
-    );
+    let overlay_node = self.overlay.as_widget()
+      .layout(self.overlay_tree, renderer, &limits)
+      .align(
+        self.horizontal_alignment.into(),
+        self.vertical_alignment.into(),
+        max_size,
+      );
     Node::with_children(max_size, vec![overlay_node])
   }
   fn overlay(
@@ -272,7 +275,7 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
     }
 
     if let Some(on_esc_pressed) = self.on_esc_pressed.as_ref() {
-      if let Event::Keyboard(keyboard::Event::KeyPressed { key_code: keyboard::KeyCode::Escape, .. }) = event {
+      if let Event::Keyboard(keyboard::Event::KeyPressed { key: keyboard::Key::Named(Named::Escape), .. }) = event {
         shell.publish(on_esc_pressed());
         return event::Status::Captured;
       }
@@ -333,9 +336,12 @@ impl<M, R> overlay::Overlay<M, R> for ModalOverlay<'_, '_, M, R> where
     renderer.fill_quad(
       renderer::Quad {
         bounds,
-        border_radius: 0.0f32.into(),
-        border_width: 0.0,
-        border_color: Color::TRANSPARENT,
+        border: Border {
+          radius: 0.0f32.into(),
+          width: 0.0,
+          color: Color::TRANSPARENT,
+        },
+        ..renderer::Quad::default()
       },
       self.background.get_background_color(theme),
     );

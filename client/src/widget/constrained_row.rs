@@ -1,4 +1,4 @@
-use iced::{Alignment, Element, Event, Length, Point, Rectangle};
+use iced::{Alignment, Element, Event, Length, Point, Rectangle, Size};
 use iced::advanced::{Clipboard, Layout, overlay, Renderer, renderer, Shell, Widget};
 use iced::advanced::layout::{Limits, Node};
 use iced::advanced::widget::{Operation, Tree};
@@ -102,8 +102,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for ConstrainedRow<'a, M, R> {
     tree.diff_children(&self.elements);
   }
 
-  fn width(&self) -> Length { Length::Fill }
-  fn height(&self) -> Length { Length::Fixed(self.height) }
+  fn size(&self) -> Size<Length> { Size::new(Length::Fill, Length::Fixed(self.height)) }
   fn layout(&self, tree: &mut Tree, renderer: &R, limits: &Limits) -> Node {
     let limits = limits.max_height(self.height);
     let max = limits.max();
@@ -117,9 +116,10 @@ impl<'a, M, R: Renderer> Widget<M, R> for ConstrainedRow<'a, M, R> {
     for ((element, constraint), tree) in self.elements.iter().zip(&self.constraints).zip(&mut tree.children) {
       let width = (constraint.width_fill_portion / total_fill_portion) * available_width;
       let element_limits = limits.max_width(width);
-      let mut node = element.as_widget().layout(tree, renderer, &element_limits);
-      node.move_to(Point::new(x, 0.0));
-      node.align(constraint.horizontal_alignment, constraint.vertical_alignment, element_limits.max());
+      let node = element.as_widget()
+        .layout(tree, renderer, &element_limits)
+        .move_to(Point::new(x, 0.0))
+        .align(constraint.horizontal_alignment, constraint.vertical_alignment, element_limits.max());
       nodes.push(node);
       x += width + self.spacing;
     }
