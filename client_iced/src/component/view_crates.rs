@@ -19,8 +19,8 @@ pub struct ViewCrates {
   follow_crate: FollowCrate,
   follow_crate_overlay_open: bool,
 
-  crates_being_refreshed: BTreeSet<String>,
-  all_crates_being_refreshed: bool,
+  crates_being_changed: BTreeSet<String>,
+  all_crates_being_changed: bool,
 
   id_to_crate: BTreeMap<String, Crate>,
   client: AttHttpClient,
@@ -42,6 +42,7 @@ pub enum Message {
   SetCrates(Result<Vec<Crate>, AttHttpClientError>),
 
   UnfollowCrate(String),
+  RemoveCrate(String, Result<(), AttHttpClientError>),
 
   #[default]
   Ignore,
@@ -52,8 +53,8 @@ impl ViewCrates {
     Self {
       follow_crate: Default::default(),
       follow_crate_overlay_open: false,
-      crates_being_refreshed: Default::default(),
-      all_crates_being_refreshed: true,
+      crates_being_changed: Default::default(),
+      all_crates_being_changed: true,
       id_to_crate: cache.id_to_crate.clone(),
       client,
     }
@@ -86,21 +87,21 @@ impl ViewCrates {
       }
 
       RefreshCrate(crate_id) => {
-        self.crates_being_refreshed.insert(crate_id.clone());
+        self.crates_being_changed.insert(crate_id.clone());
         return self.client.clone().refresh_crate(crate_id.clone())
           .perform(|r| UpdateCrate(crate_id, r)).into();
       }
       RefreshOutdated => {
-        self.all_crates_being_refreshed = true;
+        self.all_crates_being_changed = true;
         return self.client.clone().refresh_outdated_crates().perform(UpdateCrates).into();
       }
       RefreshAll => {
-        self.all_crates_being_refreshed = true;
+        self.all_crates_being_changed = true;
         return self.client.clone().refresh_all_crates().perform(SetCrates).into();
       }
 
       UpdateCrate(crate_id, result) => {
-        self.crates_being_refreshed.remove(&crate_id);
+        self.crates_being_changed.remove(&crate_id);
         match result {
           Ok(krate) => {
             debug!(crate_id, "update crate");
@@ -110,14 +111,14 @@ impl ViewCrates {
         }
       }
       UpdateCrates(result) => {
-        self.all_crates_being_refreshed = false;
+        self.all_crates_being_changed = false;
         match result {
           Ok(crates) => {
             debug!(?crates, "update crates");
             for krate in crates {
               let crate_id = krate.id.clone();
               trace!(crate_id, "update crate");
-              self.crates_being_refreshed.remove(&crate_id);
+              self.crates_being_changed.remove(&crate_id);
               self.id_to_crate.insert(crate_id, krate);
             }
           }
@@ -125,7 +126,7 @@ impl ViewCrates {
         }
       }
       SetCrates(result) => {
-        self.all_crates_being_refreshed = false;
+        self.all_crates_being_changed = false;
         match result {
           Ok(crates) => {
             debug!(?crates, "set crates");
@@ -135,9 +136,20 @@ impl ViewCrates {
         }
       }
 
-      UnfollowCrate(id) => {
-        self.crates_being_refreshed.remove(&id);
-        self.id_to_crate.remove(&id);
+      UnfollowCrate(crate_id) => {
+        self.crates_being_changed.insert(crate_id.clone());
+        return self.client.clone().unfollow_crate(crate_id.clone())
+          .perform(|r| RemoveCrate(crate_id, r)).into();
+      }
+      RemoveCrate(crate_id, result) => {
+        self.crates_being_changed.remove(&crate_id);
+        match result {
+          Ok(()) => {
+            debug!(crate_id, "remove crate");
+            self.id_to_crate.remove(&crate_id);
+          },
+          Err(cause) => error!(?cause, "failed to unfollow crate"),
+        }
       }
 
       Ignore => {}
@@ -161,7 +173,7 @@ impl ViewCrates {
           .button(icon_text("\u{F116}"))
           .padding(4.0)
           .on_press(|| Message::RefreshCrate(id.clone()))
-          .disabled(self.all_crates_being_refreshed || self.crates_being_refreshed.contains(id))
+          .disabled(self.all_crates_being_changed || self.crates_being_changed.contains(id))
           .add(),
         5 => WidgetBuilder::once()
           .button(icon_text("\u{F5DE}"))
@@ -185,7 +197,7 @@ impl ViewCrates {
       .push(0.2, "")
       .into_element();
 
-    let disable_refresh = self.all_crates_being_refreshed || !self.crates_being_refreshed.is_empty();
+    let disable_refresh = self.all_crates_being_changed || !self.crates_being_changed.is_empty();
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
       .button("Add").positive_style().on_press(|| Message::OpenFollowCrateModal).add()
