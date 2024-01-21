@@ -2,13 +2,13 @@ use iced::Element;
 use iced::widget::Button;
 use iced::widget::button::StyleSheet as ButtonStyleSheet;
 
-use super::super::state::Types;
+use super::super::state::StateTypes;
 
 pub trait ButtonActions<'a, M> {
   type Change;
   fn on_press<F: Fn() -> M + 'a>(self, on_press: F) -> Self::Change;
 }
-pub trait CreateButton<'a, S: Types<'a>> where
+pub trait CreateButton<'a, S: StateTypes<'a>> where
   S::Theme: ButtonStyleSheet
 {
   type Message: Clone;
@@ -25,7 +25,7 @@ impl<'a, M> ButtonActions<'a, M> for ButtonPassthrough {
     ButtonFunctions { on_press: Box::new(on_press) }
   }
 }
-impl<'a, S: Types<'a>> CreateButton<'a, S> for ButtonPassthrough where
+impl<'a, S: StateTypes<'a>> CreateButton<'a, S> for ButtonPassthrough where
   S::Theme: ButtonStyleSheet,
   S::Message: Clone,
 {
@@ -52,7 +52,7 @@ impl<'a, M> ButtonActions<'a, M> for ButtonFunctions<'a, M> {
     self
   }
 }
-impl<'a, S: Types<'a>> CreateButton<'a, S> for ButtonFunctions<'a, S::Message> where
+impl<'a, S: StateTypes<'a>> CreateButton<'a, S> for ButtonFunctions<'a, S::Message> where
   S::Theme: ButtonStyleSheet,
 {
   type Message = ();

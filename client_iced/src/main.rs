@@ -9,7 +9,7 @@ use att_core::util::dotenv;
 use att_core::util::start::{DirectoryKind, Start};
 
 use crate::app::{App, Flags};
-use crate::widget::font::ICON_FONT_BYTES;
+use crate::widget::icon;
 
 pub mod app;
 pub mod widget;
@@ -47,7 +47,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   };
 
   let fonts = vec![
-    Cow::Borrowed(ICON_FONT_BYTES),
+    Cow::Borrowed(icon::FONT_BYTES),
     #[cfg(target_arch = "wasm32")] Cow::Borrowed(widget::font::FIRA_SANS_FONT_BYTES)
   ];
 

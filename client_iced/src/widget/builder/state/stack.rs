@@ -20,7 +20,7 @@ use std::marker::PhantomData;
 use iced::advanced::Renderer;
 use iced::Element;
 
-use super::{StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, Types};
+use super::{StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, StateTypes};
 use super::super::WidgetBuilder;
 
 /// Algebraic stack list constructor.
@@ -75,7 +75,7 @@ impl<E> StackList for Nil<E> {
 
 // Implement state traits for all types implementing `StackList`.
 
-impl<'a, M: 'a, R: Renderer + 'a, L> Types<'a> for L where
+impl<'a, M: 'a, R: Renderer + 'a, L> StateTypes<'a> for L where
   L: StackList<E=Element<'a, M, R>>
 {
   type Message = M;

@@ -6,7 +6,7 @@ pub mod heap;
 pub mod once;
 
 /// Internal trait for access to element types.
-pub trait Types<'a> {
+pub trait StateTypes<'a> {
   /// [`Element`] message type.
   type Message: 'a;
   /// [`Element`] renderer type.
@@ -16,7 +16,7 @@ pub trait Types<'a> {
 }
 
 /// Internal trait for adding to widget builder state.
-pub trait StateAdd<'a>: Types<'a> {
+pub trait StateAdd<'a>: StateTypes<'a> {
   /// Type to return from [`Self::add`].
   type AddOutput;
   /// Add `element` onto `self`, then return a [new builder](Self::AddOutput) with those elements.
@@ -24,7 +24,7 @@ pub trait StateAdd<'a>: Types<'a> {
 }
 
 /// Internal trait for consuming widget builder state.
-pub trait StateConsume<'a>: Types<'a> {
+pub trait StateConsume<'a>: StateTypes<'a> {
   /// Type to return from [`Self::consume`].
   type ConsumeOutput;
   /// Consume all [elements](Element) from `self` into a [`Vec`], call `f` on that [`Vec`] to create a new [`Element`],
@@ -34,7 +34,7 @@ pub trait StateConsume<'a>: Types<'a> {
 }
 
 /// Internal trait for mapping widget builder state.
-pub trait StateMap<'a>: Types<'a> {
+pub trait StateMap<'a>: StateTypes<'a> {
   /// Builder type to return from [`Self::map_last`].
   type MapOutput;
   /// Take the last [`Element`] from `self`, call `map` on that [`Element`] to create a new [`Element`], then return
@@ -44,13 +44,13 @@ pub trait StateMap<'a>: Types<'a> {
 }
 
 /// Internal trait taking all widget builder state.
-pub trait StateTakeAll<'a>: Types<'a> {
+pub trait StateTakeAll<'a>: StateTypes<'a> {
   /// Take all [elements](Element) from `self` into a [`Vec`] and return it.
   fn take_all(self) -> Vec<Element<'a, Self::Message, Self::Renderer>>;
 }
 
 /// Internal trait taking single widget builder state.
-pub trait StateTake<'a>: Types<'a> {
+pub trait StateTake<'a>: StateTypes<'a> {
   /// Take the single [`Element`] from `self` and return it.
   fn take(self) -> Element<'a, Self::Message, Self::Renderer>;
 }

@@ -10,6 +10,7 @@ use crate::app::Cache;
 use crate::component::{follow_crate, Perform, Update};
 use crate::component::follow_crate::FollowCrate;
 use crate::widget::builder::WidgetBuilder;
+use crate::widget::icon::icon_text;
 use crate::widget::modal::Modal;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
@@ -27,10 +28,10 @@ pub struct ViewCrates {
 
 #[derive(Default, Debug)]
 pub enum Message {
-  ToAddCrate(follow_crate::Message),
+  ToFollowCrate(follow_crate::Message),
 
-  OpenAddCrateModal,
-  CloseAddCrateModal,
+  OpenFollowCrateModal,
+  CloseFollowCrateModal,
 
   RefreshCrate(String),
   RefreshOutdated,
@@ -40,7 +41,7 @@ pub enum Message {
   UpdateCrates(Result<Vec<Crate>, AttHttpClientError>),
   SetCrates(Result<Vec<Crate>, AttHttpClientError>),
 
-  RemoveCrate(String),
+  UnfollowCrate(String),
 
   #[default]
   Ignore,
@@ -66,20 +67,20 @@ impl ViewCrates {
   pub fn update(&mut self, message: Message) -> Update<(), Command<Message>> {
     use Message::*;
     match message {
-      ToAddCrate(message) => {
+      ToFollowCrate(message) => {
         let (action, command) = self.follow_crate.update(message, &self.client).into_action_command();
         if let Some(krate) = action {
           self.id_to_crate.insert(krate.id.clone(), krate);
           self.follow_crate.clear_search_term();
           self.follow_crate_overlay_open = false;
         }
-        return command.map(ToAddCrate).into();
+        return command.map(ToFollowCrate).into();
       }
-      OpenAddCrateModal => {
+      OpenFollowCrateModal => {
         self.follow_crate_overlay_open = true;
         return self.follow_crate.focus_search_term_input().into();
       }
-      CloseAddCrateModal => {
+      CloseFollowCrateModal => {
         self.follow_crate.clear_search_term();
         self.follow_crate_overlay_open = false;
       }
@@ -134,7 +135,7 @@ impl ViewCrates {
         }
       }
 
-      RemoveCrate(id) => {
+      UnfollowCrate(id) => {
         self.crates_being_refreshed.remove(&id);
         self.id_to_crate.remove(&id);
       }
@@ -156,16 +157,17 @@ impl ViewCrates {
       let id = &krate.id;
       let element = match col {
         0 => WidgetBuilder::once().add_text(id),
-        4 => WidgetBuilder::once().button("Refresh")
-          .padding([1.0, 5.0])
+        4 => WidgetBuilder::once()
+          .button(icon_text("\u{F116}"))
+          .padding(4.0)
           .on_press(|| Message::RefreshCrate(id.clone()))
           .disabled(self.all_crates_being_refreshed || self.crates_being_refreshed.contains(id))
           .add(),
         5 => WidgetBuilder::once()
-          .button("Remove")
+          .button(icon_text("\u{F5DE}"))
           .destructive_style()
-          .padding([1.0, 5.0])
-          .on_press(|| Message::RemoveCrate(id.clone()))
+          .padding(4.0)
+          .on_press(|| Message::UnfollowCrate(id.clone()))
           .add(),
         _ => return None,
       };
@@ -179,14 +181,14 @@ impl ViewCrates {
       .push(1, "Latest Version")
       .push(1, "Updated at")
       .push(1, "Downloads")
-      .push(0.5, "")
-      .push(0.5, "")
+      .push(0.2, "")
+      .push(0.2, "")
       .into_element();
 
     let disable_refresh = self.all_crates_being_refreshed || !self.crates_being_refreshed.is_empty();
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
-      .button("Add").positive_style().on_press(|| Message::OpenAddCrateModal).add()
+      .button("Add").positive_style().on_press(|| Message::OpenFollowCrateModal).add()
       .button("Refresh Outdated").on_press(|| Message::RefreshOutdated).disabled(disable_refresh).add()
       .button("Refresh All").on_press(|| Message::RefreshAll).disabled(disable_refresh).add()
       .add_space_fill_width()
@@ -199,9 +201,9 @@ impl ViewCrates {
     if self.follow_crate_overlay_open {
       let overlay = self.follow_crate
         .view()
-        .map(Message::ToAddCrate);
+        .map(Message::ToFollowCrate);
       let modal = Modal::with_container(overlay, content)
-        .on_close_modal(|| Message::CloseAddCrateModal);
+        .on_close_modal(|| Message::CloseFollowCrateModal);
       modal.into()
     } else {
       content.into()

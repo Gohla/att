@@ -8,7 +8,7 @@
 use iced::advanced::Renderer;
 use iced::Element;
 
-use super::{StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, Types};
+use super::{StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, StateTypes};
 use super::super::WidgetBuilder;
 
 /// Heap-allocated list.
@@ -70,7 +70,7 @@ impl<E> HeapList<E> {
 
 // Implement state traits for `HeapList`.
 
-impl<'a, M: 'a, R: Renderer + 'a> Types<'a> for HeapList<Element<'a, M, R>> {
+impl<'a, M: 'a, R: Renderer + 'a> StateTypes<'a> for HeapList<Element<'a, M, R>> {
   type Message = M;
   type Renderer = R;
   type Theme = R::Theme;

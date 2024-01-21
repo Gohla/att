@@ -3,7 +3,7 @@ use iced::Element;
 use iced::widget::text_input::StyleSheet as TextInputStyleSheet;
 use iced::widget::TextInput;
 
-use super::super::state::Types;
+use super::super::state::StateTypes;
 
 pub trait TextInputActions<'a, M> {
   type Change;
@@ -11,7 +11,7 @@ pub trait TextInputActions<'a, M> {
   fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::Change;
   fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::Change;
 }
-pub trait CreateTextInput<'a, S: Types<'a>> where
+pub trait CreateTextInput<'a, S: StateTypes<'a>> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -36,7 +36,7 @@ impl<'a, M> TextInputActions<'a, M> for TextInputPassthrough {
     TextInputFunctions { on_submit: Some(Box::new(on_submit)), ..Default::default() }
   }
 }
-impl<'a, S: Types<'a>> CreateTextInput<'a, S> for TextInputPassthrough where
+impl<'a, S: StateTypes<'a>> CreateTextInput<'a, S> for TextInputPassthrough where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
   S::Message: Clone,
@@ -78,7 +78,7 @@ impl<'a, M> TextInputActions<'a, M> for TextInputFunctions<'a, M> {
     self
   }
 }
-impl<'a, S: Types<'a>> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message> where
+impl<'a, S: StateTypes<'a>> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
 {

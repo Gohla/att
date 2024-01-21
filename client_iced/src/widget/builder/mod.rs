@@ -22,6 +22,8 @@ use state::stack::Nil;
 use widget::button::{ButtonActions, ButtonPassthrough, CreateButton};
 use widget::text_input::{CreateTextInput, TextInputActions, TextInputPassthrough};
 
+use crate::widget::builder::state::StateTypes;
+
 mod state;
 mod widget;
 
@@ -202,6 +204,19 @@ impl<E> WidgetBuilder<HeapList<E>> {
     self
   }
 }
+
+impl<'a, S: StateTakeAll<'a>> Into<Vec<Element<'a, S::Message, S::Renderer>>> for WidgetBuilder<S> {
+  fn into(self) -> Vec<Element<'a, S::Message, S::Renderer>> {
+    self.take_all()
+  }
+}
+
+impl<'a, S: StateTake<'a>> Into<Element<'a, S::Message, S::Renderer>> for WidgetBuilder<S> {
+  fn into(self) -> Element<'a, S::Message, S::Renderer> {
+    self.take()
+  }
+}
+
 
 /// Builder for a [`Space`] widget.
 #[must_use]
@@ -535,7 +550,7 @@ impl<'a, S: StateAdd<'a>, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> 
 
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<'a, S: StateAdd<'a>, C, A> where
+pub struct ButtonBuilder<'a, S: StateTypes<'a>, C, A> where
   S::Theme: ButtonStyleSheet
 {
   state: S,
@@ -547,7 +562,7 @@ pub struct ButtonBuilder<'a, S: StateAdd<'a>, C, A> where
   padding: Padding,
   style: <S::Theme as ButtonStyleSheet>::Style,
 }
-impl<'a, S: StateAdd<'a>, C> ButtonBuilder<'a, S, C, ButtonPassthrough> where
+impl<'a, S: StateTypes<'a>, C> ButtonBuilder<'a, S, C, ButtonPassthrough> where
   S::Theme: ButtonStyleSheet
 {
   fn new(state: S, content: C) -> Self {
@@ -563,7 +578,7 @@ impl<'a, S: StateAdd<'a>, C> ButtonBuilder<'a, S, C, ButtonPassthrough> where
     }
   }
 }
-impl<'a, S: StateAdd<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'a, S, C, A> where
+impl<'a, S: StateTypes<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'a, S, C, A> where
   S::Theme: ButtonStyleSheet
 {
   /// Sets the width of the [`Button`].
@@ -670,7 +685,7 @@ impl<'a, S: StateAdd<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> 
   }
 }
 
-/// Builder for an [`Element`]
+/// Builder for an [`Element`].
 #[must_use]
 pub struct ElementBuilder<'a, S: StateAdd<'a>, M> {
   state: S,

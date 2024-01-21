@@ -10,6 +10,7 @@ pub mod modal;
 pub mod table;
 pub mod dark_light_toggle;
 pub mod font;
+pub mod icon;
 
 /// Widget extensions
 pub trait WidgetExt<'a, M, R> {

@@ -3,9 +3,9 @@ use std::marker::PhantomData;
 use iced::advanced::Renderer;
 use iced::Element;
 
-use super::{StateAdd, Types};
+use super::{StateAdd, StateTypes};
 
-impl<'a, M: 'a, R: Renderer + 'a> Types<'a> for PhantomData<Element<'a, M, R>> {
+impl<'a, M: 'a, R: Renderer + 'a> StateTypes<'a> for PhantomData<Element<'a, M, R>> {
   type Message = M;
   type Renderer = R;
   type Theme = R::Theme;
