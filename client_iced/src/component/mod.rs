@@ -2,7 +2,7 @@ use std::future::Future;
 
 use iced::Command;
 
-use att_core::maybe_send::MaybeSend;
+use att_core::util::maybe_send::MaybeSend;
 
 pub mod follow_crate;
 pub mod view_crates;

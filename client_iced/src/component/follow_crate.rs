@@ -3,12 +3,12 @@ use std::time::Duration;
 use iced::{Command, Element};
 use iced::widget::text_input;
 use tracing::{error, instrument};
+use att_client::{AttHttpClient, AttHttpClientError};
 
 use att_core::crates::{Crate, CrateSearch};
 
-use crate::client::{AttHttpClient, AttHttpClientError};
 use crate::component::{Perform, Update};
-use crate::time::{Instant, sleep};
+use att_core::util::time::{Instant, sleep};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;

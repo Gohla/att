@@ -6,10 +6,10 @@ use iced::window::Id;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
+use att_client::{AttHttpClient, AttHttpClientError};
 use att_core::crates::Crate;
 use att_core::users::UserCredentials;
 
-use crate::client::{AttHttpClient, AttHttpClientError};
 use crate::component::Perform;
 use crate::component::view_crates::{self, ViewCrates};
 use crate::widget::builder::WidgetBuilder;

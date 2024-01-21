@@ -3,10 +3,10 @@ use std::collections::{BTreeMap, BTreeSet};
 use iced::{Command, Element};
 use tracing::{debug, error, instrument, trace};
 
+use att_client::{AttHttpClient, AttHttpClientError};
 use att_core::crates::{Crate, CrateSearch};
 
 use crate::app::Cache;
-use crate::client::{AttHttpClient, AttHttpClientError};
 use crate::component::{follow_crate, Perform, Update};
 use crate::component::follow_crate::FollowCrate;
 use crate::widget::builder::WidgetBuilder;

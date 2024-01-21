@@ -4,18 +4,16 @@ use std::error::Error;
 use iced::{Application, Settings, window};
 use iced::window::settings::PlatformSpecific;
 
-use att_core::dotenv;
-use att_core::start::{DirectoryKind, Start};
+use att_client::AttHttpClient;
+use att_core::util::dotenv;
+use att_core::util::start::{DirectoryKind, Start};
 
 use crate::app::{App, Flags};
-use crate::client::AttHttpClient;
 use crate::widget::font::ICON_FONT_BYTES;
 
 pub mod app;
 pub mod widget;
 pub mod component;
-pub mod client;
-mod time;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let (start, _file_log_flush_guard) = Start::new("Client");

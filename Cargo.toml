@@ -4,11 +4,13 @@ cargo-features = ["named-profiles", "profile-overrides"]
 members = [
   "core",
   "client",
+  "client_iced",
   "server",
 ]
 default-members = [
   "core",
   "client",
+  "client_iced",
   "server",
 ]
 resolver = "2"
@@ -20,6 +22,7 @@ publish = false
 
 [workspace.dependencies]
 att_core = { path = "core" }
+att_client = { path = "client" }
 tokio = "1"
 futures = "0.3"
 reqwest = "0.11"

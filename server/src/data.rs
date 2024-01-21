@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use att_core::start::{DirectoryKind, Start};
+use att_core::util::start::{DirectoryKind, Start};
 
 use crate::crates::CratesData;
 use crate::job_scheduler::{BlockingJob, JobAction, JobResult};
