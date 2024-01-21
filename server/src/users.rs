@@ -11,10 +11,10 @@ use rand_core::OsRng;
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use att_core::users::UserCredentials;
+use att_core::users::{UserCredentials, UsersError};
 
 use crate::data::Database;
-use crate::util::F;
+use crate::util::JsonResult;
 
 // Data
 
@@ -105,10 +105,10 @@ impl Users {
   ) -> Result<Option<&'u User>, password_hash::Error> {
     let user = if let Some(user) = data.get_user_by_name(&user_credentials.name) {
       let parsed_hash = PasswordHash::new(&user.password_hash)?;
-      if self.argon2.verify_password(user_credentials.password.as_bytes(), &parsed_hash).is_ok() {
-        Some(user)
-      } else {
-        None // TODO: properly handle error?
+      match self.argon2.verify_password(user_credentials.password.as_bytes(), &parsed_hash) {
+        Ok(()) => Some(user),
+        Err(password_hash::Error::Password) => None,
+        Err(e) => return Err(e),
       }
     } else {
       None
@@ -182,12 +182,20 @@ pub fn router() -> Router<()> {
   Router::new()
     .route("/login", post(login).delete(logout))
 }
-async fn login(mut auth_session: AuthSession, Json(credentials): Json<UserCredentials>) -> Result<(), F> {
-  let user = auth_session.authenticate(credentials.clone()).await?.ok_or(F::forbidden())?;
-  auth_session.login(&user).await?;
-  Ok(())
+async fn login(mut auth_session: AuthSession, Json(credentials): Json<UserCredentials>) -> JsonResult<(), UsersError> {
+  async move {
+    let user = auth_session.authenticate(credentials.clone()).await
+      .map_err(|_| UsersError::Internal)?
+      .ok_or(UsersError::IncorrectUserNameOrPassword)?;
+    auth_session.login(&user).await
+      .map_err(|_| UsersError::Internal)?;
+    Ok(())
+  }.await.into()
 }
-async fn logout(mut auth_session: AuthSession) -> Result<(), F> {
-  auth_session.logout().await?;
-  Ok(())
+async fn logout(mut auth_session: AuthSession) -> JsonResult<(), UsersError> {
+  async move {
+    auth_session.logout().await
+      .map_err(|_| UsersError::Internal)?;
+    Ok(())
+  }.await.into()
 }

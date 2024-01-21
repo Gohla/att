@@ -1,19 +1,26 @@
-use std::error::Error;
-
-use axum::http::StatusCode;
+use axum::Json;
 use axum::response::{IntoResponse, Response};
+use serde::Serialize;
 
-pub struct F(StatusCode);
-impl F {
-  pub fn unauthorized() -> Self { Self(StatusCode::UNAUTHORIZED) }
-  pub fn forbidden() -> Self { Self(StatusCode::FORBIDDEN) }
-  pub fn error() -> Self { Self(StatusCode::INTERNAL_SERVER_ERROR) }
+use att_core::util::status_code::AsStatusCode;
+
+pub struct JsonResult<T, E>(pub Result<T, E>);
+
+impl<T, E> JsonResult<T, E> {
+  #[inline]
+  pub fn new(result: Result<T, E>) -> Self { Self(result) }
 }
-impl IntoResponse for F {
+impl<T, E> From<Result<T, E>> for JsonResult<T, E> {
+  #[inline]
+  fn from(result: Result<T, E>) -> Self { Self::new(result) }
+}
+
+impl<T: Serialize, E: Serialize + AsStatusCode> IntoResponse for JsonResult<T, E> {
+  #[inline]
   fn into_response(self) -> Response {
-    self.0.into_response()
+    match self.0 {
+      r @ Ok(_) => Json(r).into_response(),
+      ref r @ Err(ref e) => (e.as_status_code(), Json(r)).into_response(),
+    }
   }
-}
-impl<E: Error> From<E> for F {
-  fn from(_: E) -> Self { Self::error() }
 }

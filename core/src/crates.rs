@@ -1,5 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use thiserror::Error;
+
+use crate::util;
 
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct CrateSearch {
@@ -19,6 +22,7 @@ impl From<String> for CrateSearch {
     Self::from_term(search_term)
   }
 }
+
 
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct Crate {
@@ -52,6 +56,27 @@ impl From<&crates_io_api::Crate> for Crate {
       downloads: c.downloads,
       updated_at: c.updated_at,
       max_version: c.max_version.clone(),
+    }
+  }
+}
+
+
+#[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize, Error)]
+pub enum CrateError {
+  #[error("Not logged in")]
+  NotLoggedIn,
+  #[error("Crate was not found")]
+  NotFound,
+  #[error("Internal server error")]
+  Internal,
+}
+impl util::status_code::AsStatusCode for CrateError {
+  #[inline]
+  fn as_status_code(&self) -> util::status_code::StatusCode {
+    match self {
+      Self::NotLoggedIn => util::status_code::StatusCode::FORBIDDEN,
+      Self::NotFound => util::status_code::StatusCode::NOT_FOUND,
+      Self::Internal => util::status_code::StatusCode::INTERNAL_SERVER_ERROR,
     }
   }
 }

@@ -6,7 +6,7 @@ use iced::window::Id;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use att_client::{AttHttpClient, AttHttpClientError};
+use att_client::{AttClient, AttClientError};
 use att_core::crates::Crate;
 use att_core::users::UserCredentials;
 
@@ -29,7 +29,7 @@ pub struct Flags {
   pub data: Option<Data>,
   pub cache: Option<Cache>,
   pub save_fn: SaveFn,
-  pub client: AttHttpClient,
+  pub client: AttClient,
   pub dark_mode: bool,
 }
 
@@ -46,7 +46,7 @@ pub struct App {
 pub enum Message {
   ToViewCrates(view_crates::Message),
 
-  LoginResponse(Result<(), AttHttpClientError>),
+  LoginResponse(Result<(), AttClientError>),
 
   ToggleLightDarkMode,
 
@@ -97,7 +97,7 @@ impl iced::Application for App {
             info!("logged in");
             return self.view_crates.request_followed_crates().map(Message::ToViewCrates);
           }
-          Err(cause) => error!(?cause, "failed to login"),
+          Err(cause) => error!(%cause, "failed to login: {cause:?}"),
         }
       }
 
@@ -108,7 +108,7 @@ impl iced::Application for App {
       Message::Exit(window_id) => {
         self.view_crates.cache(&mut self.cache);
         if let Err(cause) = (self.save_fn)(&self.data, &self.cache) {
-          error!(?cause, "failed to save data and cache");
+          error!(%cause, "failed to save data and cache: {cause:?}");
         }
         return window::close(window_id);
       }

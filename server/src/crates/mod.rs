@@ -2,21 +2,21 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::future::Future;
 
-use axum::{Json, Router};
 use axum::extract::{Path, Query, State};
+use axum::Router;
 use axum_login::AuthUser;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use att_core::crates::{Crate, CrateSearch};
+use att_core::crates::{Crate, CrateError, CrateSearch};
 use crates_io_client::CratesIoClient;
 
 use crate::crates::crates_io_client::CratesIoClientError;
 use crate::data::Database;
 use crate::job_scheduler::{Job, JobAction, JobResult};
 use crate::users::AuthSession;
-use crate::util::F;
+use crate::util::JsonResult;
 
 pub mod crates_io_client;
 
@@ -50,8 +50,8 @@ impl Crates {
     let crates = response.map(|crates_page| crates_page.crates.into_iter().map(|c| c.into()).collect());
     Ok(crates)
   }
-  #[instrument(skip(self, data), err)]
-  pub async fn get_followed_crates(&self, data: &CratesData, user_id: u64) -> Result<Vec<Crate>, CratesIoClientError> {
+  #[instrument(skip(self, data))]
+  pub async fn get_followed_crates(&self, data: &CratesData, user_id: u64) -> Vec<Crate> {
     let crates = if let Some(followed_crate_ids) = data.followed_crate_ids.get(&user_id) {
       let mut crates = Vec::with_capacity(followed_crate_ids.len());
       for crate_id in followed_crate_ids {
@@ -63,32 +63,17 @@ impl Crates {
     } else {
       Vec::new()
     };
-    Ok(crates)
+    crates
   }
   #[instrument(skip(self, data), err)]
-  pub async fn get(&self, data: &mut CratesData, crate_id: &str) -> Result<Crate, CratesIoClientError> {
-    let krate = if let Some((krate, _)) = data.id_to_crate.get(crate_id) {
-      krate.clone()
-    } else {
-      self.refresh_one(data, crate_id.to_string()).await?
-    };
-    Ok(krate)
+  pub async fn get(&self, data: &mut CratesData, crate_id: String) -> Result<Crate, CratesIoClientError> {
+    self.ensure_refreshed(&mut data.id_to_crate, &crate_id, Utc::now(), refresh_hourly).await
   }
 
   #[instrument(skip(self, data), err)]
-  pub async fn follow(&self, data: &mut CratesData, crate_id: &str, user_id: u64) -> Result<Crate, CratesIoClientError> {
-    let now = Utc::now();
-    let krate = if let Some((krate, last_refreshed)) = data.id_to_crate.get_mut(crate_id) {
-      if Self::should_refresh(&now, last_refreshed) {
-        let response = self.crates_io_client.refresh(crate_id.to_string()).await?;
-        *krate = response.crate_data.into();
-        *last_refreshed = now;
-      }
-      krate.clone()
-    } else {
-      self.refresh_one(data, crate_id.to_string()).await?
-    };
-    data.followed_crate_ids.entry(user_id).or_default().insert(crate_id.to_string());
+  pub async fn follow(&self, data: &mut CratesData, crate_id: String, user_id: u64) -> Result<Crate, CratesIoClientError> {
+    let krate = self.ensure_refreshed(&mut data.id_to_crate, &crate_id, Utc::now(), refresh_hourly).await?;
+    data.followed_crate_ids.entry(user_id).or_default().insert(crate_id);
     Ok(krate)
   }
   pub fn unfollow(&self, data: &mut CratesData, crate_id: &str, user_id: u64) {
@@ -100,23 +85,19 @@ impl Crates {
 
   #[instrument(skip(self, data), err)]
   pub async fn refresh_one(&self, data: &mut CratesData, crate_id: String) -> Result<Crate, CratesIoClientError> {
-    let response = self.crates_io_client.refresh(crate_id).await?;
-    let krate: Crate = response.crate_data.into();
-    let now = Utc::now();
-    data.id_to_crate.insert(krate.id.clone(), (krate.clone(), now));
-    Ok(krate)
+    self.ensure_refreshed(&mut data.id_to_crate, &crate_id, Utc::now(), |_, _| true).await
   }
   #[instrument(skip(self, data), err)]
-  pub async fn refresh_outdated(&self, data: &mut CratesData) -> Result<Vec<Crate>, CratesIoClientError> {
-    self.refresh_multiple(data, Utc::now(), Self::should_refresh).await
+  pub async fn refresh_outdated(&self, data: &mut CratesData, user_id: u64) -> Result<Vec<Crate>, CratesIoClientError> {
+    self.refresh_multiple(data, user_id, Utc::now(), refresh_hourly).await
   }
   #[instrument(skip(self, data), err)]
-  pub async fn refresh_all(&self, data: &mut CratesData) -> Result<Vec<Crate>, CratesIoClientError> {
-    self.refresh_multiple(data, Utc::now(), |_, _| true).await
+  pub async fn refresh_all(&self, data: &mut CratesData, user_id: u64) -> Result<Vec<Crate>, CratesIoClientError> {
+    self.refresh_multiple(data, user_id, Utc::now(), |_, _| true).await
   }
 
   #[instrument(skip_all, err)]
-  async fn refresh_multiple(
+  pub async fn refresh_for_all_users(
     &self,
     data: &mut CratesData,
     now: DateTime<Utc>,
@@ -145,9 +126,50 @@ impl Crates {
     }
     Ok(refreshed)
   }
-  fn should_refresh(now: &DateTime<Utc>, last_refresh: &DateTime<Utc>) -> bool {
-    now.signed_duration_since(last_refresh) > Duration::hours(1)
+
+  #[instrument(skip_all, err)]
+  async fn refresh_multiple(
+    &self,
+    data: &mut CratesData,
+    user_id: u64,
+    now: DateTime<Utc>,
+    should_refresh: impl Fn(&DateTime<Utc>, &DateTime<Utc>) -> bool
+  ) -> Result<Vec<Crate>, CratesIoClientError> {
+    let mut refreshed = Vec::new();
+    if let Some(followed_crate_ids) = data.followed_crate_ids.get(&user_id) {
+      for crate_id in followed_crate_ids {
+        let krate = self.ensure_refreshed(&mut data.id_to_crate, crate_id, now, &should_refresh).await?;
+        refreshed.push(krate);
+      }
+    }
+    Ok(refreshed)
   }
+  async fn ensure_refreshed(
+    &self,
+    id_to_crate: &mut BTreeMap<String, (Crate, DateTime<Utc>)>,
+    crate_id: &String,
+    now: DateTime<Utc>,
+    should_refresh: impl Fn(&DateTime<Utc>, &DateTime<Utc>) -> bool
+  ) -> Result<Crate, CratesIoClientError> {
+    let krate = if let Some((krate, last_refreshed)) = id_to_crate.get_mut(crate_id) {
+      if should_refresh(&now, last_refreshed) {
+        let response = self.crates_io_client.refresh(crate_id.clone()).await?;
+        *krate = response.crate_data.into();
+        *last_refreshed = now;
+      }
+      krate.clone()
+    } else {
+      let response = self.crates_io_client.refresh(crate_id.clone()).await?;
+      let krate: Crate = response.crate_data.into();
+      id_to_crate.insert(crate_id.clone(), (krate.clone(), now));
+      krate
+    }; // Note: can't use entry API due to async.
+    Ok(krate)
+  }
+}
+
+fn refresh_hourly(now: &DateTime<Utc>, last_refresh: &DateTime<Utc>) -> bool {
+  now.signed_duration_since(last_refresh) > Duration::hours(1)
 }
 
 
@@ -177,54 +199,78 @@ async fn search_crates(
   auth_session: AuthSession,
   State(state): State<CratesRoutingState>,
   Query(search): Query<CrateSearch>
-) -> Result<Json<Vec<Crate>>, F> {
-  let data = state.database.read().await;
-  let crates = match search {
-    CrateSearch { followed: true, .. } => {
-      if let Some(user) = &auth_session.user {
-        state.crates.get_followed_crates(&data.crates, user.id()).await?
-      } else {
-        return Err(F::unauthorized())
+) -> JsonResult<Vec<Crate>, CrateError> {
+  async move {
+    let data = state.database.read().await;
+    let crates = match search {
+      CrateSearch { followed: true, .. } => {
+        if let Some(user) = &auth_session.user {
+          state.crates.get_followed_crates(&data.crates, user.id()).await
+        } else {
+          return Err(CrateError::NotLoggedIn)
+        }
       }
-    }
-    CrateSearch { search_term: Some(search_term), .. } => state.crates.search(search_term).await?.unwrap_or_default(),
-    _ => Vec::default()
-  };
-  Ok(Json(crates))
+      CrateSearch { search_term: Some(search_term), .. } => state.crates.search(search_term).await
+        .map_err(|_| CrateError::Internal)?
+        .unwrap_or_default(),
+      _ => Vec::default()
+    };
+    Ok(crates)
+  }.await.into()
 }
-async fn get_crate(State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
-  let mut data = state.database.write().await;
-  let krate = state.crates.get(&mut data.crates, &crate_id).await?;
-  Ok(Json(krate))
-}
-
-async fn follow_crate(auth_session: AuthSession, State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
-  let user_id = auth_session.user.ok_or(F::unauthorized())?.id();
-  let mut data = state.database.write().await;
-  let krate = state.crates.follow(&mut data.crates, &crate_id, user_id).await?;
-  Ok(Json(krate))
-}
-async fn unfollow_crate(auth_session: AuthSession, State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> Result<(), F> {
-  let user_id = auth_session.user.ok_or(F::unauthorized())?.id();
-  let mut data = state.database.write().await;
-  state.crates.unfollow(&mut data.crates, &crate_id, user_id);
-  Ok(())
+async fn get_crate(State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> JsonResult<Crate, CrateError> {
+  async move {
+    let mut data = state.database.write().await;
+    let krate = state.crates.get(&mut data.crates, crate_id).await
+      .map_err(CratesIoClientError::into_crate_error)?;
+    Ok(krate)
+  }.await.into()
 }
 
-async fn refresh_crate(State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> Result<Json<Crate>, F> {
-  let mut data = state.database.write().await;
-  let krate = state.crates.refresh_one(&mut data.crates, crate_id).await?;
-  Ok(Json(krate))
+async fn follow_crate(auth_session: AuthSession, State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> JsonResult<Crate, CrateError> {
+  async move {
+    let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id();
+    let mut data = state.database.write().await;
+    let krate = state.crates.follow(&mut data.crates, crate_id, user_id).await
+      .map_err(CratesIoClientError::into_crate_error)?;
+    Ok(krate)
+  }.await.into()
 }
-async fn refresh_outdated_crates(State(state): State<CratesRoutingState>) -> Result<Json<Vec<Crate>>, F> {
-  let mut data = state.database.write().await;
-  let crates = state.crates.refresh_outdated(&mut data.crates).await?;
-  Ok(Json(crates))
+async fn unfollow_crate(auth_session: AuthSession, State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> JsonResult<(), CrateError> {
+  async move {
+    let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id();
+    let mut data = state.database.write().await;
+    state.crates.unfollow(&mut data.crates, &crate_id, user_id);
+    Ok(())
+  }.await.into()
 }
-async fn refresh_all_crates(State(state): State<CratesRoutingState>) -> Result<Json<Vec<Crate>>, F> {
-  let mut data = state.database.write().await;
-  let crates = state.crates.refresh_all(&mut data.crates).await?;
-  Ok(Json(crates))
+
+async fn refresh_crate(auth_session: AuthSession, State(state): State<CratesRoutingState>, Path(crate_id): Path<String>) -> JsonResult<Crate, CrateError> {
+  async move {
+    let _ = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id();
+    let mut data = state.database.write().await;
+    let krate = state.crates.refresh_one(&mut data.crates, crate_id).await
+      .map_err(CratesIoClientError::into_crate_error)?;
+    Ok(krate)
+  }.await.into()
+}
+async fn refresh_outdated_crates(auth_session: AuthSession, State(state): State<CratesRoutingState>) -> JsonResult<Vec<Crate>, CrateError> {
+  async move {
+    let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id();
+    let mut data = state.database.write().await;
+    let crates = state.crates.refresh_outdated(&mut data.crates, user_id).await
+      .map_err(CratesIoClientError::into_crate_error)?;
+    Ok(crates)
+  }.await.into()
+}
+async fn refresh_all_crates(auth_session: AuthSession, State(state): State<CratesRoutingState>) -> JsonResult<Vec<Crate>, CrateError> {
+  async move {
+    let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id();
+    let mut data = state.database.write().await;
+    let crates = state.crates.refresh_all(&mut data.crates, user_id).await
+      .map_err(CratesIoClientError::into_crate_error)?;
+    Ok(crates)
+  }.await.into()
 }
 
 
@@ -241,7 +287,7 @@ impl RefreshJob {
 }
 impl Job for RefreshJob {
   async fn run(&self) -> JobResult {
-    self.crates.refresh_outdated(&mut self.database.write().await.crates).await?;
+    self.crates.refresh_for_all_users(&mut self.database.write().await.crates, Utc::now(), refresh_hourly).await?;
     Ok(JobAction::Continue)
   }
 }

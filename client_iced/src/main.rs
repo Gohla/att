@@ -4,7 +4,7 @@ use std::error::Error;
 use iced::{Application, Settings, window};
 use iced::window::settings::PlatformSpecific;
 
-use att_client::AttHttpClient;
+use att_client::AttClient;
 use att_core::util::start::{DirectoryKind, dotenv, Start};
 
 use crate::app::{App, Flags};
@@ -25,7 +25,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   });
 
   let base_url = std::env::var("ATT_CLIENT_BASE_URL").unwrap_or_else(|_| dotenv!("ATT_CLIENT_BASE_URL").to_string());
-  let client = AttHttpClient::from_base_url(base_url)?;
+  let client = AttClient::from_base_url(base_url)?;
 
   let dark_mode = match dark_light::detect() {
     dark_light::Mode::Dark => true,

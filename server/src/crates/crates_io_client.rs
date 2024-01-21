@@ -11,6 +11,8 @@ use futures::FutureExt;
 use tokio::sync::{mpsc, oneshot};
 use tracing::{debug, info, instrument, trace};
 
+use att_core::crates::CrateError;
+
 // Public API
 
 #[derive(Clone)]
@@ -41,6 +43,14 @@ impl CratesIoClientError {
       Err(Self::Cancelled) => Ok(None),
       Err(e) => Err(e),
       Ok(v) => Ok(Some(v))
+    }
+  }
+
+  #[inline]
+  pub fn into_crate_error(self) -> CrateError {
+    match self {
+      Self::CratesIoFail(crates_io_api::Error::NotFound(_)) => CrateError::NotFound,
+      _ => CrateError::Internal,
     }
   }
 }

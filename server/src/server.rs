@@ -45,7 +45,7 @@ impl Server {
       ;
 
     let router = Router::new()
-      .nest("/api/v1", api_routes)
+      .nest("/api", api_routes)
       .layer(session_layer)
       .layer(authentication_layer)
       .layer(TraceLayer::new_for_http())

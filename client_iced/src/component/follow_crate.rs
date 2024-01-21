@@ -3,12 +3,12 @@ use std::time::Duration;
 use iced::{Command, Element};
 use iced::widget::text_input;
 use tracing::{error, instrument};
-use att_client::{AttHttpClient, AttHttpClientError};
 
+use att_client::{AttClient, AttClientError};
 use att_core::crates::{Crate, CrateSearch};
+use att_core::util::time::{Instant, sleep};
 
 use crate::component::{Perform, Update};
-use att_core::util::time::{Instant, sleep};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
@@ -18,16 +18,16 @@ pub struct FollowCrate {
   search_id: text_input::Id,
   search_term: String,
   search_wait_until: Option<Instant>,
-  crates: Result<Vec<Crate>, AttHttpClientError>,
+  crates: Result<Vec<Crate>, AttClientError>,
 }
 
 #[derive(Default, Debug)]
 pub enum Message {
   SetSearchTerm(String),
   SearchCrates,
-  SetCrates(Result<Vec<Crate>, AttHttpClientError>),
+  SetCrates(Result<Vec<Crate>, AttClientError>),
   FollowCrate(String),
-  ReceiveFollowedCrate(Result<Crate, AttHttpClientError>),
+  ReceiveFollowedCrate(Result<Crate, AttClientError>),
   #[default]
   Ignore,
 }
@@ -56,7 +56,7 @@ impl FollowCrate {
 
 impl FollowCrate {
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message, client: &AttHttpClient) -> Update<Option<Crate>, Command<Message>> {
+  pub fn update(&mut self, message: Message, client: &AttClient) -> Update<Option<Crate>, Command<Message>> {
     use Message::*;
     match message {
       SetSearchTerm(search_term) => {
@@ -80,13 +80,13 @@ impl FollowCrate {
       }
       SetCrates(crates) => {
         if let Err(cause) = &crates {
-          error!(?cause, "failed to search for crates");
+          error!(%cause, "failed to search for crates: {cause:?}");
         }
         self.crates = crates
       },
       FollowCrate(crate_id) => return client.clone().follow_crate(crate_id).perform(ReceiveFollowedCrate).into(),
       ReceiveFollowedCrate(Ok(krate)) => return Update::from_action(Some(krate)),
-      ReceiveFollowedCrate(Err(cause)) => error!(?cause, "failed to follow crate"),
+      ReceiveFollowedCrate(Err(cause)) => error!(%cause, "failed to follow crate: {cause:?}"),
       Ignore => {},
     }
     Update::default()

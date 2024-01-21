@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use iced::{Command, Element};
 use tracing::{debug, error, instrument, trace};
 
-use att_client::{AttHttpClient, AttHttpClientError};
+use att_client::{AttClient, AttClientError};
 use att_core::crates::{Crate, CrateSearch};
 
 use crate::app::Cache;
@@ -23,7 +23,7 @@ pub struct ViewCrates {
   all_crates_being_changed: bool,
 
   id_to_crate: BTreeMap<String, Crate>,
-  client: AttHttpClient,
+  client: AttClient,
 }
 
 #[derive(Default, Debug)]
@@ -37,19 +37,19 @@ pub enum Message {
   RefreshOutdated,
   RefreshAll,
 
-  UpdateCrate(String, Result<Crate, AttHttpClientError>),
-  UpdateCrates(Result<Vec<Crate>, AttHttpClientError>),
-  SetCrates(Result<Vec<Crate>, AttHttpClientError>),
+  UpdateCrate(String, Result<Crate, AttClientError>),
+  UpdateCrates(Result<Vec<Crate>, AttClientError>),
+  SetCrates(Result<Vec<Crate>, AttClientError>),
 
   UnfollowCrate(String),
-  RemoveCrate(String, Result<(), AttHttpClientError>),
+  RemoveCrate(String, Result<(), AttClientError>),
 
   #[default]
   Ignore,
 }
 
 impl ViewCrates {
-  pub fn new(client: AttHttpClient, cache: &Cache) -> Self {
+  pub fn new(client: AttClient, cache: &Cache) -> Self {
     Self {
       follow_crate: Default::default(),
       follow_crate_overlay_open: false,
@@ -107,7 +107,7 @@ impl ViewCrates {
             debug!(crate_id, "update crate");
             self.id_to_crate.insert(crate_id, krate);
           },
-          Err(cause) => error!(?cause, "failed to update crate"),
+          Err(cause) => error!(%cause, "failed to update crate: {cause:?}"),
         }
       }
       UpdateCrates(result) => {
@@ -122,7 +122,7 @@ impl ViewCrates {
               self.id_to_crate.insert(crate_id, krate);
             }
           }
-          Err(cause) => error!(?cause, "failed to update crates"),
+          Err(cause) => error!(%cause, "failed to update crates: {cause:?}"),
         }
       }
       SetCrates(result) => {
@@ -132,7 +132,7 @@ impl ViewCrates {
             debug!(?crates, "set crates");
             self.id_to_crate = BTreeMap::from_iter(crates.into_iter().map(|c| (c.id.clone(), c)));
           }
-          Err(cause) => error!(?cause, "failed to set crates"),
+          Err(cause) => error!(%cause, "failed to set crates: {cause:?}"),
         }
       }
 
@@ -148,7 +148,7 @@ impl ViewCrates {
             debug!(crate_id, "remove crate");
             self.id_to_crate.remove(&crate_id);
           },
-          Err(cause) => error!(?cause, "failed to unfollow crate"),
+          Err(cause) => error!(%cause, "failed to unfollow crate: {cause:?}"),
         }
       }
 
@@ -180,6 +180,7 @@ impl ViewCrates {
           .destructive_style()
           .padding(4.0)
           .on_press(|| Message::UnfollowCrate(id.clone()))
+          .disabled(self.all_crates_being_changed || self.crates_being_changed.contains(id))
           .add(),
         _ => return None,
       };
