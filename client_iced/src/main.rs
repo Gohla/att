@@ -5,8 +5,7 @@ use iced::{Application, Settings, window};
 use iced::window::settings::PlatformSpecific;
 
 use att_client::AttHttpClient;
-use att_core::util::dotenv;
-use att_core::util::start::{DirectoryKind, Start};
+use att_core::util::start::{DirectoryKind, dotenv, Start};
 
 use crate::app::{App, Flags};
 use crate::widget::icon;

@@ -4,7 +4,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use directories::ProjectDirs;
-use dotenvy_macro::dotenv;
+pub use dotenvy_macro::dotenv;
 use tracing_appender::non_blocking::WorkerGuard;
 use tracing_subscriber::EnvFilter;
 use tracing_subscriber::Layer;

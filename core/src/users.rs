@@ -21,7 +21,7 @@ impl UserCredentials {
 }
 impl Debug for UserCredentials {
   fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-    f.debug_struct("User")
+    f.debug_struct("UserCredentials")
       .field("name", &self.name)
       .field("password", &"[redacted]")
       .finish()

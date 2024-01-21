@@ -15,4 +15,4 @@ tracing.workspace = true
 iced = { workspace = true, default-features = true, features = ["advanced", "tokio"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-iced = { workspace = true, default-features = false, features = ["advanced", "webgl"] }
+iced = { workspace = true, default-features = true, features = ["advanced"] }
