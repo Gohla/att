@@ -4,7 +4,7 @@ use iced::{Command, Element};
 use iced::widget::text_input;
 use tracing::{error, instrument};
 
-use att_client::{AttClient, AttClientError};
+use att_client::http_client::{AttHttpClient, AttHttpClientError};
 use att_core::crates::{Crate, CrateSearch};
 use att_core::util::time::{Instant, sleep};
 
@@ -18,16 +18,16 @@ pub struct FollowCrate {
   search_id: text_input::Id,
   search_term: String,
   search_wait_until: Option<Instant>,
-  crates: Result<Vec<Crate>, AttClientError>,
+  crates: Result<Vec<Crate>, AttHttpClientError>,
 }
 
 #[derive(Default, Debug)]
 pub enum Message {
   SetSearchTerm(String),
   SearchCrates,
-  SetCrates(Result<Vec<Crate>, AttClientError>),
+  SetCrates(Result<Vec<Crate>, AttHttpClientError>),
   FollowCrate(String),
-  ReceiveFollowedCrate(Result<Crate, AttClientError>),
+  ReceiveFollowedCrate(Result<Crate, AttHttpClientError>),
   #[default]
   Ignore,
 }
@@ -56,7 +56,7 @@ impl FollowCrate {
 
 impl FollowCrate {
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message, client: &AttClient) -> Update<Option<Crate>, Command<Message>> {
+  pub fn update(&mut self, message: Message, client: &AttHttpClient) -> Update<Option<Crate>, Command<Message>> {
     use Message::*;
     match message {
       SetSearchTerm(search_term) => {

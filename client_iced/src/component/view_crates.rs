@@ -3,7 +3,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use iced::{Command, Element};
 use tracing::{debug, error, instrument, trace};
 
-use att_client::{AttClient, AttClientError};
+use att_client::http_client::{AttHttpClient, AttHttpClientError};
 use att_core::crates::{Crate, CrateSearch};
 
 use crate::app::Cache;
@@ -23,7 +23,7 @@ pub struct ViewCrates {
   all_crates_being_changed: bool,
 
   id_to_crate: BTreeMap<String, Crate>,
-  client: AttClient,
+  client: AttHttpClient,
 }
 
 #[derive(Default, Debug)]
@@ -37,19 +37,19 @@ pub enum Message {
   RefreshOutdated,
   RefreshAll,
 
-  UpdateCrate(String, Result<Crate, AttClientError>),
-  UpdateCrates(Result<Vec<Crate>, AttClientError>),
-  SetCrates(Result<Vec<Crate>, AttClientError>),
+  UpdateCrate(String, Result<Crate, AttHttpClientError>),
+  UpdateCrates(Result<Vec<Crate>, AttHttpClientError>),
+  SetCrates(Result<Vec<Crate>, AttHttpClientError>),
 
   UnfollowCrate(String),
-  RemoveCrate(String, Result<(), AttClientError>),
+  RemoveCrate(String, Result<(), AttHttpClientError>),
 
   #[default]
   Ignore,
 }
 
 impl ViewCrates {
-  pub fn new(client: AttClient, cache: &Cache) -> Self {
+  pub fn new(client: AttHttpClient, cache: &Cache) -> Self {
     Self {
       follow_crate: Default::default(),
       follow_crate_overlay_open: false,

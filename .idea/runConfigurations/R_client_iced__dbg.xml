@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="B client_iced @wasm" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="build --bin att_client_iced -p att_client_iced -p att_client -p att_core --profile=dev --target=wasm32-unknown-unknown" />
+  <configuration default="false" name="R client_iced #dbg" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+    <option name="command" value="run --bin att_client_iced --profile=dbg" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="false" />

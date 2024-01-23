@@ -21,7 +21,7 @@ mod users;
 mod util;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let (start, _file_log_flush_guard) = Start::new("Server");
+  let (start, _file_log_flush_guard) = Start::new("server");
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .enable_all()

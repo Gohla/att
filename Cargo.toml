@@ -5,12 +5,14 @@ members = [
   "core",
   "client",
   "client_iced",
+  "client_dioxus",
   "server",
 ]
 default-members = [
   "core",
   "client",
   "client_iced",
+  "client_dioxus",
   "server",
 ]
 resolver = "2"

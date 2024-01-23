@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
-  <configuration default="false" name="R client_iced [dbg]" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="run --bin att_client_iced --profile=dbg" />
+  <configuration default="false" name="R client_dioxus" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
+    <option name="command" value="run --bin att_client_dioxus --profile=dev" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="false" />
@@ -12,6 +12,8 @@
     <option name="backtrace" value="SHORT" />
     <option name="isRedirectInput" value="false" />
     <option name="redirectInputPath" value="" />
-    <method v="2" />
+    <method v="2">
+      <option name="CARGO.BUILD_TASK_PROVIDER" enabled="true" />
+    </method>
   </configuration>
 </component>

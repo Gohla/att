@@ -6,7 +6,7 @@ use iced::window::Id;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 
-use att_client::{AttClient, AttClientError};
+use att_client::http_client::{AttHttpClient, AttHttpClientError};
 use att_core::crates::Crate;
 use att_core::users::UserCredentials;
 
@@ -29,7 +29,7 @@ pub struct Flags {
   pub data: Option<Data>,
   pub cache: Option<Cache>,
   pub save_fn: SaveFn,
-  pub client: AttClient,
+  pub client: AttHttpClient,
   pub dark_mode: bool,
 }
 
@@ -46,7 +46,7 @@ pub struct App {
 pub enum Message {
   ToViewCrates(view_crates::Message),
 
-  LoginResponse(Result<(), AttClientError>),
+  LoginResponse(Result<(), AttHttpClientError>),
 
   ToggleLightDarkMode,
 
@@ -66,7 +66,7 @@ impl iced::Application for App {
     let login_command = flags.client.clone().login(UserCredentials::default())
       .perform(Message::LoginResponse);
 
-    let view_crates = ViewCrates::new(flags.client, &cache);
+    let view_crates = ViewCrates::new(flags.client.clone(), &cache);
 
     let app = App {
       data,
