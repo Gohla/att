@@ -2,8 +2,6 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
-use crate::util;
-
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct CrateSearch {
   pub search_term: Option<String>,
@@ -38,24 +36,27 @@ impl Crate {
 }
 
 #[cfg(feature = "crates_io")]
-impl From<crates_io_api::Crate> for Crate {
-  fn from(c: crates_io_api::Crate) -> Self {
-    Self {
-      id: c.id,
-      downloads: c.downloads,
-      updated_at: c.updated_at,
-      max_version: c.max_version,
+pub mod crates_io {
+  use super::Crate;
+
+  impl From<crates_io_api::Crate> for Crate {
+    fn from(c: crates_io_api::Crate) -> Self {
+      Self {
+        id: c.id,
+        downloads: c.downloads,
+        updated_at: c.updated_at,
+        max_version: c.max_version,
+      }
     }
   }
-}
-#[cfg(feature = "crates_io")]
-impl From<&crates_io_api::Crate> for Crate {
-  fn from(c: &crates_io_api::Crate) -> Self {
-    Self {
-      id: c.id.clone(),
-      downloads: c.downloads,
-      updated_at: c.updated_at,
-      max_version: c.max_version.clone(),
+  impl From<&crates_io_api::Crate> for Crate {
+    fn from(c: &crates_io_api::Crate) -> Self {
+      Self {
+        id: c.id.clone(),
+        downloads: c.downloads,
+        updated_at: c.updated_at,
+        max_version: c.max_version.clone(),
+      }
     }
   }
 }
@@ -70,13 +71,21 @@ pub enum CrateError {
   #[error("Internal server error")]
   Internal,
 }
-impl util::status_code::AsStatusCode for CrateError {
-  #[inline]
-  fn as_status_code(&self) -> util::status_code::StatusCode {
-    match self {
-      Self::NotLoggedIn => util::status_code::StatusCode::FORBIDDEN,
-      Self::NotFound => util::status_code::StatusCode::NOT_FOUND,
-      Self::Internal => util::status_code::StatusCode::INTERNAL_SERVER_ERROR,
+
+#[cfg(feature = "http_status_code")]
+pub mod http_status_code {
+  use crate::util::status_code::{AsStatusCode, StatusCode};
+
+  use super::CrateError;
+
+  impl AsStatusCode for CrateError {
+    #[inline]
+    fn as_status_code(&self) -> StatusCode {
+      match self {
+        Self::NotLoggedIn => StatusCode::FORBIDDEN,
+        Self::NotFound => StatusCode::NOT_FOUND,
+        Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
+      }
     }
   }
 }
