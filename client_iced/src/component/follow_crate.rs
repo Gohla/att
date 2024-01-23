@@ -21,15 +21,13 @@ pub struct FollowCrate {
   crates: Result<Vec<Crate>, AttHttpClientError>,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub enum Message {
   SetSearchTerm(String),
   SearchCrates,
   SetCrates(Result<Vec<Crate>, AttHttpClientError>),
   FollowCrate(String),
   ReceiveFollowedCrate(Result<Crate, AttHttpClientError>),
-  #[default]
-  Ignore,
 }
 
 impl Default for FollowCrate {
@@ -87,7 +85,6 @@ impl FollowCrate {
       FollowCrate(crate_id) => return client.clone().follow_crate(crate_id).perform(ReceiveFollowedCrate).into(),
       ReceiveFollowedCrate(Ok(krate)) => return Update::from_action(Some(krate)),
       ReceiveFollowedCrate(Err(cause)) => error!(%cause, "failed to follow crate: {cause:?}"),
-      Ignore => {},
     }
     Update::default()
   }

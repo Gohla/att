@@ -18,7 +18,7 @@ pub struct ViewCrates {
   client: AttClient,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug)]
 pub enum Message {
   ToFollowCrate(follow_crate::Message),
 
@@ -34,9 +34,6 @@ pub enum Message {
   UpdateCrates(UpdateCrates<false>),
   UpdateCrate(UpdateCrate),
   RemoveCrate(RemoveCrate),
-
-  #[default]
-  Ignore,
 }
 
 impl ViewCrates {
@@ -99,8 +96,6 @@ impl ViewCrates {
       RemoveCrate(operation) => {
         let _ = operation.apply(data, view_data);
       }
-
-      Ignore => {}
     }
     Update::default()
   }
