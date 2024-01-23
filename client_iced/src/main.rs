@@ -4,7 +4,7 @@ use std::error::Error;
 use iced::{Application, Settings, window};
 use iced::window::settings::PlatformSpecific;
 
-use att_client::http_client::AttHttpClient;
+use att_client::AttClient;
 use att_core::util::start::{DirectoryKind, dotenv, Start};
 
 use crate::app::{App, Flags};
@@ -16,16 +16,14 @@ pub mod component;
 
 fn main() -> Result<(), Box<dyn Error>> {
   let (start, _file_log_flush_guard) = Start::new("client_iced");
-  let data = start.deserialize_json_file(DirectoryKind::Data, "data.json")?;
-  let cache = start.deserialize_json_file(DirectoryKind::Cache, "cache.json")?;
-  let save_fn = Box::new(move |data: &_, cache: &_| {
+  let data = start.deserialize_json_file(DirectoryKind::Data, "data.json")?.unwrap_or_default();
+  let save_fn = Box::new(move |data: &_| {
     start.serialize_json_file(DirectoryKind::Data, "data.json", data)?;
-    start.serialize_json_file(DirectoryKind::Cache, "cache.json", cache)?;
     Ok(())
   });
 
   let base_url = std::env::var("ATT_CLIENT_BASE_URL").unwrap_or_else(|_| dotenv!("ATT_CLIENT_BASE_URL").to_string());
-  let client = AttHttpClient::from_base_url(base_url)?;
+  let client = AttClient::from_base_url(base_url)?;
 
   let dark_mode = match dark_light::detect() {
     dark_light::Mode::Dark => true,
@@ -52,10 +50,9 @@ fn main() -> Result<(), Box<dyn Error>> {
 
   let flags = Flags {
     data,
-    cache,
-    save_fn,
-    client,
     dark_mode,
+    client,
+    save_fn,
   };
   let settings = Settings {
     id: Some("att".to_string()),

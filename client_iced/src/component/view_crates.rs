@@ -1,12 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
-
 use iced::{Command, Element};
-use tracing::{debug, error, instrument, trace};
+use tracing::instrument;
 
-use att_client::http_client::{AttHttpClient, AttHttpClientError};
-use att_core::crates::{Crate, CrateSearch};
+use att_client::{AttClient, Data, RemoveCrate, UpdateCrate, UpdateCrates, ViewData};
 
-use crate::app::Cache;
 use crate::component::{follow_crate, Perform, Update};
 use crate::component::follow_crate::FollowCrate;
 use crate::widget::builder::WidgetBuilder;
@@ -19,11 +15,7 @@ pub struct ViewCrates {
   follow_crate: FollowCrate,
   follow_crate_overlay_open: bool,
 
-  crates_being_changed: BTreeSet<String>,
-  all_crates_being_changed: bool,
-
-  id_to_crate: BTreeMap<String, Crate>,
-  client: AttHttpClient,
+  client: AttClient,
 }
 
 #[derive(Default, Debug)]
@@ -36,42 +28,38 @@ pub enum Message {
   RefreshCrate(String),
   RefreshOutdated,
   RefreshAll,
-
-  UpdateCrate(String, Result<Crate, AttHttpClientError>),
-  UpdateCrates(Result<Vec<Crate>, AttHttpClientError>),
-  SetCrates(Result<Vec<Crate>, AttHttpClientError>),
-
   UnfollowCrate(String),
-  RemoveCrate(String, Result<(), AttHttpClientError>),
+
+  SetCrates(UpdateCrates<true>),
+  UpdateCrates(UpdateCrates<false>),
+  UpdateCrate(UpdateCrate),
+  RemoveCrate(RemoveCrate),
 
   #[default]
   Ignore,
 }
 
 impl ViewCrates {
-  pub fn new(client: AttHttpClient, cache: &Cache) -> Self {
+  pub fn new(client: AttClient) -> Self {
     Self {
       follow_crate: Default::default(),
       follow_crate_overlay_open: false,
-      crates_being_changed: Default::default(),
-      all_crates_being_changed: true,
-      id_to_crate: cache.id_to_crate.clone(),
       client,
     }
   }
 
-  pub fn request_followed_crates(&self) -> Command<Message> {
-    self.client.clone().search_crates(CrateSearch::followed()).perform(Message::SetCrates)
+  pub fn request_followed_crates(&self, view_data: &mut ViewData) -> Command<Message> {
+    self.client.clone().get_followed_crates(view_data).perform(Message::SetCrates)
   }
 
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message) -> Update<(), Command<Message>> {
+  pub fn update(&mut self, message: Message, data: &mut Data, view_data: &mut ViewData) -> Update<(), Command<Message>> {
     use Message::*;
     match message {
       ToFollowCrate(message) => {
-        let (action, command) = self.follow_crate.update(message, &self.client).into_action_command();
+        let (action, command) = self.follow_crate.update(message, self.client.http_client()).into_action_command();
         if let Some(krate) = action {
-          self.id_to_crate.insert(krate.id.clone(), krate);
+          data.id_to_crate.insert(krate.id.clone(), krate);
           self.follow_crate.clear_search_term();
           self.follow_crate_overlay_open = false;
         }
@@ -87,69 +75,29 @@ impl ViewCrates {
       }
 
       RefreshCrate(crate_id) => {
-        self.crates_being_changed.insert(crate_id.clone());
-        return self.client.clone().refresh_crate(crate_id.clone())
-          .perform(|r| UpdateCrate(crate_id, r)).into();
+        return self.client.clone().refresh_crate(view_data, crate_id.clone()).perform(UpdateCrate).into();
       }
       RefreshOutdated => {
-        self.all_crates_being_changed = true;
-        return self.client.clone().refresh_outdated_crates().perform(UpdateCrates).into();
+        return self.client.clone().refresh_outdated_crates(view_data).perform(UpdateCrates).into();
       }
       RefreshAll => {
-        self.all_crates_being_changed = true;
-        return self.client.clone().refresh_all_crates().perform(SetCrates).into();
+        return self.client.clone().refresh_all_crates(view_data).perform(SetCrates).into();
       }
-
-      UpdateCrate(crate_id, result) => {
-        self.crates_being_changed.remove(&crate_id);
-        match result {
-          Ok(krate) => {
-            debug!(crate_id, "update crate");
-            self.id_to_crate.insert(crate_id, krate);
-          },
-          Err(cause) => error!(%cause, "failed to update crate: {cause:?}"),
-        }
-      }
-      UpdateCrates(result) => {
-        self.all_crates_being_changed = false;
-        match result {
-          Ok(crates) => {
-            debug!(?crates, "update crates");
-            for krate in crates {
-              let crate_id = krate.id.clone();
-              trace!(crate_id, "update crate");
-              self.crates_being_changed.remove(&crate_id);
-              self.id_to_crate.insert(crate_id, krate);
-            }
-          }
-          Err(cause) => error!(%cause, "failed to update crates: {cause:?}"),
-        }
-      }
-      SetCrates(result) => {
-        self.all_crates_being_changed = false;
-        match result {
-          Ok(crates) => {
-            debug!(?crates, "set crates");
-            self.id_to_crate = BTreeMap::from_iter(crates.into_iter().map(|c| (c.id.clone(), c)));
-          }
-          Err(cause) => error!(%cause, "failed to set crates: {cause:?}"),
-        }
-      }
-
       UnfollowCrate(crate_id) => {
-        self.crates_being_changed.insert(crate_id.clone());
-        return self.client.clone().unfollow_crate(crate_id.clone())
-          .perform(|r| RemoveCrate(crate_id, r)).into();
+        return self.client.clone().unfollow_crate(view_data, crate_id.clone()).perform(RemoveCrate).into();
       }
-      RemoveCrate(crate_id, result) => {
-        self.crates_being_changed.remove(&crate_id);
-        match result {
-          Ok(()) => {
-            debug!(crate_id, "remove crate");
-            self.id_to_crate.remove(&crate_id);
-          },
-          Err(cause) => error!(%cause, "failed to unfollow crate: {cause:?}"),
-        }
+
+      UpdateCrate(operation) => {
+        let _ = operation.apply(data, view_data);
+      }
+      UpdateCrates(operation) => {
+        let _ = operation.apply(data, view_data);
+      }
+      SetCrates(operation) => {
+        let _ = operation.apply(data, view_data);
+      }
+      RemoveCrate(operation) => {
+        let _ = operation.apply(data, view_data);
       }
 
       Ignore => {}
@@ -157,30 +105,30 @@ impl ViewCrates {
     Update::default()
   }
 
-  pub fn view(&self) -> Element<Message> {
+  pub fn view<'a>(&'a self, data: &'a Data, view_data: &'a ViewData) -> Element<Message> {
     let cell_to_element = |row, col| -> Option<Element<Message>> {
-      let Some(krate) = self.id_to_crate.values().nth(row) else { return None; };
+      let Some(krate) = data.id_to_crate.values().nth(row) else { return None; };
       match col {
         1 => return Some(WidgetBuilder::once().add_text(&krate.max_version)),
         2 => return Some(WidgetBuilder::once().add_text(krate.updated_at.format("%Y-%m-%d").to_string())),
         3 => return Some(WidgetBuilder::once().add_text(format!("{}", krate.downloads))),
         _ => {}
       }
-      let id = &krate.id;
+      let crate_id = &krate.id;
       let element = match col {
-        0 => WidgetBuilder::once().add_text(id),
+        0 => WidgetBuilder::once().add_text(crate_id),
         4 => WidgetBuilder::once()
           .button(icon_text("\u{F116}"))
           .padding(4.0)
-          .on_press(|| Message::RefreshCrate(id.clone()))
-          .disabled(self.all_crates_being_changed || self.crates_being_changed.contains(id))
+          .on_press(|| Message::RefreshCrate(crate_id.clone()))
+          .disabled(view_data.is_crate_being_modified(crate_id))
           .add(),
         5 => WidgetBuilder::once()
           .button(icon_text("\u{F5DE}"))
           .destructive_style()
           .padding(4.0)
-          .on_press(|| Message::UnfollowCrate(id.clone()))
-          .disabled(self.all_crates_being_changed || self.crates_being_changed.contains(id))
+          .on_press(|| Message::UnfollowCrate(crate_id.clone()))
+          .disabled(view_data.is_crate_being_modified(crate_id))
           .add(),
         _ => return None,
       };
@@ -189,7 +137,7 @@ impl ViewCrates {
     let table = Table::with_capacity(5, cell_to_element)
       .spacing(1.0)
       .body_row_height(24.0)
-      .body_row_count(self.id_to_crate.len())
+      .body_row_count(data.id_to_crate.len())
       .push(2, "Name")
       .push(1, "Latest Version")
       .push(1, "Updated at")
@@ -198,7 +146,7 @@ impl ViewCrates {
       .push(0.2, "")
       .into_element();
 
-    let disable_refresh = self.all_crates_being_changed || !self.crates_being_changed.is_empty();
+    let disable_refresh = view_data.is_any_crate_being_modified();
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
       .button("Add").positive_style().on_press(|| Message::OpenFollowCrateModal).add()
@@ -221,9 +169,5 @@ impl ViewCrates {
     } else {
       content.into()
     }
-  }
-
-  pub fn cache(&mut self, cache: &mut Cache) {
-    std::mem::swap(&mut self.id_to_crate, &mut cache.id_to_crate);
   }
 }
