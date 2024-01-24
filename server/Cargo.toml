@@ -5,7 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-att_core = { workspace = true, features = ["app_env", "app_tracing", "app_storage", "app_storage_json", "serde", "crates_io_api", "http_status_code"] }
+att_core = { workspace = true, features = ["app_env", "app_tracing_all", "app_storage", "app_storage_json", "serde", "crates_io_api", "http_status_code"] }
 axum = "0.7"
 axum-login = "0.12"
 tower-sessions = "0.9"

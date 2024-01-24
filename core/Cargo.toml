@@ -15,7 +15,6 @@ directories = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, optional = true, features = ["env-filter", "fmt", "registry"] }
 tracing-appender = { workspace = true, optional = true }
-tracing-log = { workspace = true, optional = true }
 thiserror.workspace = true
 http = { workspace = true, optional = true }
 
@@ -30,9 +29,13 @@ console_error_panic_hook = { version = "0.1", optional = true }
 
 [features]
 app_env = ["dep:dotenvy", "dep:dotenvy_macro"]
-app_tracing = ["dep:tracing", "dep:tracing-subscriber", "dep:tracing-appender", "dep:tracing-log", "dep:tracing-web", "dep:console_error_panic_hook"]
+app_tracing = ["dep:tracing", "dep:tracing-subscriber", "dep:tracing-web"]
+app_tracing_panic = ["app_tracing", "dep:console_error_panic_hook"]
+app_tracing_file = ["app_tracing", "dep:tracing-appender"]
+app_tracing_log = ["app_tracing", "tracing-subscriber/tracing-log"]
+app_tracing_all = ["app_tracing_panic", "app_tracing", "app_tracing_file", "app_tracing_log"]
 app_storage = ["dep:directories"]
-app_storage_json = ["serde", "dep:serde_json"]
+app_storage_json = ["app_storage", "serde", "dep:serde_json"]
 time = ["dep:tokio", "dep:gloo-timers", "dep:web-time"]
 serde = ["dep:serde", "chrono/serde"]
 crates_io_api = ["dep:crates_io_api"]

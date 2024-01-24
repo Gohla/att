@@ -408,7 +408,6 @@ dependencies = [
  "tokio",
  "tracing",
  "tracing-appender",
- "tracing-log",
  "tracing-subscriber",
  "tracing-web",
  "web-time 1.0.0",
