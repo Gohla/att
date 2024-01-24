@@ -5,7 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-att_core = { workspace = true, features = ["app_env", "app_tracing_all", "app_storage", "app_storage_json", "time", "serde"] }
+att_core = { workspace = true, features = ["app_env", "app_tracing_all", "app_storage", "app_storage_json", "serde", "time"] }
 att_client.workspace = true
 dark-light = "1"
 serde.workspace = true

@@ -46,8 +46,10 @@ pub struct AppTracing {
   _file_tracing: FileTracing,
 }
 #[cfg(feature = "app_tracing_file")]
+#[derive(Default)]
 struct FileTracing(Option<tracing_appender::non_blocking::WorkerGuard>);
 #[cfg(not(feature = "app_tracing_file"))]
+#[derive(Default)]
 struct FileTracing;
 
 
@@ -76,7 +78,7 @@ impl AppTracing {
         .with_filter(console_filter)
     );
 
-    let guard = if let Some((file_path, filter)) = file {
+    let _file_tracing = if let Some((file_path, filter)) = file {
       let result = (|| {
         if let Some(parent) = file_path.parent() {
           create_dir_all(parent)?;
@@ -87,7 +89,7 @@ impl AppTracing {
         Err(e) => {
           layered.init();
           warn!("Cannot log to file; could not truncate/create and open log file '{}' for writing: {}", file_path.display(), e);
-          None
+          FileTracing::default()
         }
         Ok(log_file) => {
           let writer = BufWriter::new(log_file);
@@ -99,15 +101,14 @@ impl AppTracing {
               .with_filter(filter)
           );
           layered.init();
-          Some(guard)
+          FileTracing(Some(guard))
         }
       }
     } else {
       layered.init();
-      None
+      FileTracing::default()
     };
 
-    let _file_tracing = FileTracing(guard);
     Self { _file_tracing }
   }
 
@@ -127,7 +128,7 @@ impl AppTracing {
     );
     layered.init();
 
-    let _file_tracing = FileTracing;
+    let _file_tracing = FileTracing::default();
     Self { _file_tracing }
   }
 }
