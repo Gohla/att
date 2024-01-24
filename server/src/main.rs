@@ -5,7 +5,9 @@ use tokio::signal;
 use tokio::time::{Duration, interval};
 use tracing::debug;
 
-use att_core::util::start::Start;
+use att_core::app::env;
+use att_core::app::storage::Storage;
+use att_core::app::tracing::AppTracingBuilder;
 
 use crate::crates::{Crates, RefreshJob};
 use crate::data::{Database, StoreDatabaseJob};
@@ -21,14 +23,18 @@ mod users;
 mod util;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let (start, _file_log_flush_guard) = Start::new("server");
+  env::load_dotenv_into_env();
+  let storage = Storage::new("server");
+  let _tracing = AppTracingBuilder::default()
+    .with_log_file_path_opt(storage.local_data_file("log.txt"))
+    .build();
 
   let runtime = tokio::runtime::Builder::new_multi_thread()
     .enable_all()
     .build()?;
   let runtime_guard = runtime.enter();
 
-  let result = run(start, &runtime);
+  let result = run(storage, &runtime);
 
   debug!("shutting down tokio runtime..");
   drop(runtime_guard);
@@ -38,8 +44,8 @@ fn main() -> Result<(), Box<dyn Error>> {
   result
 }
 
-fn run(start: Start, runtime: &Runtime) -> Result<(), Box<dyn Error>> {
-  let database = Database::blocking_deserialize(&start)?;
+fn run(storage: Storage, runtime: &Runtime) -> Result<(), Box<dyn Error>> {
+  let database = Database::blocking_deserialize(&storage)?;
 
   let users = Users::default();
   users.ensure_default_user_exists(&mut database.blocking_write().users)?;
@@ -50,13 +56,13 @@ fn run(start: Start, runtime: &Runtime) -> Result<(), Box<dyn Error>> {
   let (job_scheduler, job_scheduler_task) = JobScheduler::new();
   runtime.spawn(job_scheduler_task);
   job_scheduler.blocking_schedule_job(RefreshJob::new(crates.clone(), database.clone()), interval(Duration::from_secs(60 * 60)), "refresh outdated crate data");
-  job_scheduler.blocking_schedule_blocking_job(StoreDatabaseJob::new(start.clone(), database.clone()), interval(Duration::from_secs(60 * 5)), "store database");
+  job_scheduler.blocking_schedule_blocking_job(StoreDatabaseJob::new(storage.clone(), database.clone()), interval(Duration::from_secs(60 * 5)), "store database");
 
   let server = Server::new(database.clone(), users, crates);
   let result = runtime.block_on(server.run(shutdown_signal()));
 
   debug!("storing database");
-  database.blocking_serialize(&start)?;
+  database.blocking_serialize(&storage)?;
 
   result
 }

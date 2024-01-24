@@ -6,7 +6,7 @@ use std::sync::Arc;
 use serde::{Deserialize, Serialize};
 use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use att_core::util::start::{DirectoryKind, Start};
+use att_core::app::storage::{DirectoryKind, Storage};
 
 use crate::crates::CratesData;
 use crate::job_scheduler::{BlockingJob, JobAction, JobResult};
@@ -29,15 +29,15 @@ impl Database {
     self.0.blocking_write()
   }
 
-  pub fn blocking_deserialize(start: &Start) -> Result<Self, io::Error> {
+  pub fn blocking_deserialize(start: &Storage) -> Result<Self, io::Error> {
     let data = Data::deserialize(start)?;
     Ok(Self(Arc::new(RwLock::new(data))))
   }
-  pub async fn serialize(&self, start: &Start) -> Result<(), io::Error> {
+  pub async fn serialize(&self, start: &Storage) -> Result<(), io::Error> {
     self.read().await.serialize(start)?;
     Ok(())
   }
-  pub fn blocking_serialize(&self, start: &Start) -> Result<(), io::Error> {
+  pub fn blocking_serialize(&self, start: &Storage) -> Result<(), io::Error> {
     self.blocking_read().serialize(start)?;
     Ok(())
   }
@@ -51,21 +51,21 @@ pub struct Data {
 }
 
 impl Data {
-  fn deserialize(start: &Start) -> Result<Self, io::Error> {
+  fn deserialize(start: &Storage) -> Result<Self, io::Error> {
     Ok(start.deserialize_json_file(DirectoryKind::Data, "data.json")?.unwrap_or_default())
   }
-  fn serialize(&self, start: &Start) -> Result<(), io::Error> {
+  fn serialize(&self, start: &Storage) -> Result<(), io::Error> {
     start.serialize_json_file(DirectoryKind::Data, "data.json", self)?;
     Ok(())
   }
 }
 
 pub struct StoreDatabaseJob {
-  start: Start,
+  start: Storage,
   database: Database,
 }
 impl StoreDatabaseJob {
-  pub fn new(start: Start, database: Database) -> Self {
+  pub fn new(start: Storage, database: Database) -> Self {
     Self { start, database }
   }
 }

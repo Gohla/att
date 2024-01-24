@@ -43,7 +43,7 @@ pub enum UsersError {
 
 #[cfg(feature = "http_status_code")]
 pub mod http_status_code {
-  use crate::util::status_code::{AsStatusCode, StatusCode};
+  use crate::util::http_status_code::{AsStatusCode, StatusCode};
 
   use super::UsersError;
 

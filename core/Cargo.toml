@@ -25,14 +25,15 @@ tokio = { workspace = true, features = ["time"], optional = true }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 gloo-timers = { version = "0.3", features = ["futures"], optional = true }
 web-time = { version = "1", optional = true }
-console_error_panic_hook = { version = "0.1", optional = true }
 tracing-web = { version = "0.1", optional = true }
+console_error_panic_hook = { version = "0.1", optional = true }
 
 [features]
-start = ["dep:dotenvy", "dep:dotenvy_macro", "dep:directories", "dep:tracing", "dep:tracing-subscriber",
-  "dep:tracing-appender", "dep:tracing-log", "dep:console_error_panic_hook", "dep:tracing-web"]
+app_env = ["dep:dotenvy", "dep:dotenvy_macro"]
+app_tracing = ["dep:tracing", "dep:tracing-subscriber", "dep:tracing-appender", "dep:tracing-log", "dep:tracing-web", "dep:console_error_panic_hook"]
+app_storage = ["dep:directories"]
+app_storage_json = ["serde", "dep:serde_json"]
 time = ["dep:tokio", "dep:gloo-timers", "dep:web-time"]
 serde = ["dep:serde", "chrono/serde"]
-start_serde_json = ["serde", "dep:serde_json"]
-crates_io = ["dep:crates_io_api"]
+crates_io_api = ["dep:crates_io_api"]
 http_status_code = ["dep:http"]

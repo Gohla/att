@@ -5,7 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-att_core = { workspace = true, features = ["start", "serde", "start_serde_json"] }
+att_core = { workspace = true, features = ["serde"] }
 reqwest = { workspace = true, features = ["json", "cookies"] }
 url.workspace = true
 serde.workspace = true

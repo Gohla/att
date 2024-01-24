@@ -1,14 +1,15 @@
 use std::error::Error;
 
 use att_client::http_client::AttHttpClient;
-use att_core::util::start::{dotenv, Start};
+use att_core::app::env::run_or_compile_time_env;
+use att_core::app::storage::Storage;
 
 use crate::app::app;
 
 pub mod app;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let (_start, _file_log_flush_guard) = Start::new("client_dioxus");
+  let _storage = Storage::new("client_dioxus");
   // let data = start.deserialize_json_file(DirectoryKind::Data, "data.json")?.unwrap_or_default();
   // let cache = start.deserialize_json_file(DirectoryKind::Cache, "cache.json")?.unwrap_or_default();
   // let save_fn = Box::new(move |data: &_, cache: &_| {
@@ -17,7 +18,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   //   Ok(())
   // });
 
-  let base_url = std::env::var("ATT_CLIENT_BASE_URL").unwrap_or_else(|_| dotenv!("ATT_CLIENT_BASE_URL").to_string());
+  let base_url = run_or_compile_time_env!("ATT_CLIENT_BASE_URL");
   let _client = AttHttpClient::from_base_url(base_url)?;
 
   dioxus_web::launch(app);

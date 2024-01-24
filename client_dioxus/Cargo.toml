@@ -5,7 +5,7 @@ edition.workspace = true
 publish.workspace = true
 
 [dependencies]
-att_core = { workspace = true, features = ["start", "time", "serde", "start_serde_json"] }
+att_core = { workspace = true, features = ["time", "serde"] }
 att_client.workspace = true
 dioxus = "0.4"
 dioxus-web = "0.4"

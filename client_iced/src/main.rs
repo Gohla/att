@@ -5,7 +5,10 @@ use iced::{Application, Settings, window};
 use iced::window::settings::PlatformSpecific;
 
 use att_client::AttClient;
-use att_core::util::start::{DirectoryKind, dotenv, Start};
+use att_core::app::env;
+use att_core::app::storage::{DirectoryKind, Storage};
+use att_core::app::tracing::AppTracingBuilder;
+use att_core::run_or_compile_time_env;
 
 use crate::app::{App, Flags};
 use crate::widget::icon;
@@ -15,14 +18,19 @@ pub mod widget;
 pub mod component;
 
 fn main() -> Result<(), Box<dyn Error>> {
-  let (start, _file_log_flush_guard) = Start::new("client_iced");
-  let data = start.deserialize_json_file(DirectoryKind::Data, "data.json")?.unwrap_or_default();
+  env::load_dotenv_into_env();
+  let storage = Storage::new("client_iced");
+  let _tracing = AppTracingBuilder::default()
+    .with_log_file_path_opt(storage.local_data_file("log.txt"))
+    .build();
+
+  let data = storage.deserialize_json_file(DirectoryKind::Data, "data.json")?.unwrap_or_default();
   let save_fn = Box::new(move |data: &_| {
-    start.serialize_json_file(DirectoryKind::Data, "data.json", data)?;
+    storage.serialize_json_file(DirectoryKind::Data, "data.json", data)?;
     Ok(())
   });
 
-  let base_url = std::env::var("ATT_CLIENT_BASE_URL").unwrap_or_else(|_| dotenv!("ATT_CLIENT_BASE_URL").to_string());
+  let base_url = run_or_compile_time_env!("ATT_CLIENT_BASE_URL");
   let client = AttClient::from_base_url(base_url)?;
 
   let dark_mode = match dark_light::detect() {

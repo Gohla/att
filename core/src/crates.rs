@@ -35,7 +35,7 @@ impl Crate {
   }
 }
 
-#[cfg(feature = "crates_io")]
+#[cfg(feature = "crates_io_api")]
 pub mod crates_io {
   use super::Crate;
 
@@ -74,7 +74,7 @@ pub enum CrateError {
 
 #[cfg(feature = "http_status_code")]
 pub mod http_status_code {
-  use crate::util::status_code::{AsStatusCode, StatusCode};
+  use crate::util::http_status_code::{AsStatusCode, StatusCode};
 
   use super::CrateError;
 

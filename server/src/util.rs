@@ -2,7 +2,7 @@ use axum::Json;
 use axum::response::{IntoResponse, Response};
 use serde::Serialize;
 
-use att_core::util::status_code::AsStatusCode;
+use att_core::util::http_status_code::AsStatusCode;
 
 pub struct JsonResult<T, E>(pub Result<T, E>);
 
