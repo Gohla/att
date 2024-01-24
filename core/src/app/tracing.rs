@@ -1,8 +1,7 @@
-use std::fs::{create_dir_all, File};
-use std::io::{self, BufWriter};
+#![allow(dead_code)]
+
 use std::path::Path;
 
-use tracing::warn;
 use tracing_subscriber::{EnvFilter, Layer};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
@@ -14,12 +13,21 @@ pub struct AppTracingBuilder<P> {
   file_filter: Option<EnvFilter>,
 }
 impl<P: AsRef<Path>> AppTracingBuilder<P> {
+  pub fn with_console_filter(mut self, console_filter: EnvFilter) -> Self {
+    self.console_filter = Some(console_filter);
+    self
+  }
+
   pub fn with_log_file_path(mut self, log_file_path: P) -> Self {
     self.log_file_path = Some(log_file_path);
     self
   }
   pub fn with_log_file_path_opt(mut self, log_file_path: Option<P>) -> Self {
     self.log_file_path = log_file_path;
+    self
+  }
+  pub fn with_file_filter(mut self, file_filter: EnvFilter) -> Self {
+    self.file_filter = Some(file_filter);
     self
   }
 
@@ -36,9 +44,14 @@ impl<P: AsRef<Path>> AppTracingBuilder<P> {
     }
 
     let console_filter = self.console_filter.unwrap_or_else(|| filter!("CONSOLE_LOG"));
-    let file = self.log_file_path.as_ref().map(|p| (p.as_ref(), self.file_filter.unwrap_or_else(|| filter!("FILE_LOG"))));
 
-    AppTracing::new(console_filter, file)
+    #[cfg(not(target_arch = "wasm32"))] {
+      let file = self.log_file_path.as_ref().map(|p| (p.as_ref(), self.file_filter.unwrap_or_else(|| filter!("FILE_LOG"))));
+      AppTracing::new(console_filter, file)
+    }
+    #[cfg(target_arch = "wasm32")] {
+      AppTracing::new_wasm(console_filter)
+    }
   }
 }
 
@@ -54,23 +67,14 @@ struct FileTracing;
 
 
 impl AppTracing {
+  #[cfg(not(target_arch = "wasm32"))]
   fn new(
     console_filter: EnvFilter,
     file: Option<(&Path, EnvFilter)>,
   ) -> Self {
-    #[cfg(not(target_arch = "wasm32"))] {
-      Self::create(console_filter, file)
-    }
-    #[cfg(target_arch = "wasm32")] {
-      Self::create_wasm(console_filter)
-    }
-  }
+    use std::fs::{create_dir_all, File};
+    use std::io::{self, BufWriter};
 
-  #[cfg(not(target_arch = "wasm32"))]
-  fn create(
-    console_filter: EnvFilter,
-    file: Option<(&Path, EnvFilter)>,
-  ) -> Self {
     let layered = tracing_subscriber::registry();
     let layered = layered.with(
       tracing_subscriber::fmt::layer()
@@ -88,7 +92,7 @@ impl AppTracing {
       match result {
         Err(e) => {
           layered.init();
-          warn!("Cannot log to file; could not truncate/create and open log file '{}' for writing: {}", file_path.display(), e);
+          tracing::warn!("Cannot log to file; could not truncate/create and open log file '{}' for writing: {}", file_path.display(), e);
           FileTracing::default()
         }
         Ok(log_file) => {
@@ -113,11 +117,9 @@ impl AppTracing {
   }
 
   #[cfg(target_arch = "wasm32")]
-  fn create_wasm(
+  fn new_wasm(
     console_filter: EnvFilter,
   ) -> Self {
-    std::panic::set_hook(Box::new(console_error_panic_hook::hook));
-
     let layered = tracing_subscriber::registry();
     let layered = layered.with(
       tracing_subscriber::fmt::layer()

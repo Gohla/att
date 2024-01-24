@@ -1309,7 +1309,6 @@ checksum = "fafaff75f50035078c2da45441ee61472fd0f335fa15b05170165eaf3479f0df"
 dependencies = [
  "async-channel 1.9.0",
  "async-trait",
- "console_error_panic_hook",
  "dioxus-core",
  "dioxus-html",
  "dioxus-interpreter-js",
