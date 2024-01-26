@@ -1,29 +1,29 @@
 #![allow(dead_code)]
 
-use std::path::Path;
+use std::path::PathBuf;
 
 use tracing_subscriber::{EnvFilter, Layer};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 #[derive(Default)]
-pub struct AppTracingBuilder<P> {
+pub struct AppTracingBuilder {
   console_filter: Option<EnvFilter>,
-  log_file_path: Option<P>,
+  log_file_path: Option<PathBuf>,
   file_filter: Option<EnvFilter>,
 }
-impl<P: AsRef<Path>> AppTracingBuilder<P> {
+impl AppTracingBuilder {
   pub fn with_console_filter(mut self, console_filter: EnvFilter) -> Self {
     self.console_filter = Some(console_filter);
     self
   }
 
-  pub fn with_log_file_path(mut self, log_file_path: P) -> Self {
-    self.log_file_path = Some(log_file_path);
+  pub fn with_log_file_path(mut self, log_file_path: impl ToOwned<Owned=PathBuf>) -> Self {
+    self.log_file_path = Some(log_file_path.to_owned());
     self
   }
-  pub fn with_log_file_path_opt(mut self, log_file_path: Option<P>) -> Self {
-    self.log_file_path = log_file_path;
+  pub fn with_log_file_path_opt(mut self, log_file_path: Option<impl ToOwned<Owned=PathBuf>>) -> Self {
+    self.log_file_path = log_file_path.map(|p| p.to_owned());
     self
   }
   pub fn with_file_filter(mut self, file_filter: EnvFilter) -> Self {
@@ -70,7 +70,7 @@ impl AppTracing {
   #[cfg(not(target_arch = "wasm32"))]
   fn new(
     console_filter: EnvFilter,
-    file: Option<(&Path, EnvFilter)>,
+    file: Option<(&std::path::Path, EnvFilter)>,
   ) -> Self {
     use std::fs::{create_dir_all, File};
     use std::io::{self, BufWriter};

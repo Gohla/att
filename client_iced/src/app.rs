@@ -53,7 +53,7 @@ impl iced::Application for App {
     let data = flags.data;
     let mut view_data = ViewData::default();
 
-    let login_command = flags.client.clone().login(&mut view_data, UserCredentials::default())
+    let login_command = flags.client.clone().login(view_data.app_mut(), UserCredentials::default())
       .perform(Message::Login);
 
     let view_crates = ViewCrates::new(flags.client);
@@ -78,14 +78,14 @@ impl iced::Application for App {
   fn update(&mut self, message: Message) -> Command<Self::Message> {
     match message {
       Message::ToViewCrates(message) => {
-        return self.view_crates.update(message, &mut self.data, &mut self.view_data)
+        return self.view_crates.update(message, self.data.crates_mut(), self.view_data.crates_mut())
           .into_command()
           .map(|m| Message::ToViewCrates(m));
       }
 
       Message::Login(login) => {
-        if login.apply(&mut self.view_data).is_ok() {
-          return self.view_crates.request_followed_crates(&mut self.view_data).map(Message::ToViewCrates);
+        if login.apply(self.view_data.app_mut()).is_ok() {
+          return self.view_crates.request_followed_crates(self.view_data.crates_mut()).map(Message::ToViewCrates);
         }
       }
 
@@ -110,7 +110,7 @@ impl iced::Application for App {
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)
-      .add_element(self.view_crates.view(&self.data, &self.view_data).map(Message::ToViewCrates))
+      .add_element(self.view_crates.view(self.data.crates(), self.view_data.crates()).map(Message::ToViewCrates))
       .column().spacing(10.0).padding(10).fill().add()
       .take();
 

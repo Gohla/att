@@ -1,0 +1,15 @@
+[application]
+name = "ATT"
+default_platform = "web"
+out_dir = "dist"
+
+[web.app]
+title = "ATT"
+
+[web.watcher]
+reload_html = true
+watch_path = ["src"]
+
+[web.resource]
+
+[web.resource.dev]

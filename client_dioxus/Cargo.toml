@@ -13,3 +13,4 @@ dark-light = "1"
 serde.workspace = true
 tracing.workspace = true
 chrono.workspace = true
+futures-channel = "0.3"

@@ -1,7 +1,7 @@
 use iced::{Command, Element};
 use tracing::instrument;
 
-use att_client::{AttClient, Data, RemoveCrate, UpdateCrate, UpdateCrates, ViewData};
+use att_client::{AttClient, CratesData, CratesViewData, RemoveCrate, UpdateCrate, UpdateCrates};
 
 use crate::component::{follow_crate, Perform, Update};
 use crate::component::follow_crate::FollowCrate;
@@ -45,12 +45,12 @@ impl ViewCrates {
     }
   }
 
-  pub fn request_followed_crates(&self, view_data: &mut ViewData) -> Command<Message> {
+  pub fn request_followed_crates(&self, view_data: &mut CratesViewData) -> Command<Message> {
     self.client.clone().get_followed_crates(view_data).perform(Message::SetCrates)
   }
 
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message, data: &mut Data, view_data: &mut ViewData) -> Update<(), Command<Message>> {
+  pub fn update(&mut self, message: Message, data: &mut CratesData, view_data: &mut CratesViewData) -> Update<(), Command<Message>> {
     use Message::*;
     match message {
       ToFollowCrate(message) => {
@@ -85,22 +85,22 @@ impl ViewCrates {
       }
 
       UpdateCrate(operation) => {
-        let _ = operation.apply(data, view_data);
+        let _ = operation.apply(view_data, data);
       }
       UpdateCrates(operation) => {
-        let _ = operation.apply(data, view_data);
+        let _ = operation.apply(view_data, data);
       }
       SetCrates(operation) => {
-        let _ = operation.apply(data, view_data);
+        let _ = operation.apply(view_data, data);
       }
       RemoveCrate(operation) => {
-        let _ = operation.apply(data, view_data);
+        let _ = operation.apply(view_data, data);
       }
     }
     Update::default()
   }
 
-  pub fn view<'a>(&'a self, data: &'a Data, view_data: &'a ViewData) -> Element<Message> {
+  pub fn view<'a>(&'a self, data: &'a CratesData, view_data: &'a CratesViewData) -> Element<Message> {
     let cell_to_element = |row, col| -> Option<Element<Message>> {
       let Some(krate) = data.id_to_crate.values().nth(row) else { return None; };
       match col {

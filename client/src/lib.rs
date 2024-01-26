@@ -12,27 +12,63 @@ use crate::http_client::{AttHttpClient, AttHttpClientError};
 pub mod http_client;
 
 /// Client data: the local view of the data that is on the server. Should be (de)serialized between runs of the program.
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Clone, Default, Serialize, Deserialize)]
 pub struct Data {
+  crates: CratesData,
+}
+impl Data {
+  #[inline]
+  pub fn crates(&self) -> &CratesData { &self.crates }
+  #[inline]
+  pub fn crates_mut(&mut self) -> &mut CratesData { &mut self.crates }
+}
+
+#[derive(Clone, Default, Serialize, Deserialize)]
+pub struct CratesData {
   pub id_to_crate: BTreeMap<String, Crate>,
 }
+
 
 /// Client view data: the runtime data needed to properly view data, request updates from the server, send
 /// modifications to the server, and to apply operations that update the [data](Data) and this [view data](ViewData).
 #[derive(Default)]
 pub struct ViewData {
-  logging_in_or_out: bool,
-  logged_in: bool,
-
-  crates_being_modified: BTreeSet<String>,
-  all_crates_being_modified: bool,
+  app: AppViewData,
+  crates: CratesViewData,
 }
 impl ViewData {
   #[inline]
-  pub fn logging_in_or_out(&self) -> bool { self.logging_in_or_out }
+  pub fn app(&self) -> &AppViewData { &self.app }
   #[inline]
-  pub fn logged_in(&self) -> bool { self.logged_in }
+  pub fn app_mut(&mut self) -> &mut AppViewData { &mut self.app }
+  #[inline]
+  pub fn crates(&self) -> &CratesViewData { &self.crates }
+  #[inline]
+  pub fn crates_mut(&mut self) -> &mut CratesViewData { &mut self.crates }
+}
 
+#[derive(Default)]
+pub struct AppViewData {
+  login_state: LoginState,
+}
+#[derive(Default)]
+pub enum LoginState {
+  #[default] LoggedOut,
+  LoggedIn,
+  LoggingIn,
+  LoggingOut,
+}
+impl AppViewData {
+  #[inline]
+  pub fn login_state(&self) -> &LoginState { &self.login_state }
+}
+
+#[derive(Default)]
+pub struct CratesViewData {
+  crates_being_modified: BTreeSet<String>,
+  all_crates_being_modified: bool,
+}
+impl CratesViewData {
   #[inline]
   pub fn crates_being_modified(&self) -> &BTreeSet<String> { &self.crates_being_modified }
   #[inline]
@@ -46,6 +82,7 @@ impl ViewData {
     self.all_crates_being_modified || !self.crates_being_modified.is_empty()
   }
 }
+
 
 /// Client to asynchronously request updates and send updates to the server. All async methods return an operation
 /// that must be applied to the [data](Data) and [view data](ViewData) when the future completes.
@@ -66,16 +103,16 @@ impl AttClient {
 
 
   #[inline]
-  pub fn login(self, view_data: &mut ViewData, user_credentials: UserCredentials) -> impl Future<Output=Login> {
-    view_data.logging_in_or_out = true;
+  pub fn login(self, view_data: &mut AppViewData, user_credentials: UserCredentials) -> impl Future<Output=Login> {
+    view_data.login_state = LoginState::LoggingIn;
     async move {
       let result = self.http_client.login(user_credentials).await;
       Login { result }
     }
   }
   #[inline]
-  pub fn logout(self, view_data: &mut ViewData) -> impl Future<Output=Logout> {
-    view_data.logging_in_or_out = true;
+  pub fn logout(self, view_data: &mut AppViewData) -> impl Future<Output=Logout> {
+    view_data.login_state = LoginState::LoggingOut;
     async move {
       let result = self.http_client.logout().await;
       Logout { result }
@@ -83,7 +120,7 @@ impl AttClient {
   }
 
   #[inline]
-  pub fn get_followed_crates(self, view_data: &mut ViewData) -> impl Future<Output=UpdateCrates<true>> {
+  pub fn get_followed_crates(self, view_data: &mut CratesViewData) -> impl Future<Output=UpdateCrates<true>> {
     view_data.all_crates_being_modified = true;
     async move {
       let result = self.http_client.search_crates(CrateSearch::followed()).await;
@@ -91,7 +128,7 @@ impl AttClient {
     }
   }
   #[inline]
-  pub fn follow_crate(self, view_data: &mut ViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
+  pub fn follow_crate(self, view_data: &mut CratesViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
     view_data.crates_being_modified.insert(crate_id.clone());
     async move {
       let result = self.http_client.follow_crate(crate_id.clone()).await;
@@ -99,7 +136,7 @@ impl AttClient {
     }
   }
   #[inline]
-  pub fn unfollow_crate(self, view_data: &mut ViewData, crate_id: String) -> impl Future<Output=RemoveCrate> {
+  pub fn unfollow_crate(self, view_data: &mut CratesViewData, crate_id: String) -> impl Future<Output=RemoveCrate> {
     view_data.crates_being_modified.insert(crate_id.clone());
     async move {
       let result = self.http_client.unfollow_crate(crate_id.clone()).await;
@@ -108,7 +145,7 @@ impl AttClient {
   }
 
   #[inline]
-  pub fn refresh_outdated_crates(self, view_data: &mut ViewData) -> impl Future<Output=UpdateCrates<false>> {
+  pub fn refresh_outdated_crates(self, view_data: &mut CratesViewData) -> impl Future<Output=UpdateCrates<false>> {
     view_data.all_crates_being_modified = true;
     async move {
       let result = self.http_client.refresh_outdated_crates().await;
@@ -116,7 +153,7 @@ impl AttClient {
     }
   }
   #[inline]
-  pub fn refresh_all_crates(self, view_data: &mut ViewData) -> impl Future<Output=UpdateCrates<true>> {
+  pub fn refresh_all_crates(self, view_data: &mut CratesViewData) -> impl Future<Output=UpdateCrates<true>> {
     view_data.all_crates_being_modified = true;
     async move {
       let result = self.http_client.refresh_all_crates().await;
@@ -124,7 +161,7 @@ impl AttClient {
     }
   }
   #[inline]
-  pub fn refresh_crate(self, view_data: &mut ViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
+  pub fn refresh_crate(self, view_data: &mut CratesViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
     view_data.crates_being_modified.insert(crate_id.clone());
     async move {
       let result = self.http_client.refresh_crate(crate_id.clone()).await;
@@ -141,13 +178,13 @@ pub struct Login {
   result: Result<(), AttHttpClientError>,
 }
 impl Login {
-  pub fn apply(self, view_data: &mut ViewData) -> Result<(), AttHttpClientError> {
-    view_data.logging_in_or_out = false;
+  pub fn apply(self, view_data: &mut AppViewData) -> Result<(), AttHttpClientError> {
+    view_data.login_state = LoginState::LoggedOut; // First reset.
 
     self.result
       .inspect_err(|cause| error!(%cause, "failed to login: {cause:?}"))?;
     debug!("logged in");
-    view_data.logged_in = true;
+    view_data.login_state = LoginState::LoggedIn; // Only set if there is no error.
 
     Ok(())
   }
@@ -157,13 +194,13 @@ pub struct Logout {
   result: Result<(), AttHttpClientError>,
 }
 impl Logout {
-  pub fn apply(self, view_data: &mut ViewData) -> Result<(), AttHttpClientError> {
-    view_data.logging_in_or_out = false;
+  pub fn apply(self, view_data: &mut AppViewData) -> Result<(), AttHttpClientError> {
+    view_data.login_state = LoginState::LoggedIn; // First reset.
 
     self.result
       .inspect_err(|cause| error!(%cause, "failed to logout: {cause:?}"))?;
     debug!("logged out");
-    view_data.logged_in = false;
+    view_data.login_state = LoginState::LoggedOut; // Only set if there is no error.
 
     Ok(())
   }
@@ -174,7 +211,7 @@ pub struct UpdateCrates<const SET_CRATES: bool> {
   result: Result<Vec<Crate>, AttHttpClientError>,
 }
 impl<const SET_CRATES: bool> UpdateCrates<SET_CRATES> {
-  pub fn apply(self, data: &mut Data, view_data: &mut ViewData) -> Result<(), AttHttpClientError> {
+  pub fn apply(self, view_data: &mut CratesViewData, data: &mut CratesData) -> Result<(), AttHttpClientError> {
     view_data.all_crates_being_modified = false;
 
     let crates = self.result
@@ -196,7 +233,7 @@ pub struct UpdateCrate {
   result: Result<Crate, AttHttpClientError>,
 }
 impl UpdateCrate {
-  pub fn apply(self, data: &mut Data, view_data: &mut ViewData) -> Result<(), AttHttpClientError> {
+  pub fn apply(self, view_data: &mut CratesViewData, data: &mut CratesData) -> Result<(), AttHttpClientError> {
     view_data.crates_being_modified.remove(&self.crate_id);
 
     let krate = self.result
@@ -213,7 +250,7 @@ pub struct RemoveCrate {
   result: Result<(), AttHttpClientError>,
 }
 impl RemoveCrate {
-  pub fn apply(self, data: &mut Data, view_data: &mut ViewData) -> Result<(), AttHttpClientError> {
+  pub fn apply(self, view_data: &mut CratesViewData, data: &mut CratesData) -> Result<(), AttHttpClientError> {
     view_data.crates_being_modified.remove(&self.crate_id);
 
     self.result
