@@ -15,6 +15,7 @@ impl<T: 'static> UseValue<T> {
     cx.use_hook(move || UseValue { value, update: cx.schedule_update() })
   }
 }
+/// Extension trait for creating [value hooks](UseValue).
 pub trait UseValueExt<T> {
   /// Creates a [value hook](UseValue) on the component of `self`, with an initial `value`.
   fn use_value(&self, value: T) -> &mut UseValue<T>;

@@ -1,5 +1,5 @@
 [application]
-name = "ATT"
+name = "att"
 default_platform = "web"
 out_dir = "dist"
 
