@@ -4,8 +4,8 @@ use iced::Command;
 
 use att_core::util::maybe_send::MaybeSend;
 
-pub mod follow_crate;
-pub mod view_crates;
+pub mod search_crate;
+pub mod view_followed_crates;
 
 /// Update received from components.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]

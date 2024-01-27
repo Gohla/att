@@ -14,47 +14,55 @@ use crate::widget::table::Table;
 use crate::widget::WidgetExt;
 
 #[derive(Debug)]
-pub struct FollowCrate {
-  search_id: text_input::Id,
+pub struct SearchCrates {
+  text_input_id: text_input::Id,
+  button_text: String,
+
   search_term: String,
-  search_wait_until: Option<Instant>,
-  crates: Result<Vec<Crate>, AttHttpClientError>,
+  wait_until: Option<Instant>,
+  result: Result<Vec<Crate>, AttHttpClientError>,
 }
 
 #[derive(Debug)]
 pub enum Message {
   SetSearchTerm(String),
-  SearchCrates,
-  SetCrates(Result<Vec<Crate>, AttHttpClientError>),
-  FollowCrate(String),
-  ReceiveFollowedCrate(Result<Crate, AttHttpClientError>),
+  Search,
+  SetResult(Result<Vec<Crate>, AttHttpClientError>),
+  Choose(String),
 }
 
-impl Default for FollowCrate {
+impl Default for SearchCrates {
   fn default() -> Self {
     Self {
-      search_id: text_input::Id::unique(),
+      text_input_id: text_input::Id::unique(),
+      button_text: "Choose".to_string(),
+
       search_term: String::new(),
-      search_wait_until: None,
-      crates: Ok(vec![]),
+      wait_until: None,
+      result: Ok(vec![]),
     }
   }
 }
 
-impl FollowCrate {
-  pub fn focus_search_term_input<M: 'static>(&self) -> Command<M> {
-    text_input::focus(self.search_id.clone())
+impl SearchCrates {
+  pub fn new(button_text: impl Into<String>) -> Self {
+    Self { button_text: button_text.into(), ..Self::default() }
   }
 
-  pub fn clear_search_term(&mut self) {
+  pub fn focus_search_term_input<M: 'static>(&self) -> Command<M> {
+    text_input::focus(self.text_input_id.clone())
+  }
+
+  pub fn clear(&mut self) {
     self.search_term.clear();
-    self.crates = Ok(vec![]);
+    self.wait_until = None;
+    self.result = Ok(vec![]);
   }
 }
 
-impl FollowCrate {
+impl SearchCrates {
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message, client: &AttHttpClient) -> Update<Option<Crate>, Command<Message>> {
+  pub fn update(&mut self, message: Message, client: &AttHttpClient) -> Update<Option<String>, Command<Message>> {
     use Message::*;
     match message {
       SetSearchTerm(search_term) => {
@@ -62,38 +70,36 @@ impl FollowCrate {
         return if !search_term.is_empty() {
           let wait_duration = Duration::from_millis(300);
           let wait_until = Instant::now() + wait_duration;
-          self.search_wait_until = Some(wait_until);
-          sleep(wait_duration).perform(|_| SearchCrates).into()
+          self.wait_until = Some(wait_until);
+          sleep(wait_duration).perform(|_| Search).into()
         } else {
-          self.search_wait_until = None;
-          self.crates = Ok(vec![]);
+          self.wait_until = None;
+          self.result = Ok(vec![]);
           Update::empty()
         };
       }
-      SearchCrates => if let Some(search_wait_until) = self.search_wait_until {
+      Search => if let Some(search_wait_until) = self.wait_until {
         if Instant::now() > search_wait_until {
           return client.clone().search_crates(CrateSearch::from_term(self.search_term.clone()))
-            .perform(SetCrates).into();
+            .perform(SetResult).into();
         }
       }
-      SetCrates(crates) => {
+      SetResult(crates) => {
         if let Err(cause) = &crates {
           error!(%cause, "failed to search for crates: {cause:?}");
         }
-        self.crates = crates
+        self.result = crates
       },
-      FollowCrate(crate_id) => return client.clone().follow_crate(crate_id).perform(ReceiveFollowedCrate).into(),
-      ReceiveFollowedCrate(Ok(krate)) => return Update::from_action(Some(krate)),
-      ReceiveFollowedCrate(Err(cause)) => error!(%cause, "failed to follow crate: {cause:?}"),
+      Choose(crate_id) => return Update::from_action(Some(crate_id)),
     }
     Update::default()
   }
 
   pub fn view(&self) -> Element<Message> {
     let builder = WidgetBuilder::stack()
-      .text_input("Crate search term", &self.search_term).id(self.search_id.clone()).on_input(Message::SetSearchTerm).add();
+      .text_input("Crate search term", &self.search_term).id(self.text_input_id.clone()).on_input(Message::SetSearchTerm).add();
 
-    let crates = match &self.crates {
+    let crates = match &self.result {
       Ok(crates) => {
         let cell_to_element = |row, col| -> Option<Element<Message>> {
           let Some(krate): Option<&Crate> = crates.get(row) else { return None; };
@@ -102,7 +108,7 @@ impl FollowCrate {
             1 => WidgetBuilder::once().add_text(&krate.max_version),
             2 => WidgetBuilder::once().add_text(krate.updated_at.format("%Y-%m-%d").to_string()),
             3 => WidgetBuilder::once().add_text(format!("{}", krate.downloads)),
-            4 => WidgetBuilder::once().button("Follow").padding([1.0, 5.0]).positive_style().on_press(|| Message::FollowCrate(krate.id.clone())).add(),
+            4 => WidgetBuilder::once().button(self.button_text.as_str()).padding([1.0, 5.0]).positive_style().on_press(|| Message::Choose(krate.id.clone())).add(),
             _ => return None,
           };
           Some(element)

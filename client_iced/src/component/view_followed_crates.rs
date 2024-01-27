@@ -3,44 +3,44 @@ use tracing::instrument;
 
 use att_client::{AttClient, CratesData, CratesViewData, RemoveCrate, UpdateCrate, UpdateCrates};
 
-use crate::component::{follow_crate, Perform, Update};
-use crate::component::follow_crate::FollowCrate;
+use crate::component::{Perform, search_crate, Update};
+use crate::component::search_crate::SearchCrates;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::icon::icon_text;
 use crate::widget::modal::Modal;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
 
-pub struct ViewCrates {
-  follow_crate: FollowCrate,
-  follow_crate_overlay_open: bool,
+pub struct ViewFollowedCrates {
+  search_crate: SearchCrates,
+  search_crate_overlay_open: bool,
 
   client: AttClient,
 }
 
 #[derive(Debug)]
 pub enum Message {
-  ToFollowCrate(follow_crate::Message),
-
-  OpenFollowCrateModal,
-  CloseFollowCrateModal,
+  ToSearchCrate(search_crate::Message),
+  OpenSearchCrateModal,
+  CloseSearchCrateModal,
+  FollowCrate(UpdateCrate),
 
   RefreshCrate(String),
   RefreshOutdated,
   RefreshAll,
   UnfollowCrate(String),
 
-  SetCrates(UpdateCrates<true>),
-  UpdateCrates(UpdateCrates<false>),
   UpdateCrate(UpdateCrate),
+  UpdateCrates(UpdateCrates<false>),
+  SetCrates(UpdateCrates<true>),
   RemoveCrate(RemoveCrate),
 }
 
-impl ViewCrates {
+impl ViewFollowedCrates {
   pub fn new(client: AttClient) -> Self {
     Self {
-      follow_crate: Default::default(),
-      follow_crate_overlay_open: false,
+      search_crate: SearchCrates::new("Follow"),
+      search_crate_overlay_open: false,
       client,
     }
   }
@@ -50,25 +50,30 @@ impl ViewCrates {
   }
 
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message, data: &mut CratesData, view_data: &mut CratesViewData) -> Update<(), Command<Message>> {
+  pub fn update(&mut self, message: Message, view_data: &mut CratesViewData, data: &mut CratesData) -> Update<(), Command<Message>> {
     use Message::*;
     match message {
-      ToFollowCrate(message) => {
-        let (action, command) = self.follow_crate.update(message, self.client.http_client()).into_action_command();
-        if let Some(krate) = action {
-          data.id_to_crate.insert(krate.id.clone(), krate);
-          self.follow_crate.clear_search_term();
-          self.follow_crate_overlay_open = false;
+      ToSearchCrate(message) => {
+        let (action, command) = self.search_crate.update(message, self.client.http_client()).into_action_command();
+        let search_command = command.map(ToSearchCrate);
+        if let Some(crate_id) = action {
+          let follow_command = self.client.clone().follow_crate(view_data, crate_id).perform(FollowCrate);
+          return Command::batch([search_command, follow_command]).into();
         }
-        return command.map(ToFollowCrate).into();
+        return search_command.into();
       }
-      OpenFollowCrateModal => {
-        self.follow_crate_overlay_open = true;
-        return self.follow_crate.focus_search_term_input().into();
+      OpenSearchCrateModal => {
+        self.search_crate_overlay_open = true;
+        return self.search_crate.focus_search_term_input().into();
       }
-      CloseFollowCrateModal => {
-        self.follow_crate.clear_search_term();
-        self.follow_crate_overlay_open = false;
+      CloseSearchCrateModal => {
+        self.search_crate.clear();
+        self.search_crate_overlay_open = false;
+      }
+      FollowCrate(operation) => {
+        let _ = operation.apply(view_data, data);
+        self.search_crate.clear();
+        self.search_crate_overlay_open = false;
       }
 
       RefreshCrate(crate_id) => {
@@ -144,7 +149,7 @@ impl ViewCrates {
     let disable_refresh = view_data.is_any_crate_being_modified();
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
-      .button("Add").positive_style().on_press(|| Message::OpenFollowCrateModal).add()
+      .button("Add").positive_style().on_press(|| Message::OpenSearchCrateModal).add()
       .button("Refresh Outdated").on_press(|| Message::RefreshOutdated).disabled(disable_refresh).add()
       .button("Refresh All").on_press(|| Message::RefreshAll).disabled(disable_refresh).add()
       .add_space_fill_width()
@@ -154,12 +159,12 @@ impl ViewCrates {
       .column().spacing(10.0).padding(10).fill().add()
       .take();
 
-    if self.follow_crate_overlay_open {
-      let overlay = self.follow_crate
+    if self.search_crate_overlay_open {
+      let overlay = self.search_crate
         .view()
-        .map(Message::ToFollowCrate);
+        .map(Message::ToSearchCrate);
       let modal = Modal::with_container(overlay, content)
-        .on_close_modal(|| Message::CloseFollowCrateModal);
+        .on_close_modal(|| Message::CloseSearchCrateModal);
       modal.into()
     } else {
       content.into()

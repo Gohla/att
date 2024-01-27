@@ -8,7 +8,7 @@ use att_client::{AttClient, Data, Login, ViewData};
 use att_core::users::UserCredentials;
 
 use crate::component::Perform;
-use crate::component::view_crates::{self, ViewCrates};
+use crate::component::view_followed_crates::{self, ViewFollowedCrates};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
 
@@ -22,19 +22,19 @@ pub struct Flags {
 }
 
 pub struct App {
-  data: Data,
   view_data: ViewData,
+  data: Data,
 
   dark_mode: bool,
 
-  view_crates: ViewCrates,
+  view_followed_crates: ViewFollowedCrates,
 
   save_fn: SaveFn,
 }
 
 #[derive(Debug)]
 pub enum Message {
-  ToViewCrates(view_crates::Message),
+  ToViewFollowedCrates(view_followed_crates::Message),
 
   Login(Login),
 
@@ -50,42 +50,35 @@ impl iced::Application for App {
   type Flags = Flags;
 
   fn new(flags: Flags) -> (Self, Command<Message>) {
-    let data = flags.data;
     let mut view_data = ViewData::default();
+    let data = flags.data;
 
     let login_command = flags.client.clone().login(view_data.app_mut(), UserCredentials::default())
       .perform(Message::Login);
 
-    let view_crates = ViewCrates::new(flags.client);
-
     let app = App {
-      data,
       view_data,
-
+      data,
       dark_mode: flags.dark_mode,
-
-      view_crates,
-
+      view_followed_crates: ViewFollowedCrates::new(flags.client),
       save_fn: flags.save_fn,
     };
-
     let command = Command::batch([login_command]);
-
     (app, command)
   }
   fn title(&self) -> String { "All The Things".to_string() }
 
   fn update(&mut self, message: Message) -> Command<Self::Message> {
     match message {
-      Message::ToViewCrates(message) => {
-        return self.view_crates.update(message, self.data.crates_mut(), self.view_data.crates_mut())
+      Message::ToViewFollowedCrates(message) => {
+        return self.view_followed_crates.update(message, self.view_data.crates_mut(), self.data.crates_mut())
           .into_command()
-          .map(|m| Message::ToViewCrates(m));
+          .map(|m| Message::ToViewFollowedCrates(m));
       }
 
       Message::Login(login) => {
         if login.apply(self.view_data.app_mut()).is_ok() {
-          return self.view_crates.request_followed_crates(self.view_data.crates_mut()).map(Message::ToViewCrates);
+          return self.view_followed_crates.request_followed_crates(self.view_data.crates_mut()).map(Message::ToViewFollowedCrates);
         }
       }
 
@@ -110,7 +103,7 @@ impl iced::Application for App {
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)
-      .add_element(self.view_crates.view(self.data.crates(), self.view_data.crates()).map(Message::ToViewCrates))
+      .add_element(self.view_followed_crates.view(self.data.crates(), self.view_data.crates()).map(Message::ToViewFollowedCrates))
       .column().spacing(10.0).padding(10).fill().add()
       .take();
 
