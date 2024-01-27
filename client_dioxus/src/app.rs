@@ -91,7 +91,6 @@ fn ViewFollowedCrates<'a>(cx: Scope<'a>, client: &'a AttClient) -> Element<'a> {
           th { "Downloads" }
           th { "Updated at" }
           th { "Max version" }
-          th { "Actions" }
         }
       }
       tbody {
