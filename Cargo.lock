@@ -374,7 +374,7 @@ dependencies = [
  "dark-light",
  "dioxus",
  "dioxus-web",
- "futures-channel",
+ "futures",
  "serde",
  "tracing",
 ]

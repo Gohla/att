@@ -2,7 +2,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use dioxus::core::{ScopeState, TaskId};
-use futures_channel::oneshot;
+use futures::channel::oneshot;
 
 /// Hook that runs a future to completion when [run](UseFutureSingle::run) is called, triggering an update of the component
 /// this hook belongs to when the future completes, providing the value that future produced through

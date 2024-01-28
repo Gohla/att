@@ -2,7 +2,7 @@ use std::future::Future;
 use std::sync::Arc;
 
 use dioxus::core::ScopeState;
-use futures_channel::mpsc;
+use futures::channel::mpsc;
 
 /// Hook that runs futures with input from [run](UseFuture::run) to completion, triggering an update of the component
 /// this hook belongs to when the future completes, providing the values those futures produced through

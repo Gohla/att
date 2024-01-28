@@ -8,24 +8,20 @@ pub struct UseValue<T> {
   value: T,
   update: Arc<dyn Fn()>,
 }
-impl<T: 'static> UseValue<T> {
-  /// Creates a [value hook](UseValue) on the component of `cx`, with an initial `value`.
-  #[inline]
-  pub fn hook(cx: &ScopeState, value: T) -> &mut UseValue<T> {
-    cx.use_hook(move || UseValue { value, update: cx.schedule_update() })
-  }
-}
-/// Extension trait for creating [value hooks](UseValue).
+
+/// Extension trait for using [value hooks](UseValue).
 pub trait UseValueExt<T> {
-  /// Creates a [value hook](UseValue) on the component of `self`, with an initial `value`.
+  /// Uses a [value hook](UseValue) on the component of `self` with an initial `value`.
   fn use_value(&self, value: T) -> &mut UseValue<T>;
-  /// Creates a [value hook](UseValue) on the component of `self`, with a [default](Default) initial value.
+  /// Uses a [value hook](UseValue) on the component of `self` with a [default](Default) initial value.
   #[inline]
   fn use_value_default(&self) -> &mut UseValue<T> where T: Default { self.use_value(T::default()) }
 }
 impl<T: 'static> UseValueExt<T> for ScopeState {
   #[inline]
-  fn use_value(&self, value: T) -> &mut UseValue<T> { UseValue::hook(self, value) }
+  fn use_value(&self, value: T) -> &mut UseValue<T> {
+    self.use_hook(move || UseValue { value, update: self.schedule_update() })
+  }
 }
 
 impl<T> UseValue<T> {

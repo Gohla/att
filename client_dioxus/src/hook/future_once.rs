@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use dioxus::core::ScopeState;
-use futures_channel::oneshot;
+use futures::channel::oneshot;
 
 /// Hook that immediately runs a future to completion once, triggering an update of the component this hook belongs to
 /// when the future completes, providing the value that future produced through [try_take](UseFutureOnce::try_take).
