@@ -2,7 +2,6 @@ use dioxus::html::input_data::MouseButton;
 use dioxus::prelude::*;
 
 use att_client::{AttClient, LoginState};
-use att_core::crates::Crate;
 use att_core::users::UserCredentials;
 
 use crate::hook::prelude::*;
@@ -47,16 +46,24 @@ fn ViewFollowedCrates<'a>(cx: Scope<'a>, client: &'a AttClient) -> Element<'a> {
   let data = cx.use_value_default();
 
   let update_crates_once = cx.use_future_once(|| client.clone().get_followed_crates(view_data.get_mut()));
-  if let Some(update_crates) = update_crates_once.try_take() {
-    let _ = update_crates.apply(view_data.get_mut(), data.get_mut());
+  if let Some(operation) = update_crates_once.try_take() {
+    let _ = operation.apply(view_data.get_mut(), data.get_mut());
   }
-  let refresh_outdated_crates = cx.use_future(|| client.clone().refresh_outdated_crates(view_data.get_mut()));
-  if let Some(update_crates) = refresh_outdated_crates.try_take() {
-    let _ = update_crates.apply(view_data.get_mut(), data.get_mut());
+  let refresh_outdated_crates = cx.use_future_single(|| client.clone().refresh_outdated_crates(view_data.get_mut()));
+  if let Some(operation) = refresh_outdated_crates.try_take() {
+    let _ = operation.apply(view_data.get_mut(), data.get_mut());
   }
-  let refresh_all_crates = cx.use_future(|| client.clone().refresh_all_crates(view_data.get_mut()));
-  if let Some(set_crates) = refresh_all_crates.try_take() {
-    let _ = set_crates.apply(view_data.get_mut(), data.get_mut());
+  let refresh_all_crates = cx.use_future_single(|| client.clone().refresh_all_crates(view_data.get_mut()));
+  if let Some(operation) = refresh_all_crates.try_take() {
+    let _ = operation.apply(view_data.get_mut(), data.get_mut());
+  }
+  let refresh_crate = cx.use_future(64, |crate_id| client.clone().refresh_crate(view_data.get_mut(), crate_id));
+  for operation in refresh_crate.iter_take() {
+    let _ = operation.apply(view_data.get_mut(), data.get_mut());
+  }
+  let unfollow_crate = cx.use_future(64, |crate_id| client.clone().unfollow_crate(view_data.get_mut(), crate_id));
+  for operation in unfollow_crate.iter_take() {
+    let _ = operation.apply(view_data.get_mut(), data.get_mut());
   }
 
   let disable_refresh = view_data.get().is_any_crate_being_modified();
@@ -91,25 +98,46 @@ fn ViewFollowedCrates<'a>(cx: Scope<'a>, client: &'a AttClient) -> Element<'a> {
           th { "Downloads" }
           th { "Updated at" }
           th { "Max version" }
+          th { "Actions" }
         }
       }
       tbody {
-        for krate in data.get().id_to_crate.values() {
-          Crate { key: "{krate.id}", krate: krate }
-        }
+        data.get().id_to_crate.values().map(|krate|{
+          let refresh_handle = refresh_crate.run_handle();
+          let unfollow_handle = unfollow_crate.run_handle();
+          let disabled = view_data.get().is_crate_being_modified(&krate.id);
+          rsx! {
+            tr {
+              key: "{krate.id}",
+              td { "{krate.id}" }
+              td { "{krate.downloads}" }
+              td { "{krate.updated_at}" }
+              td { "{krate.max_version}" }
+              td {
+                button {
+                  onclick: move |event| {
+                    if let Some(MouseButton::Primary) = event.trigger_button() {
+                      refresh_handle.run(krate.id.clone());
+                    }
+                  },
+                  disabled: disabled,
+                  "Refresh"
+                }
+                button {
+                  onclick: move |event| {
+                    if let Some(MouseButton::Primary) = event.trigger_button() {
+                      unfollow_handle.run(krate.id.clone());
+                    }
+                  },
+                  disabled: disabled,
+                  "Unfollow"
+                }
+              }
+            }
+          }
+        })
       }
     }
   }
 }
 
-#[component]
-fn Crate<'a>(cx: Scope, krate: &'a Crate) -> Element {
-  render! {
-    tr {
-      td { "{krate.id}" }
-      td { "{krate.downloads}" }
-      td { "{krate.updated_at}" }
-      td { "{krate.max_version}" }
-    }
-  }
-}

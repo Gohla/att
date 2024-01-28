@@ -102,7 +102,6 @@ impl AttClient {
   pub fn http_client(&self) -> &AttHttpClient { &self.http_client }
 
 
-  #[inline]
   pub fn login(self, view_data: &mut AppViewData, user_credentials: UserCredentials) -> impl Future<Output=Login> {
     view_data.login_state = LoginState::LoggingIn;
     async move {
@@ -110,7 +109,6 @@ impl AttClient {
       Login { result }
     }
   }
-  #[inline]
   pub fn logout(self, view_data: &mut AppViewData) -> impl Future<Output=Logout> {
     view_data.login_state = LoginState::LoggingOut;
     async move {
@@ -119,7 +117,6 @@ impl AttClient {
     }
   }
 
-  #[inline]
   pub fn get_followed_crates(self, view_data: &mut CratesViewData) -> impl Future<Output=UpdateCrates<true>> {
     view_data.all_crates_being_modified = true;
     async move {
@@ -127,7 +124,6 @@ impl AttClient {
       UpdateCrates { result }
     }
   }
-  #[inline]
   pub fn follow_crate(self, view_data: &mut CratesViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
     view_data.crates_being_modified.insert(crate_id.clone());
     async move {
@@ -135,7 +131,6 @@ impl AttClient {
       UpdateCrate { crate_id, result }
     }
   }
-  #[inline]
   pub fn unfollow_crate(self, view_data: &mut CratesViewData, crate_id: String) -> impl Future<Output=RemoveCrate> {
     view_data.crates_being_modified.insert(crate_id.clone());
     async move {
@@ -144,7 +139,6 @@ impl AttClient {
     }
   }
 
-  #[inline]
   pub fn refresh_outdated_crates(self, view_data: &mut CratesViewData) -> impl Future<Output=UpdateCrates<false>> {
     view_data.all_crates_being_modified = true;
     async move {
@@ -152,7 +146,6 @@ impl AttClient {
       UpdateCrates { result }
     }
   }
-  #[inline]
   pub fn refresh_all_crates(self, view_data: &mut CratesViewData) -> impl Future<Output=UpdateCrates<true>> {
     view_data.all_crates_being_modified = true;
     async move {
@@ -160,7 +153,6 @@ impl AttClient {
       UpdateCrates { result }
     }
   }
-  #[inline]
   pub fn refresh_crate(self, view_data: &mut CratesViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
     view_data.crates_being_modified.insert(crate_id.clone());
     async move {
