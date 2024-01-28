@@ -17,7 +17,7 @@ impl AppProps {
 
 #[component]
 pub fn App(cx: Scope<AppProps>) -> Element {
-  let client = &cx.props.client;
+  let client = cx.use_context_provider(&cx.props.client);
 
   let view_data = cx.use_value_default();
 
@@ -28,7 +28,7 @@ pub fn App(cx: Scope<AppProps>) -> Element {
 
   let body = match view_data.get().login_state() {
     LoginState::LoggedOut => rsx! { "Logged out" },
-    LoginState::LoggedIn => rsx! { ViewFollowedCrates { client: client } },
+    LoginState::LoggedIn => rsx! { ViewFollowedCrates {} },
     LoginState::LoggingIn => rsx! { "Logging in" },
     LoginState::LoggingOut => rsx! { "Logging out" },
   };
@@ -39,8 +39,8 @@ pub fn App(cx: Scope<AppProps>) -> Element {
 }
 
 #[component]
-fn ViewFollowedCrates<'a>(cx: Scope<'a>, client: &'a AttClient) -> Element<'a> {
-  let client = (*client).clone();
+fn ViewFollowedCrates(cx: Scope) -> Element {
+  let client: &AttClient = cx.use_context_unwrap();
 
   let view_data = cx.use_value_default();
   let data = cx.use_value_default();
