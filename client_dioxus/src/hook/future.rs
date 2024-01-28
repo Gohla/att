@@ -8,17 +8,23 @@ use futures_channel::mpsc;
 /// this hook belongs to when the future completes, providing the values those futures produced through
 /// [try_take](UseFuture::iter_take).
 pub struct UseFuture<I, O> {
-  input_tx: mpsc::Sender<I>,
+  handle: UseFutureRunHandle<I>,
   input_rx: mpsc::Receiver<I>,
   output_tx: mpsc::Sender<O>,
   output_rx: mpsc::Receiver<O>,
+}
+/// Handle for running futures with a [future hook](UseFuture). Can be [cloned](Clone).
+#[derive(Clone)]
+pub struct UseFutureRunHandle<I> {
+  input_tx: mpsc::Sender<I>,
   update: Arc<dyn Fn()>,
 }
 
 /// Extension trait for using [future hooks](UseFuture).
 pub trait UseFutureExt<I, O> {
   /// Uses a [future hook](UseFuture) on the component of `self`, creating channels with `channel_capacity`, using
-  /// `create_future` to create futures with inputs from [run](UseFuture::run), and run them to completion.
+  /// `create_future` to create futures with inputs from [run](UseFuture::run) and [run](UseFutureRunHandle::run), and
+  /// run them to completion.
   fn use_future<F: Future<Output=O> + 'static>(
     &self,
     channel_capacity: usize,
@@ -35,14 +41,15 @@ impl<I: 'static, O: 'static> UseFutureExt<I, O> for ScopeState {
     let use_future = self.use_hook(move || {
       let (input_tx, input_rx) = mpsc::channel::<I>(channel_capacity);
       let (output_tx, output_rx) = mpsc::channel::<O>(channel_capacity);
-      UseFuture { input_tx, input_rx, output_tx, output_rx, update: self.schedule_update() }
+      let handle = UseFutureRunHandle { input_tx, update: self.schedule_update() };
+      UseFuture { handle, input_rx, output_tx, output_rx }
     });
 
     // Ignore error OK: not a problem if there are no messages but the channel is not yet closed.
     for input in std::iter::from_fn(|| use_future.input_rx.try_next().ok().flatten()) {
       let future = (create_future)(input);
       let mut tx = use_future.output_tx.clone();
-      let update = use_future.update.clone();
+      let update = use_future.handle.update.clone();
       self.push_future(async move {
         let value = future.await;
         let _ = tx.try_send(value); // TODO: should not ignore the error when it is full?
@@ -59,8 +66,13 @@ impl<I, O: 'static> UseFuture<I, O> {
   /// hook belongs to.
   #[inline]
   pub fn run(&self, input: I) {
-    let _ = self.input_tx.clone().try_send(input); // TODO: should not ignore the error when it is full?
-    (self.update)();
+    self.handle.run(input);
+  }
+
+  /// Gets the [cloneable](Clone) [future hook run handle](UseFutureRunHandle) for running futures.
+  #[inline]
+  pub fn run_handle(&self) -> &UseFutureRunHandle<I> {
+    &self.handle
   }
 
   /// Iterates over all values produced by completed futures and takes them.
@@ -73,25 +85,12 @@ impl<I, O: 'static> UseFuture<I, O> {
   }
 }
 
-/// Handle for running futures with a [future hook](UseFuture). Can be [cloned](Clone).
-#[derive(Clone)]
-pub struct UseFutureRunHandle<I> {
-  tx: mpsc::Sender<I>,
-  update: Arc<dyn Fn()>,
-}
-impl<I, O: 'static> UseFuture<I, O> {
-  /// Creates a [future hook run handle](UseFutureRunHandle) for running futures, but which can also be [cloned](Clone).
-  #[inline]
-  pub fn run_handle(&self) -> UseFutureRunHandle<I> {
-    UseFutureRunHandle { tx: self.input_tx.clone(), update: self.update.clone() }
-  }
-}
 impl<I> UseFutureRunHandle<I> {
   /// Run a future with `input` to completion the next time the hook of this handle is used. Triggers an update of the
   /// component the hook of this handle belongs to.
   #[inline]
   pub fn run(&self, input: I) {
-    let _ = self.tx.clone().try_send(input); // TODO: should not ignore the error when it is full?
+    let _ = self.input_tx.clone().try_send(input); // TODO: should not ignore the error when it is full?
     (self.update)();
   }
 }
