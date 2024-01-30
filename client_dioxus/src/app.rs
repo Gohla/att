@@ -1,6 +1,7 @@
 use dioxus::prelude::*;
 
-use att_client::{AttClient, LoginState};
+use att_client::app::{AppRequest, LoginState};
+use att_client::AttClient;
 use att_core::users::UserCredentials;
 
 use crate::component::view_followed_crates::ViewFollowedCrates;
@@ -18,10 +19,11 @@ impl AppProps {
 #[component]
 pub fn App(cx: Scope<AppProps>) -> Element {
   let client = cx.use_context_provider(&cx.props.client);
+  let request: AppRequest = client.app();
 
   let view_data = cx.use_value_default();
 
-  let login = cx.use_future_once(|| client.clone().login(view_data.get_mut(), UserCredentials::default()));
+  let login = cx.use_future_once(|| request.login(view_data.get_mut(), UserCredentials::default()));
   if let Some(login) = login.try_take() {
     let _ = login.apply(view_data.get_mut());
   }

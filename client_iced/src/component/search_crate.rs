@@ -13,8 +13,8 @@ use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
 
-#[derive(Debug)]
 pub struct SearchCrates {
+  client: AttHttpClient,
   text_input_id: text_input::Id,
   button_text: String,
 
@@ -31,22 +31,17 @@ pub enum Message {
   Choose(String),
 }
 
-impl Default for SearchCrates {
-  fn default() -> Self {
+impl SearchCrates {
+  pub fn new(client: AttHttpClient, button_text: impl Into<String>) -> Self {
     Self {
+      client,
       text_input_id: text_input::Id::unique(),
-      button_text: "Choose".to_string(),
+      button_text: button_text.into(),
 
       search_term: String::new(),
       wait_until: None,
       result: Ok(vec![]),
     }
-  }
-}
-
-impl SearchCrates {
-  pub fn new(button_text: impl Into<String>) -> Self {
-    Self { button_text: button_text.into(), ..Self::default() }
   }
 
   pub fn focus_search_term_input<M: 'static>(&self) -> Command<M> {
@@ -62,7 +57,7 @@ impl SearchCrates {
 
 impl SearchCrates {
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message, client: &AttHttpClient) -> Update<Option<String>, Command<Message>> {
+  pub fn update(&mut self, message: Message) -> Update<Option<String>, Command<Message>> {
     use Message::*;
     match message {
       SetSearchTerm(search_term) => {
@@ -80,7 +75,7 @@ impl SearchCrates {
       }
       Search => if let Some(search_wait_until) = self.wait_until {
         if Instant::now() > search_wait_until {
-          return client.clone().search_crates(CrateSearch::from_term(self.search_term.clone()))
+          return self.client.clone().search_crates(CrateSearch::from_term(self.search_term.clone()))
             .perform(SetResult).into();
         }
       }

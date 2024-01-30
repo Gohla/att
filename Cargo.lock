@@ -355,6 +355,7 @@ name = "att_client"
 version = "0.1.0"
 dependencies = [
  "att_core",
+ "futures",
  "reqwest",
  "serde",
  "thiserror",

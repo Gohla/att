@@ -4,7 +4,8 @@ use iced::{Command, Element, Event, event, executor, Renderer, Subscription, The
 use iced::window::Id;
 use tracing::error;
 
-use att_client::{AttClient, Data, Login, ViewData};
+use att_client::{AttClient, Data};
+use att_client::app::{AppRequest, AppViewData, Login};
 use att_core::users::UserCredentials;
 
 use crate::component::Perform;
@@ -15,21 +16,19 @@ use crate::widget::dark_light_toggle::light_dark_toggle;
 pub type SaveFn = Box<dyn FnMut(&Data) -> Result<(), Box<dyn Error>> + 'static>;
 
 pub struct Flags {
-  pub data: Data,
-  pub dark_mode: bool,
   pub client: AttClient,
   pub save_fn: SaveFn,
+  pub dark_mode: bool,
+  pub data: Data,
 }
 
 pub struct App {
-  view_data: ViewData,
-  data: Data,
-
-  dark_mode: bool,
-
-  view_followed_crates: ViewFollowedCrates,
-
+  _request: AppRequest,
   save_fn: SaveFn,
+  view_followed_crates: ViewFollowedCrates,
+  view_data: AppViewData,
+  dark_mode: bool,
+  data: Data,
 }
 
 #[derive(Debug)]
@@ -50,18 +49,20 @@ impl iced::Application for App {
   type Flags = Flags;
 
   fn new(flags: Flags) -> (Self, Command<Message>) {
-    let mut view_data = ViewData::default();
     let data = flags.data;
 
-    let login_command = flags.client.clone().login(view_data.app_mut(), UserCredentials::default())
+    let request = flags.client.app();
+    let mut view_data = AppViewData::default();
+    let login_command = request.clone().login(&mut view_data, UserCredentials::default())
       .perform(Message::Login);
 
     let app = App {
-      view_data,
-      data,
-      dark_mode: flags.dark_mode,
-      view_followed_crates: ViewFollowedCrates::new(flags.client),
+      _request: request,
       save_fn: flags.save_fn,
+      view_followed_crates: ViewFollowedCrates::new(flags.client),
+      view_data,
+      dark_mode: flags.dark_mode,
+      data,
     };
     let command = Command::batch([login_command]);
     (app, command)
@@ -71,14 +72,14 @@ impl iced::Application for App {
   fn update(&mut self, message: Message) -> Command<Self::Message> {
     match message {
       Message::ToViewFollowedCrates(message) => {
-        return self.view_followed_crates.update(message, self.view_data.crates_mut(), self.data.crates_mut())
+        return self.view_followed_crates.update(message, self.data.crates_mut())
           .into_command()
           .map(|m| Message::ToViewFollowedCrates(m));
       }
 
       Message::Login(login) => {
-        if login.apply(self.view_data.app_mut()).is_ok() {
-          return self.view_followed_crates.request_followed_crates(self.view_data.crates_mut()).map(Message::ToViewFollowedCrates);
+        if login.apply(&mut self.view_data).is_ok() {
+          return self.view_followed_crates.request_followed_crates().map(Message::ToViewFollowedCrates);
         }
       }
 
@@ -103,7 +104,7 @@ impl iced::Application for App {
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)
-      .add_element(self.view_followed_crates.view(self.data.crates(), self.view_data.crates()).map(Message::ToViewFollowedCrates))
+      .add_element(self.view_followed_crates.view(self.data.crates()).map(Message::ToViewFollowedCrates))
       .column().spacing(10.0).padding(10).fill().add()
       .take();
 

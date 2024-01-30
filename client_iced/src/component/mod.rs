@@ -111,3 +111,12 @@ impl<T, E, M: Default, F: Future<Output=Result<T, E>> + MaybeSend + 'static> Per
     Command::perform(self, |r| r.map(f).unwrap_or_default())
   }
 }
+
+pub trait PerformInto<T, I, M> {
+  fn perform_into(self, f: impl FnOnce(I) -> M + MaybeSend + 'static) -> Command<M>;
+}
+impl<T, I: From<T>, M, F: Future<Output=T> + MaybeSend + 'static> PerformInto<T, I, M> for F {
+  fn perform_into(self, f: impl FnOnce(I) -> M + MaybeSend + 'static) -> Command<M> {
+    Command::perform(self, |v|f(v.into()))
+  }
+}
