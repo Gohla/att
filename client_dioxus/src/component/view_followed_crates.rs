@@ -14,11 +14,11 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
   let view_data = cx.use_value_default();
   let data = cx.use_value_default();
 
-  let responses = cx.use_future(64, |request: CrateRequest| request.send(&client, view_data.get_mut()));
-  for response in responses.iter_take() {
+  let requests = cx.use_future(64, |request: CrateRequest| request.send(&client, view_data.get_mut()));
+  for response in requests.drain_values() {
     response.process(view_data.get_mut(), data.get_mut());
   }
-  let request_handle = responses.run_handle();
+  let request_handle = requests.handle();
 
   cx.use_once(|| request_handle.run(CrateRequest::GetFollowed));
 

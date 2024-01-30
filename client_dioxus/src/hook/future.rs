@@ -6,7 +6,7 @@ use futures::channel::mpsc;
 
 /// Hook that runs futures with input from [run](UseFuture::run) to completion, triggering an update of the component
 /// this hook belongs to when the future completes, providing the values those futures produced through
-/// [try_take](UseFuture::iter_take).
+/// [try_take](UseFuture::drain_values).
 pub struct UseFuture<I, O> {
   handle: UseFutureRunHandle<I>,
   input_rx: mpsc::Receiver<I>,
@@ -71,7 +71,7 @@ impl<I, O: 'static> UseFuture<I, O> {
 
   /// Gets the [cloneable](Clone) [future hook run handle](UseFutureRunHandle) for running futures.
   #[inline]
-  pub fn run_handle(&self) -> &UseFutureRunHandle<I> {
+  pub fn handle(&self) -> &UseFutureRunHandle<I> {
     &self.handle
   }
 
@@ -79,7 +79,7 @@ impl<I, O: 'static> UseFuture<I, O> {
   ///
   /// This method takes the values out, so it will only return them once.
   #[inline]
-  pub fn iter_take(&mut self) -> impl Iterator<Item=O> + '_ {
+  pub fn drain_values(&mut self) -> impl Iterator<Item=O> + '_ {
     // Ignore error OK: not a problem if there are no messages but the channel is not yet closed.
     std::iter::from_fn(|| self.output_rx.try_next().ok().flatten())
   }
