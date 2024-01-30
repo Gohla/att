@@ -1,6 +1,6 @@
 use dioxus::prelude::*;
 
-use att_client::app::{AppRequest, LoginState};
+use att_client::app::{AppClient, LoginState};
 use att_client::AttClient;
 use att_core::users::UserCredentials;
 
@@ -19,7 +19,7 @@ impl AppProps {
 #[component]
 pub fn App(cx: Scope<AppProps>) -> Element {
   let client = cx.use_context_provider(&cx.props.client);
-  let request: AppRequest = client.app();
+  let request: AppClient = client.clone().into_app_client();
 
   let view_data = cx.use_value_default();
 

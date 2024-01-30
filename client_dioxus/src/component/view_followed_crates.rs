@@ -2,25 +2,25 @@ use dioxus::html::input_data::MouseButton;
 use dioxus::prelude::*;
 
 use att_client::AttClient;
-use att_client::crates::{CrateAction, CrateRequest};
+use att_client::crates::{CrateClient, CrateRequest};
 
 use crate::hook::prelude::*;
 
 #[component]
 pub fn ViewFollowedCrates(cx: Scope) -> Element {
   let client: &AttClient = cx.use_context_unwrap();
-  let request: CrateRequest = client.crates();
+  let client: CrateClient = client.clone().into_crate_client();
 
   let view_data = cx.use_value_default();
   let data = cx.use_value_default();
 
-  let actions = cx.use_future(64, |action: CrateAction| action.perform(request.clone(), view_data.get_mut()));
-  for operation in actions.iter_take() {
-    operation.apply(view_data.get_mut(), data.get_mut());
+  let responses = cx.use_future(64, |request: CrateRequest| request.send(&client, view_data.get_mut()));
+  for response in responses.iter_take() {
+    response.process(view_data.get_mut(), data.get_mut());
   }
-  let actions_handle = actions.run_handle();
+  let request_handle = responses.run_handle();
 
-  cx.use_once(|| actions_handle.run(CrateAction::GetFollowed));
+  cx.use_once(|| request_handle.run(CrateRequest::GetFollowed));
 
   let disable_refresh = view_data.get().is_any_crate_being_modified();
   render! {
@@ -30,7 +30,7 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
       button {
         onclick: move |event| {
           if let Some(MouseButton::Primary) = event.trigger_button() {
-            actions_handle.run(CrateAction::RefreshOutdated);
+            request_handle.run(CrateRequest::RefreshOutdated);
           }
         },
         disabled: disable_refresh,
@@ -39,7 +39,7 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
       button {
         onclick: move |event| {
           if let Some(MouseButton::Primary) = event.trigger_button() {
-            actions_handle.run(CrateAction::RefreshAll);
+            request_handle.run(CrateRequest::RefreshAll);
           }
         },
         disabled: disable_refresh,
@@ -70,7 +70,7 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
                 button {
                   onclick: move |event| {
                     if let Some(MouseButton::Primary) = event.trigger_button() {
-                      actions_handle.run(CrateAction::Refresh(krate.id.clone()));
+                      request_handle.run(CrateRequest::Refresh(krate.id.clone()));
                     }
                   },
                   disabled: disabled,
@@ -79,7 +79,7 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
                 button {
                   onclick: move |event| {
                     if let Some(MouseButton::Primary) = event.trigger_button() {
-                      actions_handle.run(CrateAction::Unfollow(krate.id.clone()));
+                      request_handle.run(CrateRequest::Unfollow(krate.id.clone()));
                     }
                   },
                   disabled: disabled,

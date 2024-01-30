@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
 use att_core::crates::{Crate, CrateSearch};
-use att_core::util::maybe_send::{MaybeSend, MaybeSendFutureExt};
+use att_core::util::maybe_send::MaybeSendFuture;
 
 use crate::http_client::{AttHttpClient, AttHttpClientError};
 
@@ -40,63 +40,63 @@ impl CrateViewData {
 }
 
 
-/// Crate requests.
+/// Crate client for requesting (changes to) data.
 #[derive(Clone)]
-pub struct CrateRequest {
+pub struct CrateClient {
   http_client: AttHttpClient,
 }
-impl CrateRequest {
+impl CrateClient {
   #[inline]
   pub(crate) fn new(http_client: AttHttpClient) -> Self { Self { http_client } }
 
-  pub fn get_followed(self, view_data: &mut CrateViewData) -> impl Future<Output=UpdateCrates<true>> {
+  pub fn get_followed(&self, view_data: &mut CrateViewData) -> impl Future<Output=UpdateCrates<true>> {
     view_data.all_crates_being_modified = true;
+    let future = self.http_client.search_crates(CrateSearch::followed());
     async move {
-      let result = self.http_client.search_crates(CrateSearch::followed()).await;
-      UpdateCrates { result }
+      UpdateCrates { result: future.await }
     }
   }
-  pub fn follow(self, view_data: &mut CrateViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
+  pub fn follow(&self, view_data: &mut CrateViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
     view_data.crates_being_modified.insert(crate_id.clone());
+    let future = self.http_client.follow_crate(crate_id.clone());
     async move {
-      let result = self.http_client.follow_crate(crate_id.clone()).await;
-      UpdateCrate { crate_id, result }
+      UpdateCrate { crate_id, result: future.await }
     }
   }
-  pub fn unfollow(self, view_data: &mut CrateViewData, crate_id: String) -> impl Future<Output=RemoveCrate> {
+  pub fn unfollow(&self, view_data: &mut CrateViewData, crate_id: String) -> impl Future<Output=RemoveCrate> {
     view_data.crates_being_modified.insert(crate_id.clone());
+    let future = self.http_client.unfollow_crate(crate_id.clone());
     async move {
-      let result = self.http_client.unfollow_crate(crate_id.clone()).await;
-      RemoveCrate { crate_id, result }
+      RemoveCrate { crate_id, result: future.await }
     }
   }
 
-  pub fn refresh_outdated(self, view_data: &mut CrateViewData) -> impl Future<Output=UpdateCrates<false>> {
+  pub fn refresh_outdated(&self, view_data: &mut CrateViewData) -> impl Future<Output=UpdateCrates<false>> {
     view_data.all_crates_being_modified = true;
+    let future = self.http_client.refresh_outdated_crates();
     async move {
-      let result = self.http_client.refresh_outdated_crates().await;
-      UpdateCrates { result }
+      UpdateCrates { result: future.await }
     }
   }
-  pub fn refresh_all(self, view_data: &mut CrateViewData) -> impl Future<Output=UpdateCrates<true>> {
+  pub fn refresh_all(&self, view_data: &mut CrateViewData) -> impl Future<Output=UpdateCrates<true>> {
     view_data.all_crates_being_modified = true;
+    let future = self.http_client.refresh_all_crates();
     async move {
-      let result = self.http_client.refresh_all_crates().await;
-      UpdateCrates { result }
+      UpdateCrates { result: future.await }
     }
   }
-  pub fn refresh(self, view_data: &mut CrateViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
+  pub fn refresh(&self, view_data: &mut CrateViewData, crate_id: String) -> impl Future<Output=UpdateCrate> {
     view_data.crates_being_modified.insert(crate_id.clone());
+    let future = self.http_client.refresh_crate(crate_id.clone());
     async move {
-      let result = self.http_client.refresh_crate(crate_id.clone()).await;
-      UpdateCrate { crate_id, result }
+      UpdateCrate { crate_id, result: future.await }
     }
   }
 }
 
-/// Crate action: request in message form.
+/// Crate requests in message form.
 #[derive(Debug)]
-pub enum CrateAction {
+pub enum CrateRequest {
   GetFollowed,
   Follow(String),
   Unfollow(String),
@@ -104,10 +104,10 @@ pub enum CrateAction {
   RefreshOutdated,
   RefreshAll,
 }
-impl CrateAction {
-  pub fn perform(self, request: CrateRequest, view_data: &mut CrateViewData) -> impl Future<Output=CrateOperation> + MaybeSend + 'static {
-    use CrateAction::*;
-    use CrateOperation::*;
+impl CrateRequest {
+  pub fn send(self, request: &CrateClient, view_data: &mut CrateViewData) -> impl MaybeSendFuture<'static, Output=CrateResponse> {
+    use CrateRequest::*;
+    use CrateResponse::*;
     match self {
       GetFollowed => request.get_followed(view_data).map(Set).boxed_maybe_send(),
       Follow(crate_id) => request.follow(view_data, crate_id).map(UpdateOne).boxed_maybe_send(),
@@ -120,14 +120,14 @@ impl CrateAction {
 }
 
 
-/// Update single crate operation.
+/// Update single crate response.
 #[derive(Debug)]
 pub struct UpdateCrate {
   crate_id: String,
   result: Result<Crate, AttHttpClientError>,
 }
 impl UpdateCrate {
-  pub fn apply(self, view_data: &mut CrateViewData, data: &mut CrateData) -> Result<(), AttHttpClientError> {
+  pub fn process(self, view_data: &mut CrateViewData, data: &mut CrateData) -> Result<(), AttHttpClientError> {
     view_data.crates_being_modified.remove(&self.crate_id);
 
     let krate = self.result
@@ -139,13 +139,13 @@ impl UpdateCrate {
   }
 }
 
-/// Update/set multiple crates operation.
+/// Update/set multiple crates response.
 #[derive(Debug)]
 pub struct UpdateCrates<const SET: bool> {
   result: Result<Vec<Crate>, AttHttpClientError>,
 }
 impl<const SET: bool> UpdateCrates<SET> {
-  pub fn apply(self, view_data: &mut CrateViewData, data: &mut CrateData) -> Result<(), AttHttpClientError> {
+  pub fn process(self, view_data: &mut CrateViewData, data: &mut CrateData) -> Result<(), AttHttpClientError> {
     view_data.all_crates_being_modified = false;
 
     let crates = self.result
@@ -162,14 +162,14 @@ impl<const SET: bool> UpdateCrates<SET> {
   }
 }
 
-/// Remove (unfollow) crate operation.
+/// Remove (unfollow) crate response.
 #[derive(Debug)]
 pub struct RemoveCrate {
   crate_id: String,
   result: Result<(), AttHttpClientError>,
 }
 impl RemoveCrate {
-  pub fn apply(self, view_data: &mut CrateViewData, data: &mut CrateData) -> Result<(), AttHttpClientError> {
+  pub fn process(self, view_data: &mut CrateViewData, data: &mut CrateData) -> Result<(), AttHttpClientError> {
     view_data.crates_being_modified.remove(&self.crate_id);
 
     self.result
@@ -181,37 +181,37 @@ impl RemoveCrate {
   }
 }
 
-/// Crate operation in message form.
+/// Crate responses in message form.
 #[derive(Debug)]
-pub enum CrateOperation {
+pub enum CrateResponse {
   UpdateOne(UpdateCrate),
   Update(UpdateCrates<false>),
   Set(UpdateCrates<true>),
   Remove(RemoveCrate),
 }
-impl From<UpdateCrate> for CrateOperation {
+impl From<UpdateCrate> for CrateResponse {
   #[inline]
   fn from(op: UpdateCrate) -> Self { Self::UpdateOne(op) }
 }
-impl From<UpdateCrates<false>> for CrateOperation {
+impl From<UpdateCrates<false>> for CrateResponse {
   #[inline]
   fn from(op: UpdateCrates<false>) -> Self { Self::Update(op) }
 }
-impl From<UpdateCrates<true>> for CrateOperation {
+impl From<UpdateCrates<true>> for CrateResponse {
   #[inline]
   fn from(op: UpdateCrates<true>) -> Self { Self::Set(op) }
 }
-impl From<RemoveCrate> for CrateOperation {
+impl From<RemoveCrate> for CrateResponse {
   #[inline]
   fn from(op: RemoveCrate) -> Self { Self::Remove(op) }
 }
-impl CrateOperation {
-  pub fn apply(self, view_data: &mut CrateViewData, data: &mut CrateData) {
+impl CrateResponse {
+  pub fn process(self, view_data: &mut CrateViewData, data: &mut CrateData) {
     match self {
-      CrateOperation::UpdateOne(operation) => { let _ = operation.apply(view_data, data); }
-      CrateOperation::Update(operation) => { let _ = operation.apply(view_data, data); }
-      CrateOperation::Set(operation) => { let _ = operation.apply(view_data, data); }
-      CrateOperation::Remove(operation) => { let _ = operation.apply(view_data, data); }
+      CrateResponse::UpdateOne(operation) => { let _ = operation.process(view_data, data); }
+      CrateResponse::Update(operation) => { let _ = operation.process(view_data, data); }
+      CrateResponse::Set(operation) => { let _ = operation.process(view_data, data); }
+      CrateResponse::Remove(operation) => { let _ = operation.process(view_data, data); }
     }
   }
 }

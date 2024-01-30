@@ -26,33 +26,33 @@ impl AppViewData {
 }
 
 
-/// Application requests.
+/// Application client for requesting (changes to) data.
 #[derive(Clone)]
-pub struct AppRequest {
+pub struct AppClient {
   http_client: AttHttpClient,
 }
-impl AppRequest {
+impl AppClient {
   #[inline]
   pub(crate) fn new(http_client: AttHttpClient) -> Self { Self { http_client } }
 
-  pub fn login(self, view_data: &mut AppViewData, user_credentials: UserCredentials) -> impl Future<Output=Login> {
+  pub fn login(&self, view_data: &mut AppViewData, user_credentials: UserCredentials) -> impl Future<Output=Login> {
     view_data.login_state = LoginState::LoggingIn;
+    let future = self.http_client.login(user_credentials);
     async move {
-      let result = self.http_client.login(user_credentials).await;
-      Login { result }
+      Login { result: future.await }
     }
   }
-  pub fn logout(self, view_data: &mut AppViewData) -> impl Future<Output=Logout> {
+  pub fn logout(&self, view_data: &mut AppViewData) -> impl Future<Output=Logout> {
     view_data.login_state = LoginState::LoggingOut;
+    let future = self.http_client.logout();
     async move {
-      let result = self.http_client.logout().await;
-      Logout { result }
+      Logout { result: future.await }
     }
   }
 }
 
 
-/// Application login operation.
+/// Application login response.
 #[derive(Debug)]
 pub struct Login {
   result: Result<(), AttHttpClientError>,
@@ -70,7 +70,7 @@ impl Login {
   }
 }
 
-/// Application logout operation.
+/// Application logout response.
 #[derive(Debug)]
 pub struct Logout {
   result: Result<(), AttHttpClientError>,

@@ -3,8 +3,8 @@ use serde::{Deserialize, Serialize};
 use app::AppViewData;
 use crates::{CrateData, CrateViewData};
 
-use crate::app::AppRequest;
-use crate::crates::CrateRequest;
+use crate::app::AppClient;
+use crate::crates::CrateClient;
 use crate::http_client::AttHttpClient;
 
 pub mod http_client;
@@ -57,10 +57,12 @@ impl AttClient {
   }
 
   #[inline]
-  pub fn app(&self) -> AppRequest { AppRequest::new(self.http_client.clone()) }
+  pub fn into_app_client(self) -> AppClient { AppClient::new(self.http_client) }
   #[inline]
-  pub fn crates(&self) -> CrateRequest { CrateRequest::new(self.http_client.clone()) }
+  pub fn into_crate_client(self) -> CrateClient { CrateClient::new(self.http_client) }
 
   #[inline]
-  pub fn http_client(&self) -> &AttHttpClient { &self.http_client }
+  pub fn as_http_client(&self) -> &AttHttpClient { &self.http_client }
+  #[inline]
+  pub fn into_http_client(self) -> AttHttpClient { self.http_client }
 }

@@ -2,7 +2,7 @@ use iced::{Command, Element};
 use tracing::instrument;
 
 use att_client::AttClient;
-use att_client::crates::{CrateAction, CrateData, CrateOperation, CrateRequest, CrateViewData};
+use att_client::crates::{CrateClient, CrateData, CrateRequest, CrateResponse, CrateViewData};
 
 use crate::component::{Perform, PerformInto, search_crate, Update};
 use crate::component::search_crate::SearchCrates;
@@ -13,7 +13,7 @@ use crate::widget::table::Table;
 use crate::widget::WidgetExt;
 
 pub struct ViewFollowedCrates {
-  request: CrateRequest,
+  client: CrateClient,
   search_crate: SearchCrates,
   view_data: CrateViewData,
   search_overlay_open: bool,
@@ -25,22 +25,22 @@ pub enum Message {
   OpenSearchCrateModal,
   CloseSearchCrateModal,
 
-  PerformAction(CrateAction),
-  ApplyOperation(CrateOperation),
+  SendRequest(CrateRequest),
+  ProcessResponse(CrateResponse),
 }
 
 impl ViewFollowedCrates {
   pub fn new(client: AttClient) -> Self {
     Self {
-      request: client.crates(),
-      search_crate: SearchCrates::new(client.http_client().clone(), "Follow"),
+      client: client.clone().into_crate_client(),
+      search_crate: SearchCrates::new(client.into_http_client(), "Follow"),
       view_data: CrateViewData::default(),
       search_overlay_open: false,
     }
   }
 
   pub fn request_followed_crates(&mut self) -> Command<Message> {
-    self.request.clone().get_followed(&mut self.view_data).perform_into(Message::ApplyOperation)
+    self.client.get_followed(&mut self.view_data).perform_into(Message::ProcessResponse)
   }
 
   #[instrument(skip_all)]
@@ -53,7 +53,7 @@ impl ViewFollowedCrates {
         if let Some(crate_id) = action {
           self.search_crate.clear();
           self.search_overlay_open = false;
-          let follow_command = self.request.clone().follow(&mut self.view_data, crate_id).perform_into(ApplyOperation);
+          let follow_command = self.client.follow(&mut self.view_data, crate_id).perform_into(ProcessResponse);
           return Command::batch([search_command, follow_command]).into();
         }
         return search_command.into();
@@ -67,8 +67,8 @@ impl ViewFollowedCrates {
         self.search_overlay_open = false;
       }
 
-      PerformAction(action) => return action.perform(self.request.clone(), &mut self.view_data).perform(ApplyOperation).into(),
-      ApplyOperation(operation) => operation.apply(&mut self.view_data, data),
+      SendRequest(request) => return request.send(&self.client, &mut self.view_data).perform(ProcessResponse).into(),
+      ProcessResponse(response) => response.process(&mut self.view_data, data),
     }
     Update::default()
   }
@@ -88,14 +88,14 @@ impl ViewFollowedCrates {
         4 => WidgetBuilder::once()
           .button(icon_text("\u{F116}"))
           .padding(4.0)
-          .on_press(|| Message::PerformAction(CrateAction::Refresh(crate_id.clone())))
+          .on_press(|| Message::SendRequest(CrateRequest::Refresh(crate_id.clone())))
           .disabled(self.view_data.is_crate_being_modified(crate_id))
           .add(),
         5 => WidgetBuilder::once()
           .button(icon_text("\u{F5DE}"))
           .destructive_style()
           .padding(4.0)
-          .on_press(|| Message::PerformAction(CrateAction::Unfollow(crate_id.clone())))
+          .on_press(|| Message::SendRequest(CrateRequest::Unfollow(crate_id.clone())))
           .disabled(self.view_data.is_crate_being_modified(crate_id))
           .add(),
         _ => return None,
@@ -118,8 +118,8 @@ impl ViewFollowedCrates {
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
       .button("Add").positive_style().on_press(|| Message::OpenSearchCrateModal).add()
-      .button("Refresh Outdated").on_press(|| Message::PerformAction(CrateAction::RefreshOutdated)).disabled(disable_refresh).add()
-      .button("Refresh All").on_press(|| Message::PerformAction(CrateAction::RefreshAll)).disabled(disable_refresh).add()
+      .button("Refresh Outdated").on_press(|| Message::SendRequest(CrateRequest::RefreshOutdated)).disabled(disable_refresh).add()
+      .button("Refresh All").on_press(|| Message::SendRequest(CrateRequest::RefreshAll)).disabled(disable_refresh).add()
       .add_space_fill_width()
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)

@@ -75,7 +75,7 @@ impl SearchCrates {
       }
       Search => if let Some(search_wait_until) = self.wait_until {
         if Instant::now() > search_wait_until {
-          return self.client.clone().search_crates(CrateSearch::from_term(self.search_term.clone()))
+          return self.client.search_crates(CrateSearch::from_term(self.search_term.clone()))
             .perform(SetResult).into();
         }
       }

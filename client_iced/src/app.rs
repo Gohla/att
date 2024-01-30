@@ -5,7 +5,7 @@ use iced::window::Id;
 use tracing::error;
 
 use att_client::{AttClient, Data};
-use att_client::app::{AppRequest, AppViewData, Login};
+use att_client::app::{AppClient, AppViewData, Login};
 use att_core::users::UserCredentials;
 
 use crate::component::Perform;
@@ -23,7 +23,7 @@ pub struct Flags {
 }
 
 pub struct App {
-  _request: AppRequest,
+  _request: AppClient,
   save_fn: SaveFn,
   view_followed_crates: ViewFollowedCrates,
   view_data: AppViewData,
@@ -51,9 +51,9 @@ impl iced::Application for App {
   fn new(flags: Flags) -> (Self, Command<Message>) {
     let data = flags.data;
 
-    let request = flags.client.app();
+    let request = flags.client.clone().into_app_client();
     let mut view_data = AppViewData::default();
-    let login_command = request.clone().login(&mut view_data, UserCredentials::default())
+    let login_command = request.login(&mut view_data, UserCredentials::default())
       .perform(Message::Login);
 
     let app = App {

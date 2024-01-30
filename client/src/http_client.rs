@@ -1,3 +1,5 @@
+use std::future::Future;
+
 use reqwest::{Method, RequestBuilder};
 use serde::de::DeserializeOwned;
 use thiserror::Error;
@@ -34,8 +36,6 @@ impl AttHttpClient {
 
 #[derive(Debug, Error)]
 pub enum AttHttpClientError {
-  #[error("Parsing URL failed")]
-  UrlParse(#[from] url::ParseError),
   #[error("HTTP request failed")]
   Request(#[from] reqwest::Error),
   #[error("Users request failed")]
@@ -46,94 +46,80 @@ pub enum AttHttpClientError {
 
 impl AttHttpClient {
   #[instrument(skip_all, fields(user_credentials.name = user_credentials.name), err)]
-  pub async fn login(self, user_credentials: UserCredentials) -> Result<(), AttHttpClientError> {
-    let url = self.base_url.join("users/login")?;
-    debug!(?user_credentials, url = url.to_string(), "sending login request");
-    self.request::<_, UsersError>(Method::POST, url, |b| b.json(&user_credentials)).await
+  pub fn login(&self, user_credentials: UserCredentials) -> impl Future<Output=Result<(), AttHttpClientError>> {
+    let rb = self.request_builder(Method::POST, "users/login")
+      .json(&user_credentials);
+    async move { Self::send::<_, UsersError>(rb).await }
   }
   #[instrument(skip_all, err)]
-  pub async fn logout(self) -> Result<(), AttHttpClientError> {
-    let url = self.base_url.join("users/login")?;
-    debug!(%url, "sending logout request");
-    self.request::<_, UsersError>(Method::DELETE, url, |b| b).await
+  pub fn logout(&self) -> impl Future<Output=Result<(), AttHttpClientError>> {
+    let rb = self.request_builder(Method::DELETE, "users/login");
+    async move { Self::send::<_, UsersError>(rb).await }
   }
 
   #[instrument(skip(self), err)]
-  pub async fn search_crates(self, crate_search: CrateSearch) -> Result<Vec<Crate>, AttHttpClientError> {
-    let url = self.base_url.join("crates")?;
-    debug!(?crate_search, %url, "sending search crates request");
-    self.request::<_, CrateError>(Method::GET, url, |b| b.query(&crate_search)).await
+  pub fn search_crates(&self, crate_search: CrateSearch) -> impl Future<Output=Result<Vec<Crate>, AttHttpClientError>> {
+    let rb = self.request_builder(Method::GET, "crates")
+      .query(&crate_search);
+    async move { Self::send::<_, CrateError>(rb).await }
   }
 
   #[instrument(skip(self), err)]
-  pub async fn follow_crate(self, crate_id: String) -> Result<Crate, AttHttpClientError> {
-    let url = self.base_url.join(&format!("crates/{crate_id}/follow"))?;
-    debug!(crate_id, %url, "sending follow crate request");
-    self.request::<_, CrateError>(Method::POST, url, |b| b).await
+  pub fn follow_crate(&self, crate_id: String) -> impl Future<Output=Result<Crate, AttHttpClientError>> {
+    let rb = self.request_builder(Method::POST, format!("crates/{crate_id}/follow"));
+    async move { Self::send::<_, CrateError>(rb).await }
   }
   #[instrument(skip(self), err)]
-  pub async fn unfollow_crate(self, crate_id: String) -> Result<(), AttHttpClientError> {
-    let url = self.base_url.join(&format!("crates/{crate_id}/follow"))?;
-    debug!(crate_id, %url, "sending unfollow crate request");
-    self.request::<_, CrateError>(Method::DELETE, url, |b| b).await
+  pub fn unfollow_crate(&self, crate_id: String) -> impl Future<Output=Result<(), AttHttpClientError>> {
+    let rb = self.request_builder(Method::DELETE, format!("crates/{crate_id}/follow"));
+    async move { Self::send::<_, CrateError>(rb).await }
   }
 
   #[instrument(skip(self), err)]
-  pub async fn refresh_crate(self, crate_id: String) -> Result<Crate, AttHttpClientError> {
-    let url = self.base_url.join(&format!("crates/{crate_id}/refresh"))?;
-    debug!(crate_id, %url, "sending refresh crate request");
-    self.request::<_, CrateError>(Method::POST, url, |b| b).await
+  pub fn refresh_crate(&self, crate_id: String) -> impl Future<Output=Result<Crate, AttHttpClientError>> {
+    let rb = self.request_builder(Method::POST, format!("crates/{crate_id}/refresh"));
+    async move { Self::send::<_, CrateError>(rb).await }
   }
   #[instrument(skip(self), err)]
-  pub async fn refresh_outdated_crates(self) -> Result<Vec<Crate>, AttHttpClientError> {
-    let url = self.base_url.join("crates/refresh_outdated")?;
-    debug!(%url, "sending refresh outdated crates request");
-    self.request::<_, CrateError>(Method::POST, url, |b| b).await
+  pub fn refresh_outdated_crates(&self) -> impl Future<Output=Result<Vec<Crate>, AttHttpClientError>> {
+    let rb = self.request_builder(Method::POST, "crates/refresh_outdated");
+    async move { Self::send::<_, CrateError>(rb).await }
   }
   #[instrument(skip(self), err)]
-  pub async fn refresh_all_crates(self) -> Result<Vec<Crate>, AttHttpClientError> {
-    let url = self.base_url.join("crates/refresh_all")?;
-    debug!(%url, "sending refresh all crates request");
-    self.request::<_, CrateError>(Method::POST, url, |b| b).await
+  pub fn refresh_all_crates(&self) -> impl Future<Output=Result<Vec<Crate>, AttHttpClientError>> {
+    let rb = self.request_builder(Method::POST, "crates/refresh_all");
+    async move { Self::send::<_, CrateError>(rb).await }
   }
 
-  async fn request<T: DeserializeOwned, E: DeserializeOwned>(
-    &self,
-    method: Method,
-    url: Url,
-    modify_request: impl FnOnce(RequestBuilder) -> RequestBuilder,
+  fn request_builder(&self, method: Method, join_url: impl AsRef<str>) -> RequestBuilder {
+    let url = self.base_url.join(join_url.as_ref()).expect("BUG: creating URL failed");
+    let request_builder = self.http_client.request(method, url);
+    #[cfg(not(target_arch = "wasm32"))] {
+      request_builder
+    }
+    #[cfg(target_arch = "wasm32")] {
+      use wasm_bindgen::JsCast;
+
+      let cookie = web_sys::window()
+        .unwrap()
+        .document()
+        .unwrap()
+        .dyn_into::<web_sys::HtmlDocument>()
+        .unwrap()
+        .cookie()
+        .unwrap();
+
+      request_builder
+        .header("cookie", cookie)
+        .fetch_credentials_include()
+    }
+  }
+  async fn send<T: DeserializeOwned, E: DeserializeOwned>(
+    request_builder: RequestBuilder,
   ) -> Result<T, AttHttpClientError> where AttHttpClientError: From<E> {
-    let request_builder = self.http_client.request(method, url).set_cookie_wasm();
-    let request_builder = modify_request(request_builder);
+    debug!(request = ?request_builder, "sending HTTP request");
     let response = request_builder.send().await?;
     let body: Result<T, E> = response.json().await?;
     Ok(body?)
-  }
-}
-
-trait RequestBuilderExt {
-  fn set_cookie_wasm(self) -> Self;
-}
-#[cfg(not(target_arch = "wasm32"))]
-impl RequestBuilderExt for RequestBuilder {
-  fn set_cookie_wasm(self) -> Self { self /* Do nothing */ }
-}
-#[cfg(target_arch = "wasm32")]
-impl RequestBuilderExt for RequestBuilder {
-  fn set_cookie_wasm(self) -> Self {
-    use wasm_bindgen::JsCast;
-
-    let cookie = web_sys::window()
-      .unwrap()
-      .document()
-      .unwrap()
-      .dyn_into::<web_sys::HtmlDocument>()
-      .unwrap()
-      .cookie()
-      .unwrap();
-
-    self
-      .header("cookie", cookie)
-      .fetch_credentials_include()
   }
 }
