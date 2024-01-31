@@ -9,10 +9,13 @@ use att_client::Data;
 use att_client::http_client::AttHttpClient;
 use att_core::users::UserCredentials;
 
-use crate::component::follow_crates::{self, FollowCratesComponent};
-use crate::component::Perform;
+use crate::app::follow_crates::FollowCratesComponent;
+use crate::update::Perform;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
+
+pub mod search_crates;
+pub mod follow_crates;
 
 pub type SaveFn = Box<dyn FnMut(&Data) -> Result<(), Box<dyn Error>> + 'static>;
 

@@ -4,9 +4,6 @@ use iced::Command;
 
 use att_core::util::maybe_send::MaybeSend;
 
-pub mod search_crates;
-pub mod follow_crates;
-
 /// Update received from components.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Update<A = (), C = ()> {
@@ -117,6 +114,6 @@ pub trait PerformInto<T, I, M> {
 }
 impl<T, I: From<T>, M, F: Future<Output=T> + MaybeSend + 'static> PerformInto<T, I, M> for F {
   fn perform_into(self, f: impl FnOnce(I) -> M + MaybeSend + 'static) -> Command<M> {
-    Command::perform(self, |v|f(v.into()))
+    Command::perform(self, |t| f(t.into()))
   }
 }

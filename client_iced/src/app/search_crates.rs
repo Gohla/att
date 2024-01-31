@@ -2,11 +2,11 @@ use iced::{Command, Element};
 use iced::widget::text_input;
 use tracing::instrument;
 
-use att_client::search_crates::{SearchCrates, SearchCratesRequest, SearchCratesResponse};
 use att_client::http_client::AttHttpClient;
+use att_client::search_crates::{SearchCrates, SearchCratesRequest, SearchCratesResponse};
 use att_core::crates::Crate;
 
-use crate::component::{PerformInto, Update};
+use crate::update::{PerformInto, Update};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;

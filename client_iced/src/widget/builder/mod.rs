@@ -44,7 +44,7 @@ impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
   ///
   /// The disadvantage is that every operation changes the type of the builder, and this makes it impossible to use in
   /// some cases. For example, using it in a while loop to continually add elements is not possible. In that case, a
-  /// [heap-based][heap] builder can be used. TODO: workarounds
+  /// [heap-based][heap] builder can be used.
   ///
   /// [heap]: WidgetBuilder<HeapList<Element<'a, M, R>>>::heap()
   pub fn stack() -> Self { Self(Default::default()) }
@@ -57,9 +57,9 @@ impl<'a, M, R> WidgetBuilder<HeapList<Element<'a, M, R>>> {
   /// cases where a [stack-allocated][stack] builder cannot be used.
   ///
   /// The disadvantages of a heap-allocated widget builder are:
-  /// - It does not have full compile-time safety: some incorrect state must be handled at run-time
-  ///   - Attempting to build a [`Scrollable`] or a [`Container`] when there are no elements in the builder is an error.
-  ///   - Attempting to take the single element out of the builder when there are 0 or more than 1 elements is an error.
+  /// - It does not have full compile-time safety; some incorrect state is handled at run-time:
+  ///   - Attempting to build a [`Scrollable`] or a [`Container`] when there are no elements in the builder panics.
+  ///   - Attempting to take the single element out of the builder when there is not exactly 1 element panics.
   /// - It has some run-time overhead: elements are stored on the heap, and some run-time checks are needed. Overhead
   ///   can be minimized by creating the builder with [enough capacity](Self::heap_with_capacity), and by
   ///   [reserving](Self::reserve) additional capacity if needed.

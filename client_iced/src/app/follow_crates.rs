@@ -4,8 +4,9 @@ use tracing::instrument;
 use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesData, FollowCratesResponse};
 use att_client::http_client::AttHttpClient;
 
-use crate::component::{Perform, PerformInto, search_crates, Update};
-use crate::component::search_crates::SearchCratesComponent;
+use crate::app::search_crates;
+use crate::app::search_crates::SearchCratesComponent;
+use crate::update::{Perform, PerformInto, Update};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::icon::icon_text;
 use crate::widget::modal::Modal;

@@ -4,8 +4,10 @@ use att_client::auth::{Auth, AuthStatus};
 use att_client::http_client::AttHttpClient;
 use att_core::users::UserCredentials;
 
-use crate::component::follow_crates::FollowCrates;
+use crate::app::follow_crates::FollowCrates;
 use crate::hook::prelude::*;
+
+pub mod follow_crates;
 
 pub struct AppProps {
   http_client: AttHttpClient,

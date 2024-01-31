@@ -11,7 +11,6 @@ use crate::app::{App, AppProps};
 
 pub mod hook;
 pub mod app;
-pub mod component;
 
 fn main() -> Result<(), Box<dyn Error>> {
   install_panic_handler();

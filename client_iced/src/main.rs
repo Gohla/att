@@ -13,9 +13,9 @@ use att_core::run_or_compile_time_env;
 use crate::app::{App, Flags};
 use crate::widget::icon;
 
-pub mod app;
 pub mod widget;
-pub mod component;
+pub mod update;
+pub mod app;
 
 fn main() -> Result<(), Box<dyn Error>> {
   env::load_dotenv_into_env();
