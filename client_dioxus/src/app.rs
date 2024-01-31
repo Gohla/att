@@ -1,38 +1,37 @@
 use dioxus::prelude::*;
 
-use att_client::app::{AppClient, LoginState};
-use att_client::AttClient;
+use att_client::auth::{Auth, AuthStatus};
+use att_client::http_client::AttHttpClient;
 use att_core::users::UserCredentials;
 
-use crate::component::view_followed_crates::ViewFollowedCrates;
+use crate::component::follow_crates::FollowCrates;
 use crate::hook::prelude::*;
 
 pub struct AppProps {
-  client: AttClient,
+  http_client: AttHttpClient,
 }
 impl AppProps {
-  pub fn new(client: AttClient) -> Self {
-    Self { client }
+  pub fn new(http_client: AttHttpClient) -> Self {
+    Self { http_client }
   }
 }
 
 #[component]
 pub fn App(cx: Scope<AppProps>) -> Element {
-  let client = cx.use_context_provider(&cx.props.client);
-  let request: AppClient = client.clone().into_app_client();
+  let http_client = cx.use_context_provider(&cx.props.http_client);
 
-  let view_data = cx.use_value_default();
+  let auth = cx.use_value(|| Auth::new(http_client.clone()));
 
-  let login = cx.use_future_once(|| request.login(view_data.get_mut(), UserCredentials::default()));
-  if let Some(login) = login.try_take() {
-    let _ = login.apply(view_data.get_mut());
+  let login = cx.use_future_once(|| auth.get_mut().login(UserCredentials::default()));
+  if let Some(logged_in) = login.try_take() {
+    let _ = auth.get_mut().process_logged_in(logged_in);
   }
 
-  let body = match view_data.get().login_state() {
-    LoginState::LoggedOut => rsx! { "Logged out" },
-    LoginState::LoggedIn => rsx! { ViewFollowedCrates {} },
-    LoginState::LoggingIn => rsx! { "Logging in" },
-    LoginState::LoggingOut => rsx! { "Logging out" },
+  let body = match auth.get().status() {
+    AuthStatus::LoggedOut => rsx! { "Logged out" },
+    AuthStatus::LoggedIn => rsx! { FollowCrates {} },
+    AuthStatus::LoggingIn => rsx! { "Logging in" },
+    AuthStatus::LoggingOut => rsx! { "Logging out" },
   };
   render! {
     h1 { "All The Things!" }

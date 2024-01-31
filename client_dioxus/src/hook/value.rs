@@ -11,16 +11,16 @@ pub struct UseValue<T> {
 
 /// Extension trait for using [value hooks](UseValue).
 pub trait UseValueExt<T> {
-  /// Uses a [value hook](UseValue) on the component of `self` with an initial `value`.
-  fn use_value(&self, value: T) -> &mut UseValue<T>;
+  /// Uses a [value hook](UseValue) on the component of `self` with an initial produced by `f`.
+  fn use_value(&self, f: impl FnOnce() -> T) -> &mut UseValue<T>;
   /// Uses a [value hook](UseValue) on the component of `self` with a [default](Default) initial value.
   #[inline]
-  fn use_value_default(&self) -> &mut UseValue<T> where T: Default { self.use_value(T::default()) }
+  fn use_value_default(&self) -> &mut UseValue<T> where T: Default { self.use_value(|| T::default()) }
 }
 impl<T: 'static> UseValueExt<T> for ScopeState {
   #[inline]
-  fn use_value(&self, value: T) -> &mut UseValue<T> {
-    self.use_hook(move || UseValue { value, update: self.schedule_update() })
+  fn use_value(&self, f: impl FnOnce() -> T) -> &mut UseValue<T> {
+    self.use_hook(move || UseValue { value: f(), update: self.schedule_update() })
   }
 }
 

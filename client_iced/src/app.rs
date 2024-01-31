@@ -4,41 +4,38 @@ use iced::{Command, Element, Event, event, executor, Renderer, Subscription, The
 use iced::window::Id;
 use tracing::error;
 
-use att_client::{AttClient, Data};
-use att_client::app::{AppClient, AppViewData, Login};
+use att_client::auth::{Auth, LoggedIn};
+use att_client::Data;
+use att_client::http_client::AttHttpClient;
 use att_core::users::UserCredentials;
 
+use crate::component::follow_crates::{self, FollowCratesComponent};
 use crate::component::Perform;
-use crate::component::view_followed_crates::{self, ViewFollowedCrates};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
 
 pub type SaveFn = Box<dyn FnMut(&Data) -> Result<(), Box<dyn Error>> + 'static>;
 
 pub struct Flags {
-  pub client: AttClient,
+  pub http_client: AttHttpClient,
   pub save_fn: SaveFn,
-  pub dark_mode: bool,
   pub data: Data,
+  pub dark_mode: bool,
 }
 
 pub struct App {
-  _request: AppClient,
   save_fn: SaveFn,
-  view_followed_crates: ViewFollowedCrates,
-  view_data: AppViewData,
-  dark_mode: bool,
+  follow_crates: FollowCratesComponent,
+  auth: Auth,
   data: Data,
+  dark_mode: bool,
 }
 
 #[derive(Debug)]
 pub enum Message {
-  ToViewFollowedCrates(view_followed_crates::Message),
-
-  Login(Login),
-
+  ToFollowCrates(follow_crates::Message),
+  Login(LoggedIn),
   ToggleLightDarkMode,
-
   Exit(Id),
 }
 
@@ -49,45 +46,31 @@ impl iced::Application for App {
   type Flags = Flags;
 
   fn new(flags: Flags) -> (Self, Command<Message>) {
-    let data = flags.data;
-
-    let request = flags.client.clone().into_app_client();
-    let mut view_data = AppViewData::default();
-    let login_command = request.login(&mut view_data, UserCredentials::default())
-      .perform(Message::Login);
+    let mut auth = Auth::new(flags.http_client.clone());
+    let login_command = auth.login(UserCredentials::default()).perform(Message::Login);
 
     let app = App {
-      _request: request,
       save_fn: flags.save_fn,
-      view_followed_crates: ViewFollowedCrates::new(flags.client),
-      view_data,
+      follow_crates: FollowCratesComponent::new(flags.http_client),
+      auth,
+      data: flags.data,
       dark_mode: flags.dark_mode,
-      data,
     };
     let command = Command::batch([login_command]);
     (app, command)
   }
-  fn title(&self) -> String { "All The Things".to_string() }
 
   fn update(&mut self, message: Message) -> Command<Self::Message> {
+    use Message::*;
     match message {
-      Message::ToViewFollowedCrates(message) => {
-        return self.view_followed_crates.update(message, self.data.crates_mut())
-          .into_command()
-          .map(|m| Message::ToViewFollowedCrates(m));
+      ToFollowCrates(message) => {
+        return self.follow_crates.update(message, self.data.crates_mut()).into_command().map(ToFollowCrates);
       }
-
-      Message::Login(login) => {
-        if login.apply(&mut self.view_data).is_ok() {
-          return self.view_followed_crates.request_followed_crates().map(Message::ToViewFollowedCrates);
-        }
+      Login(response) => if self.auth.process_logged_in(response).is_ok() {
+        return self.follow_crates.request_followed_crates().map(ToFollowCrates);
       }
-
-      Message::ToggleLightDarkMode => {
-        self.dark_mode = !self.dark_mode;
-      }
-
-      Message::Exit(window_id) => {
+      ToggleLightDarkMode => { self.dark_mode = !self.dark_mode; }
+      Exit(window_id) => {
         if let Err(cause) = (self.save_fn)(&self.data) {
           error!(%cause, "failed to save data: {cause:?}");
         }
@@ -95,27 +78,6 @@ impl iced::Application for App {
       }
     }
     Command::none()
-  }
-
-  fn view(&self) -> Element<Message, Renderer<Theme>> {
-    let content = WidgetBuilder::stack()
-      .text("All The Things").size(20.0).add()
-      .add_space_fill_width()
-      .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
-      .row().spacing(10.0).align_center().fill_width().add()
-      .add_horizontal_rule(1.0)
-      .add_element(self.view_followed_crates.view(self.data.crates()).map(Message::ToViewFollowedCrates))
-      .column().spacing(10.0).padding(10).fill().add()
-      .take();
-
-    content.into()
-  }
-
-  fn theme(&self) -> Theme {
-    match self.dark_mode {
-      false => Theme::Light,
-      true => Theme::Dark,
-    }
   }
 
   fn subscription(&self) -> Subscription<Message> {
@@ -127,5 +89,28 @@ impl iced::Application for App {
       }
     });
     exit_subscription
+  }
+
+  fn view(&self) -> Element<Message, Renderer<Theme>> {
+    let content = WidgetBuilder::stack()
+      .text("All The Things").size(20.0).add()
+      .add_space_fill_width()
+      .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
+      .row().spacing(10.0).align_center().fill_width().add()
+      .add_horizontal_rule(1.0)
+      .add_element(self.follow_crates.view(self.data.crates()).map(Message::ToFollowCrates))
+      .column().spacing(10.0).padding(10).fill().add()
+      .take();
+
+    content.into()
+  }
+
+  fn title(&self) -> String { "All The Things".to_string() }
+
+  fn theme(&self) -> Theme {
+    match self.dark_mode {
+      false => Theme::Light,
+      true => Theme::Dark,
+    }
   }
 }

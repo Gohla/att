@@ -10,15 +10,15 @@ use att_core::util::time::{Instant, sleep};
 
 use crate::http_client::{AttHttpClient, AttHttpClientError};
 
-/// Crate search.
+/// Search for crates.
 #[derive(Debug)]
-pub struct CrateSearch {
+pub struct SearchCrates {
   http_client: AttHttpClient,
   search_query: CrateSearchQuery,
   wait_until: Option<Instant>,
   found_crates: Vec<Crate>,
 }
-impl CrateSearch {
+impl SearchCrates {
   pub fn new(http_client: AttHttpClient) -> Self {
     Self {
       http_client,
@@ -99,25 +99,25 @@ pub struct FoundCrates {
 }
 
 
-/// Crate requests in message form.
+/// Search crate requests in message form.
 #[derive(Debug)]
-pub enum CrateSearchRequest {
+pub enum SearchCratesRequest {
   SetSearchQuery(CrateSearchQuery),
   Search,
 }
-impl CrateSearch {
+impl SearchCrates {
   /// Create a request for setting the [`search_term` of the search query](CrateSearchQuery::search_term).
-  pub fn request_set_search_term(&self, search_term: String) -> CrateSearchRequest {
+  pub fn request_set_search_term(&self, search_term: String) -> SearchCratesRequest {
     let mut search_query = self.search_query.clone();
     search_query.search_term = Some(search_term);
-    CrateSearchRequest::SetSearchQuery(search_query)
+    SearchCratesRequest::SetSearchQuery(search_query)
   }
 
-  /// Send a [crate search request](CrateSearchRequest), returning a future producing a
-  /// [response](CrateSearchResponse) that must be [processed](Self::process).
-  pub fn send(&mut self, request: CrateSearchRequest) -> impl MaybeSendFuture<'static, Output=CrateSearchResponse> {
-    use CrateSearchRequest::*;
-    use CrateSearchResponse::*;
+  /// Send a [request](SearchCratesRequest), returning a future producing a [response](SearchCratesResponse) that must
+  /// be [processed](Self::process).
+  pub fn send(&mut self, request: SearchCratesRequest) -> impl MaybeSendFuture<'static, Output=SearchCratesResponse> {
+    use SearchCratesRequest::*;
+    use SearchCratesResponse::*;
     match request {
       SetSearchQuery(search_query) => self.set_search_query(search_query).map(WaitCleared).boxed_maybe_send(),
       Search => self.search().map(FoundCrates).boxed_maybe_send(),
@@ -125,25 +125,25 @@ impl CrateSearch {
   }
 }
 
-/// Crate responses in message form.
+/// Search crate responses in message form.
 #[derive(Debug)]
-pub enum CrateSearchResponse {
+pub enum SearchCratesResponse {
   WaitCleared(WaitCleared),
   FoundCrates(FoundCrates),
 }
-impl From<WaitCleared> for CrateSearchResponse {
+impl From<WaitCleared> for SearchCratesResponse {
   #[inline]
   fn from(r: WaitCleared) -> Self { Self::WaitCleared(r) }
 }
-impl From<FoundCrates> for CrateSearchResponse {
+impl From<FoundCrates> for SearchCratesResponse {
   #[inline]
   fn from(r: FoundCrates) -> Self { Self::FoundCrates(r) }
 }
-impl CrateSearch {
-  /// Process a [crate search response](CrateSearchResponse), possibly returning a future producing a
-  /// [response](CrateSearchResponse) that must be [processed](Self::process).
-  pub fn process(&mut self, response: CrateSearchResponse) -> Option<impl MaybeSendFuture<'static, Output=CrateSearchResponse>> {
-    use CrateSearchResponse::*;
+impl SearchCrates {
+  /// Process a [response](SearchCratesResponse), possibly returning a future producing a
+  /// [response](SearchCratesResponse) that must be [processed](Self::process).
+  pub fn process(&mut self, response: SearchCratesResponse) -> Option<impl MaybeSendFuture<'static, Output=SearchCratesResponse>> {
+    use SearchCratesResponse::*;
     match response {
       WaitCleared(r) => return self.process_wait_cleared(r).map(|f| f.map(FoundCrates).boxed_maybe_send()),
       FoundCrates(r) => { let _ = self.process_found_crates(r); },

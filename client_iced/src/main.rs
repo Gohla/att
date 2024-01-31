@@ -4,7 +4,7 @@ use std::error::Error;
 use iced::{Application, Settings, window};
 use iced::window::settings::PlatformSpecific;
 
-use att_client::AttClient;
+use att_client::http_client::AttHttpClient;
 use att_core::app::env;
 use att_core::app::storage::{DirectoryKind, Storage};
 use att_core::app::tracing::AppTracingBuilder;
@@ -31,7 +31,7 @@ fn main() -> Result<(), Box<dyn Error>> {
   });
 
   let base_url = run_or_compile_time_env!("ATT_CLIENT_BASE_URL");
-  let client = AttClient::from_base_url(base_url)?;
+  let http_client = AttHttpClient::from_base_url(base_url)?;
 
   let dark_mode = match dark_light::detect() {
     dark_light::Mode::Dark => true,
@@ -57,10 +57,10 @@ fn main() -> Result<(), Box<dyn Error>> {
   ];
 
   let flags = Flags {
+    http_client,
+    save_fn,
     data,
     dark_mode,
-    client,
-    save_fn,
   };
   let settings = Settings {
     id: Some("att".to_string()),

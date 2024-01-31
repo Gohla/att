@@ -1,1 +1,1 @@
-pub mod view_followed_crates;
+pub mod follow_crates;

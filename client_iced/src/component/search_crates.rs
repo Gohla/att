@@ -2,7 +2,7 @@ use iced::{Command, Element};
 use iced::widget::text_input;
 use tracing::instrument;
 
-use att_client::crate_search::{CrateSearch, CrateSearchRequest, CrateSearchResponse};
+use att_client::crate_search::{SearchCrates, SearchCratesRequest, SearchCratesResponse};
 use att_client::http_client::AttHttpClient;
 use att_core::crates::Crate;
 
@@ -11,25 +11,25 @@ use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
 
-pub struct SearchCrates {
+pub struct SearchCratesComponent {
   search_term_id: text_input::Id,
   choose_button_text: String,
-  crate_search: CrateSearch,
+  search_crates: SearchCrates,
 }
 
 #[derive(Debug)]
 pub enum Message {
-  SendRequest(CrateSearchRequest),
-  ProcessResponse(CrateSearchResponse),
+  SendRequest(SearchCratesRequest),
+  ProcessResponse(SearchCratesResponse),
   Choose(String),
 }
 
-impl SearchCrates {
+impl SearchCratesComponent {
   pub fn new(http_client: AttHttpClient, button_text: impl Into<String>) -> Self {
     Self {
       search_term_id: text_input::Id::unique(),
       choose_button_text: button_text.into(),
-      crate_search: CrateSearch::new(http_client)
+      search_crates: SearchCrates::new(http_client)
     }
   }
 
@@ -38,17 +38,17 @@ impl SearchCrates {
   }
 
   pub fn clear(&mut self) {
-    self.crate_search.clear();
+    self.search_crates.clear();
   }
 }
 
-impl SearchCrates {
+impl SearchCratesComponent {
   #[instrument(skip_all)]
   pub fn update(&mut self, message: Message) -> Update<Option<String>, Command<Message>> {
     use Message::*;
     match message {
-      SendRequest(request) => return self.crate_search.send(request).perform_into(ProcessResponse).into(),
-      ProcessResponse(response) => if let Some(future) = self.crate_search.process(response) {
+      SendRequest(request) => return self.search_crates.send(request).perform_into(ProcessResponse).into(),
+      ProcessResponse(response) => if let Some(future) = self.search_crates.process(response) {
         return future.perform_into(ProcessResponse).into();
       }
       Choose(crate_id) => return Update::from_action(Some(crate_id)),
@@ -57,7 +57,7 @@ impl SearchCrates {
   }
 
   pub fn view(&self) -> Element<Message> {
-    let crates = self.crate_search.found_crates();
+    let crates = self.search_crates.found_crates();
     let cell_to_element = |row, col| -> Option<Element<Message>> {
       let Some(krate): Option<&Crate> = crates.get(row) else { return None; };
       let element = match col {
@@ -82,9 +82,9 @@ impl SearchCrates {
       .into_element();
 
     WidgetBuilder::stack()
-      .text_input("Crate search term", self.crate_search.search_term())
+      .text_input("Crate search term", self.search_crates.search_term())
       .id(self.search_term_id.clone())
-      .on_input(|search_term| Message::SendRequest(self.crate_search.request_set_search_term(search_term)))
+      .on_input(|search_term| Message::SendRequest(self.search_crates.request_set_search_term(search_term)))
       .add()
       .add_element(crates_table)
       .column().spacing(20).width(800).height(600).add()

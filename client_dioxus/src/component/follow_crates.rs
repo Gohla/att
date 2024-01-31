@@ -1,28 +1,27 @@
 use dioxus::html::input_data::MouseButton;
 use dioxus::prelude::*;
 
-use att_client::AttClient;
-use att_client::crates::{CrateClient, CrateRequest};
+use att_client::follow_crates::{FollowCrateRequest, FollowCrates};
+use att_client::http_client::AttHttpClient;
 
 use crate::hook::prelude::*;
 
 #[component]
-pub fn ViewFollowedCrates(cx: Scope) -> Element {
-  let client: &AttClient = cx.use_context_unwrap();
-  let client: CrateClient = client.clone().into_crate_client();
+pub fn FollowCrates(cx: Scope) -> Element {
+  let http_client: &AttHttpClient = cx.use_context_unwrap();
 
-  let view_data = cx.use_value_default();
+  let follow_crates = cx.use_value(|| FollowCrates::new(http_client.clone()));
   let data = cx.use_value_default();
 
-  let requests = cx.use_future(64, |request: CrateRequest| request.send(&client, view_data.get_mut()));
+  let requests = cx.use_future(64, |r| follow_crates.get_mut().send(r));
   for response in requests.drain_values() {
-    response.process(view_data.get_mut(), data.get_mut());
+    follow_crates.get_mut().process(response, data.get_mut());
   }
   let request_handle = requests.handle();
 
-  cx.use_once(|| request_handle.run(CrateRequest::GetFollowed));
+  cx.use_once(|| request_handle.run(FollowCrateRequest::GetFollowed));
 
-  let disable_refresh = view_data.get().is_any_crate_being_modified();
+  let disable_refresh = follow_crates.get().is_any_crate_being_modified();
   render! {
     h2 { "Followed Crates" }
     div {
@@ -30,7 +29,7 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
       button {
         onclick: move |event| {
           if let Some(MouseButton::Primary) = event.trigger_button() {
-            request_handle.run(CrateRequest::RefreshOutdated);
+            request_handle.run(FollowCrateRequest::RefreshOutdated);
           }
         },
         disabled: disable_refresh,
@@ -39,7 +38,7 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
       button {
         onclick: move |event| {
           if let Some(MouseButton::Primary) = event.trigger_button() {
-            request_handle.run(CrateRequest::RefreshAll);
+            request_handle.run(FollowCrateRequest::RefreshAll);
           }
         },
         disabled: disable_refresh,
@@ -58,7 +57,7 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
       }
       tbody {
         data.get().followed_crates().map(|krate|{
-          let disabled = view_data.get().is_crate_being_modified(&krate.id);
+          let disabled = follow_crates.get().is_crate_being_modified(&krate.id);
           rsx! {
             tr {
               key: "{krate.id}",
@@ -70,7 +69,7 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
                 button {
                   onclick: move |event| {
                     if let Some(MouseButton::Primary) = event.trigger_button() {
-                      request_handle.run(CrateRequest::Refresh(krate.id.clone()));
+                      request_handle.run(FollowCrateRequest::Refresh(krate.id.clone()));
                     }
                   },
                   disabled: disabled,
@@ -79,7 +78,7 @@ pub fn ViewFollowedCrates(cx: Scope) -> Element {
                 button {
                   onclick: move |event| {
                     if let Some(MouseButton::Primary) = event.trigger_button() {
-                      request_handle.run(CrateRequest::Unfollow(krate.id.clone()));
+                      request_handle.run(FollowCrateRequest::Unfollow(krate.id.clone()));
                     }
                   },
                   disabled: disabled,
