@@ -7,11 +7,13 @@ use att_core::crates::Crate;
 pub mod follow;
 pub mod search;
 
-pub fn render_crates_table<'a, P>(
-  cx: Scope<'a, P>,
-  crates: impl Iterator<Item=&'a Crate>,
-  render_actions: &impl Fn(&'a Crate) -> Element<'a>
+#[component]
+pub fn CratesTable<'a, 'b, GC: Fn() -> C, C: Iterator<Item=&'a Crate>, R: Fn(&'a Crate) -> LazyNodes<'a, 'b>>(
+  cx: Scope<'a>,
+  get_crates: GC,
+  render_actions: R
 ) -> Element<'a> {
+  let crates = get_crates();
   render! {
     table {
       thead {
@@ -24,20 +26,18 @@ pub fn render_crates_table<'a, P>(
         }
       }
       tbody {
-        crates.map(|krate|{
-          rsx! {
-            tr {
-              key: "{krate.id}",
-              td { "{krate.id}" }
-              td { "{krate.downloads}" }
-              td { "{krate.updated_at}" }
-              td { "{krate.max_version}" }
-              td {
-                render_actions(krate)
-              }
+        for krate in crates {
+          tr {
+            key: "{krate.id}",
+            td { "{krate.id}" }
+            td { "{krate.downloads}" }
+            td { "{krate.updated_at}" }
+            td { "{krate.max_version}" }
+            td {
+              (&render_actions)(krate)
             }
           }
-        })
+        }
       }
     }
   }

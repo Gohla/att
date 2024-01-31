@@ -5,13 +5,19 @@ use att_client::http_client::AttHttpClient;
 use att_client::search_crates::SearchCrates;
 use att_core::crates::Crate;
 
-use crate::app::crates::render_crates_table;
+use crate::app::crates::CratesTable;
 use crate::hook::context::UseContextExt;
 use crate::hook::prelude::UseValueExt;
 use crate::hook::request::UseRequestExt;
 
 #[component]
-pub fn SearchCratesComponent<FC: Fn(), FF: Fn(String)>(cx: Scope, handle_close: FC, handle_follow: FF) -> Element {
+pub fn SearchCratesComponent<HC: Fn(), HF: Fn(String)>(
+  cx: Scope,
+  header: String,
+  handle_close: HC,
+  choose_button_text: String,
+  handle_choose: HF
+) -> Element {
   let http_client: &AttHttpClient = cx.use_context_unwrap();
 
   let search_crates = cx.use_value(|| SearchCrates::new(http_client.clone()));
@@ -22,21 +28,8 @@ pub fn SearchCratesComponent<FC: Fn(), FF: Fn(String)>(cx: Scope, handle_close: 
     }
   }
 
-  let table = render_crates_table(cx, search_crates.get().found_crates().iter(), &|krate: &Crate| {
-    render! {
-      button {
-        onclick: |event| {
-          if let Some(MouseButton::Primary) = event.trigger_button() {
-            handle_follow(krate.id.clone())
-          }
-        },
-        "Follow"
-      }
-    }
-  });
-
   render! {
-    h2 { "Search" }
+    h2 { "{header}" }
     div {
       input {
         oninput: |event| {
@@ -52,6 +45,20 @@ pub fn SearchCratesComponent<FC: Fn(), FF: Fn(String)>(cx: Scope, handle_close: 
         "Close"
       }
     }
-    table
+    CratesTable {
+      get_crates: || search_crates.get().found_crates().iter(),
+      render_actions: move |krate: &Crate| {
+        rsx! {
+          button {
+            onclick: |event| {
+              if let Some(MouseButton::Primary) = event.trigger_button() {
+                handle_choose(krate.id.clone())
+              }
+            },
+            "{choose_button_text}"
+          }
+        }
+      }
+    }
   }
 }

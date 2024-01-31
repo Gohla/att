@@ -4,7 +4,7 @@ use att_client::auth::{Auth, AuthStatus};
 use att_client::http_client::AttHttpClient;
 use att_core::users::UserCredentials;
 
-use crate::app::crates::follow::FollowCrates;
+use crate::app::crates::follow::FollowCratesComponent;
 use crate::hook::prelude::*;
 
 mod crates;
@@ -31,7 +31,7 @@ pub fn App(cx: Scope<AppProps>) -> Element {
 
   let body = match auth.get().status() {
     AuthStatus::LoggedOut => rsx! { "Logged out" },
-    AuthStatus::LoggedIn => rsx! { FollowCrates {} },
+    AuthStatus::LoggedIn => rsx! { FollowCratesComponent {} },
     AuthStatus::LoggingIn => rsx! { "Logging in" },
     AuthStatus::LoggingOut => rsx! { "Logging out" },
   };
