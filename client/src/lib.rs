@@ -5,7 +5,7 @@ use follow_crates::FollowCratesData;
 pub mod http_client;
 pub mod auth;
 pub mod follow_crates;
-pub mod crate_search;
+pub mod search_crates;
 
 #[derive(Default, Serialize, Deserialize)]
 pub struct Data {

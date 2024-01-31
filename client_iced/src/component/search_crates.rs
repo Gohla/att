@@ -2,7 +2,7 @@ use iced::{Command, Element};
 use iced::widget::text_input;
 use tracing::instrument;
 
-use att_client::crate_search::{SearchCrates, SearchCratesRequest, SearchCratesResponse};
+use att_client::search_crates::{SearchCrates, SearchCratesRequest, SearchCratesResponse};
 use att_client::http_client::AttHttpClient;
 use att_core::crates::Crate;
 
