@@ -6,10 +6,10 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
-use att_core::crates::{Crate, CrateError, CrateSearch};
+use att_core::crates::{Crate, CrateError, CrateSearchQuery};
 use att_core::users::{UserCredentials, UsersError};
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct AttHttpClient {
   http_client: reqwest::Client,
   base_url: Url,
@@ -58,7 +58,7 @@ impl AttHttpClient {
   }
 
   #[instrument(skip(self), err)]
-  pub fn search_crates(&self, crate_search: CrateSearch) -> impl Future<Output=Result<Vec<Crate>, AttHttpClientError>> {
+  pub fn search_crates(&self, crate_search: CrateSearchQuery) -> impl Future<Output=Result<Vec<Crate>, AttHttpClientError>> {
     let rb = self.request_builder(Method::GET, "crates")
       .query(&crate_search);
     async move { Self::send::<_, CrateError>(rb).await }

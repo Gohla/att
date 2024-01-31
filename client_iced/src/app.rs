@@ -97,7 +97,7 @@ impl iced::Application for App {
     Command::none()
   }
 
-  fn view(&self) -> Element<'_, Message, Renderer<Theme>> {
+  fn view(&self) -> Element<Message, Renderer<Theme>> {
     let content = WidgetBuilder::stack()
       .text("All The Things").size(20.0).add()
       .add_space_fill_width()

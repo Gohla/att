@@ -9,7 +9,7 @@ use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use tracing::instrument;
 
-use att_core::crates::{Crate, CrateError, CrateSearch};
+use att_core::crates::{Crate, CrateError, CrateSearchQuery};
 use crates_io_client::CratesIoClient;
 
 use crate::crates::crates_io_client::CratesIoClientError;
@@ -198,19 +198,19 @@ pub fn router() -> Router<CratesRoutingState> {
 async fn search_crates(
   auth_session: AuthSession,
   State(state): State<CratesRoutingState>,
-  Query(search): Query<CrateSearch>
+  Query(search): Query<CrateSearchQuery>
 ) -> JsonResult<Vec<Crate>, CrateError> {
   async move {
     let data = state.database.read().await;
     let crates = match search {
-      CrateSearch { followed: true, .. } => {
+      CrateSearchQuery { followed: true, .. } => {
         if let Some(user) = &auth_session.user {
           state.crates.get_followed_crates(&data.crates, user.id()).await
         } else {
           return Err(CrateError::NotLoggedIn)
         }
       }
-      CrateSearch { search_term: Some(search_term), .. } => state.crates.search(search_term).await
+      CrateSearchQuery { search_term: Some(search_term), .. } => state.crates.search(search_term).await
         .map_err(|_| CrateError::Internal)?
         .unwrap_or_default(),
       _ => Vec::default()

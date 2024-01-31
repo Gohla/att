@@ -1,8 +1,9 @@
 use std::future::Future;
 
+/// A trait alias that enforces `Send` only on native platforms.
 pub use maybe_send::MaybeSend;
 
-/// An extension trait for boxing futures, where boxed futures implement `Send` only on native platforms.
+/// A future that implements `Send` only on native platforms.
 pub trait MaybeSendFuture<'a>: Future {
   type Boxed: Future<Output=Self::Output>;
   fn boxed_maybe_send(self) -> Self::Boxed;
@@ -13,7 +14,6 @@ mod maybe_send {
   use std::future::Future;
   use std::pin::Pin;
 
-  /// A trait alias that enforces `Send` only on native platforms.
   pub trait MaybeSend: Send {}
 
   impl<T> MaybeSend for T where T: Send {}
@@ -30,7 +30,6 @@ mod maybe_send {
   use std::future::Future;
   use std::pin::Pin;
 
-  /// A trait alias that enforces `Send` only on native platforms.
   pub trait MaybeSend {}
 
   impl<T> MaybeSend for T {}

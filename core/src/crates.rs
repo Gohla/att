@@ -3,19 +3,20 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
-pub struct CrateSearch {
+pub struct CrateSearchQuery {
   pub search_term: Option<String>,
   pub followed: bool,
 }
-impl CrateSearch {
-  pub fn from_term(search_term: String) -> Self {
-    Self { search_term: Some(search_term), ..Self::default() }
-  }
-  pub fn followed() -> Self {
-    Self { followed: true, ..Self::default() }
-  }
+impl CrateSearchQuery {
+  #[inline]
+  pub fn from_term(search_term: String) -> Self { Self { search_term: Some(search_term), ..Self::default() } }
+  #[inline]
+  pub fn from_followed() -> Self { Self { followed: true, ..Self::default() } }
+
+  #[inline]
+  pub fn search_term(&self) -> &str { self.search_term.as_deref().unwrap_or_default() }
 }
-impl From<String> for CrateSearch {
+impl From<String> for CrateSearchQuery {
   fn from(search_term: String) -> Self {
     Self::from_term(search_term)
   }

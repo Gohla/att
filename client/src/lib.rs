@@ -10,6 +10,7 @@ use crate::http_client::AttHttpClient;
 pub mod http_client;
 pub mod app;
 pub mod crates;
+pub mod crate_search;
 
 /// Client data: the local view of the data that is on the server. Should be (de)serialized between runs of the program.
 #[derive(Default, Serialize, Deserialize)]

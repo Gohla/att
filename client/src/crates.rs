@@ -5,7 +5,7 @@ use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
-use att_core::crates::{Crate, CrateSearch};
+use att_core::crates::{Crate, CrateSearchQuery};
 use att_core::util::maybe_send::MaybeSendFuture;
 
 use crate::http_client::{AttHttpClient, AttHttpClientError};
@@ -51,7 +51,7 @@ impl CrateClient {
 
   pub fn get_followed(&self, view_data: &mut CrateViewData) -> impl Future<Output=UpdateCrates<true>> {
     view_data.all_crates_being_modified = true;
-    let future = self.http_client.search_crates(CrateSearch::followed());
+    let future = self.http_client.search_crates(CrateSearchQuery::from_followed());
     async move {
       UpdateCrates { result: future.await }
     }
@@ -191,27 +191,27 @@ pub enum CrateResponse {
 }
 impl From<UpdateCrate> for CrateResponse {
   #[inline]
-  fn from(op: UpdateCrate) -> Self { Self::UpdateOne(op) }
+  fn from(r: UpdateCrate) -> Self { Self::UpdateOne(r) }
 }
 impl From<UpdateCrates<false>> for CrateResponse {
   #[inline]
-  fn from(op: UpdateCrates<false>) -> Self { Self::Update(op) }
+  fn from(r: UpdateCrates<false>) -> Self { Self::Update(r) }
 }
 impl From<UpdateCrates<true>> for CrateResponse {
   #[inline]
-  fn from(op: UpdateCrates<true>) -> Self { Self::Set(op) }
+  fn from(r: UpdateCrates<true>) -> Self { Self::Set(r) }
 }
 impl From<RemoveCrate> for CrateResponse {
   #[inline]
-  fn from(op: RemoveCrate) -> Self { Self::Remove(op) }
+  fn from(r: RemoveCrate) -> Self { Self::Remove(r) }
 }
 impl CrateResponse {
   pub fn process(self, view_data: &mut CrateViewData, data: &mut CrateData) {
     match self {
-      CrateResponse::UpdateOne(operation) => { let _ = operation.process(view_data, data); }
-      CrateResponse::Update(operation) => { let _ = operation.process(view_data, data); }
-      CrateResponse::Set(operation) => { let _ = operation.process(view_data, data); }
-      CrateResponse::Remove(operation) => { let _ = operation.process(view_data, data); }
+      CrateResponse::UpdateOne(r) => { let _ = r.process(view_data, data); }
+      CrateResponse::Update(r) => { let _ = r.process(view_data, data); }
+      CrateResponse::Set(r) => { let _ = r.process(view_data, data); }
+      CrateResponse::Remove(r) => { let _ = r.process(view_data, data); }
     }
   }
 }
