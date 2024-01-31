@@ -5,7 +5,7 @@ use futures::FutureExt;
 use tracing::{debug, error};
 
 use att_core::crates::{Crate, CrateSearchQuery};
-use att_core::util::maybe_send::MaybeSendFuture;
+use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture};
 use att_core::util::time::{Instant, sleep};
 
 use crate::http_client::{AttHttpClient, AttHttpClientError};
@@ -38,32 +38,38 @@ impl SearchCrates {
   #[inline]
   pub fn found_crates(&self) -> &Vec<Crate> { &self.found_crates }
 
-  /// Set the [crate search query](CrateSearchQuery), returning a future producing a [response](WaitCleared) that must
-  /// be [processed](Self::process_wait_cleared).
-  pub fn set_search_query(&mut self, search_query: CrateSearchQuery) -> impl Future<Output=WaitCleared> {
+  /// Set the [search query](CrateSearchQuery), possibly returning a future producing a [response](WaitCleared) that
+  /// must be [processed](Self::process_wait_cleared).
+  pub fn set_search_query(&mut self, search_query: CrateSearchQuery) -> Option<impl Future<Output=WaitCleared>> {
     self.search_query = search_query;
-    let wait_duration = Duration::from_millis(300);
-    let wait_until = Instant::now() + wait_duration;
-    self.wait_until = Some(wait_until);
-    let future = sleep(wait_duration);
-    async move {
-      future.await;
-      WaitCleared
+    if self.search_query.is_empty() {
+      self.wait_until = None;
+      self.found_crates.clear();
+      None
+    } else {
+      let wait_duration = Duration::from_millis(300);
+      let wait_until = Instant::now() + wait_duration;
+      self.wait_until = Some(wait_until);
+      let future = sleep(wait_duration);
+      Some(async move {
+        future.await;
+        WaitCleared
+      })
     }
   }
   /// Process a [wait cleared response](WaitCleared), possibly returning a future producing a [response](FoundCrates)
   /// that must be [processed](Self::process_found_crates).
   pub fn process_wait_cleared(&self, _response: WaitCleared) -> Option<impl Future<Output=FoundCrates>> {
-    if let Some(wait_until) = self.wait_until {
-      if Instant::now() > wait_until {
-        return Some(self.search());
-      }
-    }
-    None
+    self.should_search().then(|| self.search())
+  }
+  /// Checks whether a search request should be sent now.
+  #[inline]
+  pub fn should_search(&self) -> bool {
+    self.wait_until.is_some_and(|i| Instant::now() > i)
   }
 
-  /// Perform a search with the current search query, returning a future producing a [response](FoundCrates) that must
-  /// be [processed](Self::process_found_crates).
+  /// Sends a search request with the current search query, returning a future producing a [response](FoundCrates) that
+  /// must be [processed](Self::process_found_crates).
   pub fn search(&self) -> impl Future<Output=FoundCrates> {
     let future = self.http_client.search_crates(self.search_query.clone());
     async move {
@@ -113,14 +119,14 @@ impl SearchCrates {
     SearchCratesRequest::SetSearchQuery(search_query)
   }
 
-  /// Send a [request](SearchCratesRequest), returning a future producing a [response](SearchCratesResponse) that must
-  /// be [processed](Self::process).
-  pub fn send(&mut self, request: SearchCratesRequest) -> impl MaybeSendFuture<'static, Output=SearchCratesResponse> {
+  /// Send a [request](SearchCratesRequest), possibly returning a future producing a [response](SearchCratesResponse)
+  /// that must be [processed](Self::process).
+  pub fn send(&mut self, request: SearchCratesRequest) -> Option<impl Future<Output=SearchCratesResponse> + MaybeSend> {
     use SearchCratesRequest::*;
     use SearchCratesResponse::*;
     match request {
-      SetSearchQuery(search_query) => self.set_search_query(search_query).map(WaitCleared).boxed_maybe_send(),
-      Search => self.search().map(FoundCrates).boxed_maybe_send(),
+      SetSearchQuery(search_query) => self.set_search_query(search_query).map(|f| f.map(WaitCleared).boxed_maybe_send()),
+      Search => Some(self.search().map(FoundCrates).boxed_maybe_send()),
     }
   }
 }
@@ -140,12 +146,11 @@ impl From<FoundCrates> for SearchCratesResponse {
   fn from(r: FoundCrates) -> Self { Self::FoundCrates(r) }
 }
 impl SearchCrates {
-  /// Process a [response](SearchCratesResponse), possibly returning a future producing a
-  /// [response](SearchCratesResponse) that must be [processed](Self::process).
-  pub fn process(&mut self, response: SearchCratesResponse) -> Option<impl MaybeSendFuture<'static, Output=SearchCratesResponse>> {
+  /// Process a [response](SearchCratesResponse), possibly returning a request that must be [sent](Self::send).
+  pub fn process(&mut self, response: SearchCratesResponse) -> Option<SearchCratesRequest> {
     use SearchCratesResponse::*;
     match response {
-      WaitCleared(r) => return self.process_wait_cleared(r).map(|f| f.map(FoundCrates).boxed_maybe_send()),
+      WaitCleared(_) => return self.should_search().then_some(SearchCratesRequest::Search),
       FoundCrates(r) => { let _ = self.process_found_crates(r); },
     }
     None

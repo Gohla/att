@@ -15,6 +15,17 @@ impl CrateSearchQuery {
 
   #[inline]
   pub fn search_term(&self) -> &str { self.search_term.as_deref().unwrap_or_default() }
+
+  #[inline]
+  pub fn is_empty(&self) -> bool {
+    let Some(search_term) = &self.search_term else {
+      return false;
+    };
+    if !search_term.is_empty() {
+      return false;
+    }
+    !self.followed
+  }
 }
 impl From<String> for CrateSearchQuery {
   fn from(search_term: String) -> Self {

@@ -109,11 +109,22 @@ impl<T, E, M: Default, F: Future<Output=Result<T, E>> + MaybeSend + 'static> Per
   }
 }
 
-pub trait PerformInto<T, I, M> {
-  fn perform_into(self, f: impl FnOnce(I) -> M + MaybeSend + 'static) -> Command<M>;
+pub trait PerformInto<T, M> {
+  fn perform_into(self, into_message: impl FnOnce(T) -> M + MaybeSend + 'static) -> Command<M>;
 }
-impl<T, I: From<T>, M, F: Future<Output=T> + MaybeSend + 'static> PerformInto<T, I, M> for F {
-  fn perform_into(self, f: impl FnOnce(I) -> M + MaybeSend + 'static) -> Command<M> {
-    Command::perform(self, |t| f(t.into()))
+impl<T: From<F::Output>, M, F: Future + MaybeSend + 'static> PerformInto<T, M> for F {
+  fn perform_into(self, into_message: impl FnOnce(T) -> M + MaybeSend + 'static) -> Command<M> {
+    Command::perform(self, |future| into_message(future.into()))
+  }
+}
+pub trait OptPerformInto<T, M> {
+  fn opt_perform_into(self, into_message: impl FnOnce(T) -> M + MaybeSend + 'static) -> Command<M>;
+}
+impl<T: From<F::Output>, M, F: Future + MaybeSend + 'static> OptPerformInto<T, M> for Option<F> {
+  fn opt_perform_into(self, into_message: impl FnOnce(T) -> M + MaybeSend + 'static) -> Command<M> {
+    match self {
+      None => Command::none(),
+      Some(future) => Command::perform(future, |output| into_message(output.into())),
+    }
   }
 }

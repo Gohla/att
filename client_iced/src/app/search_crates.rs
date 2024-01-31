@@ -6,7 +6,7 @@ use att_client::http_client::AttHttpClient;
 use att_client::search_crates::{SearchCrates, SearchCratesRequest, SearchCratesResponse};
 use att_core::crates::Crate;
 
-use crate::update::{PerformInto, Update};
+use crate::update::{OptPerformInto, Update};
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
@@ -47,9 +47,9 @@ impl SearchCratesComponent {
   pub fn update(&mut self, message: Message) -> Update<Option<String>, Command<Message>> {
     use Message::*;
     match message {
-      SendRequest(request) => return self.search_crates.send(request).perform_into(ProcessResponse).into(),
-      ProcessResponse(response) => if let Some(future) = self.search_crates.process(response) {
-        return future.perform_into(ProcessResponse).into();
+      SendRequest(request) => return self.search_crates.send(request).opt_perform_into(ProcessResponse).into(),
+      ProcessResponse(response) => if let Some(request) = self.search_crates.process(response) {
+        return self.search_crates.send(request).opt_perform_into(ProcessResponse).into();
       }
       Choose(crate_id) => return Update::from_action(Some(crate_id)),
     }
