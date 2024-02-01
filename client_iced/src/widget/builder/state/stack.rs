@@ -17,9 +17,6 @@
 
 use std::marker::PhantomData;
 
-use iced::advanced::Renderer;
-use iced::Element;
-
 use super::{Elem, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
 use super::super::WidgetBuilder;
 
@@ -75,20 +72,14 @@ impl<E> StackList for Nil<E> {
 
 // Implement state traits for all types implementing `StackList`.
 
-impl<E, L> State for L where
-  E: Elem,
-  L: StackList<E=E>
-{
+impl<E: Elem, L: StackList<E=E>> State for L {
   type Element = E;
   type Message = E::Message;
   type Theme = E::Theme;
   type Renderer = E::Renderer;
 }
 
-impl<E, L> StateAdd for L where
-  E: Elem,
-  L: StackList<E=E>
-{
+impl<E: Elem, L: StackList<E=E>> StateAdd for L {
   type AddOutput = WidgetBuilder<Cons<E, Self>>;
   #[inline]
   fn add<I: Into<E>>(self, into_elem: I) -> Self::AddOutput {
@@ -96,48 +87,34 @@ impl<E, L> StateAdd for L where
   }
 }
 
-impl<'a, M, T, R, L> StateConsume<'a> for L where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
-  L: StackList<E=Element<'a, M, T, R>>
-{
-  type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, T, R>, Nil<Element<'a, M, T, R>>>>;
+impl<E: Elem, L: StackList<E=E>> StateConsume for L {
+  type ConsumeOutput = WidgetBuilder<Cons<E, Nil<E>>>;
   #[inline]
-  fn consume<F: FnOnce(Vec<Element<'a, M, T, R>>) -> Element<'a, M, T, R>>(self, produce: F) -> Self::ConsumeOutput {
+  fn consume<F: FnOnce(Vec<E>) -> E>(self, produce: F) -> Self::ConsumeOutput {
     let vec = self.to_vec();
     let element = produce(vec);
     WidgetBuilder(Cons(element, Nil::default()))
   }
 }
 
-impl<'a, M, T, R, L> StateMap<'a> for Cons<Element<'a, M, T, R>, L> where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
-  L: StackList<E=Element<'a, M, T, R>>
-{
-  type MapOutput = WidgetBuilder<Cons<Element<'a, M, T, R>, L>>;
+impl<E: Elem, L: StackList<E=E>> StateMap for Cons<E, L> {
+  type MapOutput = WidgetBuilder<Cons<E, L>>;
   #[inline]
-  fn map_last<F: FnOnce(Element<'a, M, T, R>) -> Element<'a, M, T, R>>(self, map: F) -> Self::MapOutput {
+  fn map_last<F: FnOnce(E) -> E>(self, map: F) -> Self::MapOutput {
     let Cons(element, rest) = self;
     let element = map(element);
     WidgetBuilder(Cons(element, rest))
   }
 }
 
-impl<E, L> StateTakeAll for L where
-  E: Elem,
-  L: StackList<E=E>
-{
+impl<E: Elem, L: StackList<E=E>> StateTakeAll for L {
   #[inline]
   fn take_all(self) -> Vec<E> {
     self.to_vec()
   }
 }
 
-impl<E: Elem> StateTake for Cons<E, Nil<E>> where
-{
+impl<E: Elem> StateTake for Cons<E, Nil<E>> {
   #[inline]
   fn take(self) -> E {
     self.0

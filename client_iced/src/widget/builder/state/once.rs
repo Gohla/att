@@ -1,20 +1,15 @@
 use std::marker::PhantomData;
 
-use super::{Elem, StateAdd, State};
+use super::{Elem, State, StateAdd};
 
-impl<'a, E> State for PhantomData<E> where
-  E: Elem
-{
+impl<E: Elem> State for PhantomData<E> {
   type Element = E;
   type Message = E::Message;
   type Theme = E::Theme;
   type Renderer = E::Renderer;
 }
 
-impl<E> StateAdd for PhantomData<E> where
-  E: Elem
-{
-
+impl<E: Elem> StateAdd for PhantomData<E> {
   type AddOutput = E;
   #[inline]
   fn add<I: Into<Self::Element>>(self, into_elem: I) -> Self::AddOutput {

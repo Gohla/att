@@ -95,7 +95,7 @@ impl iced::Application for App {
   }
 
   fn view(&self) -> Element<Message> {
-    let content = WidgetBuilder::stack()
+    WidgetBuilder::stack()
       .text("All The Things").size(20.0).add()
       .add_space_fill_width()
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
@@ -103,9 +103,7 @@ impl iced::Application for App {
       .add_horizontal_rule(1.0)
       .add_element(self.follow_crates.view(self.data.crates()).map(Message::ToFollowCrates))
       .column().spacing(10.0).padding(10).fill().add()
-      .take();
-
-    content.into()
+      .take()
   }
 
   fn title(&self) -> String { "All The Things".to_string() }

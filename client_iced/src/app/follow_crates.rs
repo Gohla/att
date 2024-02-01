@@ -132,7 +132,7 @@ impl FollowCratesComponent {
         .on_close_modal(|| Message::CloseSearchCratesModal);
       modal.into()
     } else {
-      content.into()
+      content
     }
   }
 }

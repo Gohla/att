@@ -1,6 +1,5 @@
 use iced::advanced::{Renderer, Widget};
 use iced::Element;
-use iced::widget::Space;
 
 pub mod stack;
 pub mod heap;
@@ -42,23 +41,21 @@ pub trait StateAdd: State {
 }
 
 /// Internal trait for consuming widget builder state.
-pub trait StateConsume<'a>: State {
+pub trait StateConsume: State {
   /// Type to return from [`Self::consume`].
   type ConsumeOutput;
   /// Consume all [elements](Element) from `self` into a [`Vec`], call `f` on that [`Vec`] to create a new [`Element`],
   /// then return a [new builder](Self::ConsumeOutput) with that element.
-  fn consume<F>(self, f: F) -> Self::ConsumeOutput where
-    F: FnOnce(Vec<Element<'a, Self::Message, Self::Theme, Self::Renderer>>) -> Element<'a, Self::Message, Self::Theme, Self::Renderer>;
+  fn consume<F: FnOnce(Vec<Self::Element>) -> Self::Element>(self, f: F) -> Self::ConsumeOutput;
 }
 
 /// Internal trait for mapping widget builder state.
-pub trait StateMap<'a>: State {
+pub trait StateMap: State {
   /// Builder type to return from [`Self::map_last`].
   type MapOutput;
   /// Take the last [`Element`] from `self`, call `map` on that [`Element`] to create a new [`Element`], then return
   /// a [new builder](Self::MapOutput) with that element.
-  fn map_last<F>(self, map: F) -> Self::MapOutput where
-    F: FnOnce(Element<'a, Self::Message, Self::Theme, Self::Renderer>) -> Element<'a, Self::Message, Self::Theme, Self::Renderer>;
+  fn map_last<F: FnOnce(Self::Element) -> Self::Element>(self, map: F) -> Self::MapOutput;
 }
 
 /// Internal trait taking all widget builder state.

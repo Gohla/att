@@ -4,15 +4,17 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use iced::{Alignment, Color, Element, Length, Padding, Pixels};
+use iced::advanced::Renderer;
 use iced::advanced::text::Renderer as TextRenderer;
 use iced::alignment::{Horizontal, Vertical};
 pub use iced::theme::Button as ButtonStyle;
 pub use iced::theme::Theme as BuiltinTheme;
 use iced::widget::{Column, Container, Row, Rule, Scrollable, Space, Text, TextInput};
 pub use iced::widget::button::StyleSheet as ButtonStyleSheet;
-pub use iced::widget::container::StyleSheet as ContainerStyleSheet;
+pub use iced::widget::container::{Id as ContainerId, StyleSheet as ContainerStyleSheet};
 pub use iced::widget::rule::StyleSheet as RuleStyleSheet;
-pub use iced::widget::scrollable::StyleSheet as ScrollableStyleSheet;
+pub use iced::widget::scrollable::{Id as ScrollableId, StyleSheet as ScrollableStyleSheet};
+use iced::widget::scrollable::{Direction, Viewport};
 use iced::widget::text::{LineHeight, Shaping};
 pub use iced::widget::text::StyleSheet as TextStyleSheet;
 pub use iced::widget::text_input::{Icon as TextInputIcon, Id as TextInputId, StyleSheet as TextInputStyleSheet};
@@ -51,7 +53,7 @@ impl<E: Elem> WidgetBuilder<Nil<E>> {
   pub fn stack() -> Self { Self(Default::default()) }
 }
 
-impl<'a, M, T, R> WidgetBuilder<HeapList<Element<'a, M, T, R>>> {
+impl<E: Elem> WidgetBuilder<HeapList<E>> {
   /// Create a new heap-allocated widget builder.
   ///
   /// The advantage of a heap-allocated widget builder is that its type never changes. Therefore, it can be used in the
@@ -73,7 +75,7 @@ impl<'a, M, T, R> WidgetBuilder<HeapList<Element<'a, M, T, R>>> {
   pub fn heap_with_capacity(capacity: usize) -> Self { Self(HeapList::with_capacity(capacity)) }
 }
 
-impl<'a, M, T, R> WidgetBuilder<PhantomData<Element<'a, M, T, R>>> {
+impl<E: Elem> WidgetBuilder<PhantomData<E>> {
   /// Create a new widget builder that can only be used once to build a single widget.
   pub fn once() -> Self { Self(Default::default()) }
 }
@@ -158,7 +160,7 @@ impl<S: StateAdd> WidgetBuilder<S> {
   }
 }
 
-impl<'a, S: StateConsume<'a>> WidgetBuilder<S> {
+impl<'a, S: StateConsume> WidgetBuilder<S> {
   /// Build a [`Column`] widget that will consume all elements in this builder.
   pub fn column(self) -> ColumnBuilder<S> {
     ColumnBuilder::new(self.0)
@@ -168,26 +170,26 @@ impl<'a, S: StateConsume<'a>> WidgetBuilder<S> {
     RowBuilder::new(self.0)
   }
 }
-//
-// impl<'a, S: StateMap<'a>> WidgetBuilder<S> {
-//   /// Build a [`Scrollable`] widget that will consume the last element in this builder.
-//   ///
-//   /// Can only be called when this builder has at least one element.
-//   pub fn scrollable(self) -> ScrollableBuilder<'a, S> where
-//     S::Theme: ScrollableStyleSheet
-//   {
-//     ScrollableBuilder::new(self.0)
-//   }
-//
-//   /// Build a [`Container`] widget that will consume the last element in this builder.
-//   ///
-//   /// Can only be called when this builder has at least one element.
-//   pub fn container(self) -> ContainerBuilder<'a, S> where
-//     S::Theme: ContainerStyleSheet
-//   {
-//     ContainerBuilder::new(self.0)
-//   }
-// }
+
+impl<'a, S: StateMap> WidgetBuilder<S> {
+  /// Build a [`Scrollable`] widget that will consume the last element in this builder.
+  ///
+  /// Can only be called when this builder has at least one element.
+  pub fn scrollable(self) -> ScrollableBuilder<'a, S> where
+    S::Theme: ScrollableStyleSheet
+  {
+    ScrollableBuilder::new(self.0)
+  }
+
+  /// Build a [`Container`] widget that will consume the last element in this builder.
+  ///
+  /// Can only be called when this builder has at least one element.
+  pub fn container(self) -> ContainerBuilder<S> where
+    S::Theme: ContainerStyleSheet
+  {
+    ContainerBuilder::new(self.0)
+  }
+}
 
 impl<S: StateTakeAll> WidgetBuilder<S> {
   /// Take a [`Vec`] with all element out of this builder.
@@ -520,7 +522,6 @@ impl<'a, S: StateAdd, A: TextInputActions<'a, S::Message>> TextInputBuilder<'a, 
 impl<'a, S: StateAdd, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
-//S: StateAdd<Element=Element<'a, <S as StateTypes>::Message, <S as StateTypes>::Theme, <S as StateTypes>::Renderer>>,
   S::Element: From<Element<'a, S::Message, S::Theme, S::Renderer>>,
 {
   /// Adds the [`TextInput`](iced::widget::TextInput) to the builder and returns the builder.
@@ -729,7 +730,7 @@ pub struct ColumnBuilder<S> {
   max_width: f32,
   align_items: Alignment,
 }
-impl<'a, S> ColumnBuilder<S> {
+impl<S> ColumnBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -796,12 +797,11 @@ impl<'a, S> ColumnBuilder<S> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, S: StateConsume<'a>> ColumnBuilder<S> {
-  pub fn add(self) -> S::ConsumeOutput where
-    S::Message: 'a,
-    S::Theme: 'a,
-    S::Renderer: 'a,
-  {
+impl<'a, S: StateConsume> ColumnBuilder<S> where
+  Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>, // For `Column::with_children`
+  S::Element: From<Column<'a, S::Message, S::Theme, S::Renderer>>,                    // For `.into()`
+{
+  pub fn add(self) -> S::ConsumeOutput {
     self.state.consume(|vec| {
       Column::with_children(vec)
         .spacing(self.spacing)
@@ -825,7 +825,7 @@ pub struct RowBuilder<S> {
   height: Length,
   align_items: Alignment,
 }
-impl<'a, S> RowBuilder<S> {
+impl<S> RowBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -885,12 +885,11 @@ impl<'a, S> RowBuilder<S> {
     self.align_items(Alignment::Center)
   }
 }
-impl<'a, S: StateConsume<'a>> RowBuilder<S> {
-  pub fn add(self) -> S::ConsumeOutput where
-    S::Message: 'a,
-    S::Theme: 'a,
-    S::Renderer: 'a,
-  {
+impl<'a, S: StateConsume> RowBuilder<S> where
+  Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>, // For `Row::with_children`
+  S::Element: From<Row<'a, S::Message, S::Theme, S::Renderer>>,                       // For `.into()`
+{
+  pub fn add(self) -> S::ConsumeOutput {
     self.state.consume(|vec| {
       Row::with_children(vec)
         .spacing(self.spacing)
@@ -903,192 +902,199 @@ impl<'a, S: StateConsume<'a>> RowBuilder<S> {
   }
 }
 
-// /// Builder for a [`Scrollable`] widget.
-// #[must_use]
-// pub struct ScrollableBuilder<'a, S: StateMap<'a>> where
-//   S::Theme: ScrollableStyleSheet
-// {
-//   state: S,
-//   id: Option<ScrollableId>,
-//   width: Length,
-//   height: Length,
-//   direction: Direction,
-//   on_scroll: Option<Box<dyn Fn(Viewport) -> S::Message + 'a>>,
-//   style: <S::Theme as ScrollableStyleSheet>::Style,
-// }
-// impl<'a, S: StateMap<'a>> ScrollableBuilder<'a, S> where
-//   S::Theme: ScrollableStyleSheet
-// {
-//   fn new(state: S) -> Self {
-//     Self {
-//       state,
-//       id: None,
-//       width: Length::Shrink,
-//       height: Length::Shrink,
-//       direction: Default::default(),
-//       on_scroll: None,
-//       style: Default::default(),
-//     }
-//   }
-//
-//   /// Sets the [`Id`] of the [`Scrollable`].
-//   pub fn id(mut self, id: ScrollableId) -> Self {
-//     self.id = Some(id);
-//     self
-//   }
-//   /// Sets the width of the [`Scrollable`].
-//   pub fn width(mut self, width: impl Into<Length>) -> Self {
-//     self.width = width.into();
-//     self
-//   }
-//   /// Sets the height of the [`Scrollable`].
-//   pub fn height(mut self, height: impl Into<Length>) -> Self {
-//     self.height = height.into();
-//     self
-//   }
-//   /// Sets the [`Direction`] of the [`Scrollable`] .
-//   pub fn direction(mut self, direction: Direction) -> Self {
-//     self.direction = direction;
-//     self
-//   }
-//   /// Sets a function to call when the [`Scrollable`] is scrolled.
-//   ///
-//   /// The function takes the [`Viewport`] of the [`Scrollable`].
-//   pub fn on_scroll(mut self, f: impl Fn(Viewport) -> S::Message + 'a) -> Self {
-//     self.on_scroll = Some(Box::new(f));
-//     self
-//   }
-//   /// Sets the style of the [`Scrollable`] .
-//   pub fn style(mut self, style: impl Into<<S::Theme as ScrollableStyleSheet>::Style>) -> Self {
-//     self.style = style.into();
-//     self
-//   }
-//
-//   pub fn add(self) -> S::MapOutput {
-//     self.state.map_last(|content| {
-//       let mut scrollable = Scrollable::new(content)
-//         .width(self.width)
-//         .height(self.height)
-//         .direction(self.direction)
-//         .style(self.style);
-//       if let Some(id) = self.id {
-//         scrollable = scrollable.id(id);
-//       }
-//       if let Some(on_scroll) = self.on_scroll {
-//         scrollable = scrollable.on_scroll(on_scroll);
-//       }
-//       scrollable.into()
-//     })
-//   }
-// }
-//
-// /// Builder for a [`Container`] widget.
-// #[must_use]
-// pub struct ContainerBuilder<'a, S: StateMap<'a>> where
-//   S::Theme: ContainerStyleSheet
-// {
-//   state: S,
-//   id: Option<ContainerId>,
-//   padding: Padding,
-//   width: Length,
-//   height: Length,
-//   max_width: f32,
-//   max_height: f32,
-//   horizontal_alignment: Horizontal,
-//   vertical_alignment: Vertical,
-//   style: <S::Theme as ContainerStyleSheet>::Style,
-// }
-// impl<'a, S: StateMap<'a>> ContainerBuilder<'a, S> where
-//   S::Theme: ContainerStyleSheet
-// {
-//   fn new(state: S) -> Self {
-//     Self {
-//       state,
-//       id: None,
-//       padding: Padding::ZERO,
-//       width: Length::Shrink,
-//       height: Length::Shrink,
-//       max_width: f32::INFINITY,
-//       max_height: f32::INFINITY,
-//       horizontal_alignment: Horizontal::Left,
-//       vertical_alignment: Vertical::Top,
-//       style: Default::default(),
-//     }
-//   }
-//
-//
-//   /// Sets the [`Id`] of the [`Container`].
-//   pub fn id(mut self, id: ContainerId) -> Self {
-//     self.id = Some(id);
-//     self
-//   }
-//   /// Sets the [`Padding`] of the [`Container`].
-//   pub fn padding<P: Into<Padding>>(mut self, padding: P) -> Self {
-//     self.padding = padding.into();
-//     self
-//   }
-//   /// Sets the width of the [`Container`].
-//   pub fn width(mut self, width: impl Into<Length>) -> Self {
-//     self.width = width.into();
-//     self
-//   }
-//   /// Sets the height of the [`Container`].
-//   pub fn height(mut self, height: impl Into<Length>) -> Self {
-//     self.height = height.into();
-//     self
-//   }
-//   /// Sets the maximum width of the [`Container`].
-//   pub fn max_width(mut self, max_width: impl Into<Pixels>) -> Self {
-//     self.max_width = max_width.into().0;
-//     self
-//   }
-//   /// Sets the maximum height of the [`Container`].
-//   pub fn max_height(mut self, max_height: impl Into<Pixels>) -> Self {
-//     self.max_height = max_height.into().0;
-//     self
-//   }
-//   /// Sets the content alignment for the horizontal axis of the [`Container`].
-//   pub fn align_x(mut self, alignment: Horizontal) -> Self {
-//     self.horizontal_alignment = alignment;
-//     self
-//   }
-//   /// Sets the content alignment for the vertical axis of the [`Container`].
-//   pub fn align_y(mut self, alignment: Vertical) -> Self {
-//     self.vertical_alignment = alignment;
-//     self
-//   }
-//   /// Centers the contents in the horizontal axis of the [`Container`].
-//   pub fn center_x(mut self) -> Self {
-//     self.horizontal_alignment = Horizontal::Center;
-//     self
-//   }
-//   /// Centers the contents in the vertical axis of the [`Container`].
-//   pub fn center_y(mut self) -> Self {
-//     self.vertical_alignment = Vertical::Center;
-//     self
-//   }
-//   /// Sets the style of the [`Container`].
-//   pub fn style(mut self, style: impl Into<<S::Theme as ContainerStyleSheet>::Style>) -> Self {
-//     self.style = style.into();
-//     self
-//   }
-//
-//   pub fn add(self) -> S::MapOutput {
-//     self.state.map_last(|content| {
-//       let mut container = Container::new(content)
-//         .padding(self.padding)
-//         .width(self.width)
-//         .height(self.height)
-//         .max_width(self.max_width)
-//         .max_height(self.max_width)
-//         .align_x(self.horizontal_alignment)
-//         .align_y(self.vertical_alignment)
-//         .style(self.style)
-//         ;
-//       if let Some(id) = self.id {
-//         container = container.id(id);
-//       }
-//       container.into()
-//     })
-//   }
-// }
+/// Builder for a [`Scrollable`] widget.
+#[must_use]
+pub struct ScrollableBuilder<'a, S: StateMap> where
+  S::Theme: ScrollableStyleSheet
+{
+  state: S,
+  id: Option<ScrollableId>,
+  width: Length,
+  height: Length,
+  direction: Direction,
+  on_scroll: Option<Box<dyn Fn(Viewport) -> S::Message + 'a>>,
+  style: <S::Theme as ScrollableStyleSheet>::Style,
+}
+impl<'a, S: StateMap> ScrollableBuilder<'a, S> where
+  S::Theme: ScrollableStyleSheet
+{
+  fn new(state: S) -> Self {
+    Self {
+      state,
+      id: None,
+      width: Length::Shrink,
+      height: Length::Shrink,
+      direction: Default::default(),
+      on_scroll: None,
+      style: Default::default(),
+    }
+  }
+
+  /// Sets the [`Id`] of the [`Scrollable`].
+  pub fn id(mut self, id: ScrollableId) -> Self {
+    self.id = Some(id);
+    self
+  }
+  /// Sets the width of the [`Scrollable`].
+  pub fn width(mut self, width: impl Into<Length>) -> Self {
+    self.width = width.into();
+    self
+  }
+  /// Sets the height of the [`Scrollable`].
+  pub fn height(mut self, height: impl Into<Length>) -> Self {
+    self.height = height.into();
+    self
+  }
+  /// Sets the [`Direction`] of the [`Scrollable`] .
+  pub fn direction(mut self, direction: Direction) -> Self {
+    self.direction = direction;
+    self
+  }
+  /// Sets a function to call when the [`Scrollable`] is scrolled.
+  ///
+  /// The function takes the [`Viewport`] of the [`Scrollable`].
+  pub fn on_scroll(mut self, f: impl Fn(Viewport) -> S::Message + 'a) -> Self {
+    self.on_scroll = Some(Box::new(f));
+    self
+  }
+  /// Sets the style of the [`Scrollable`] .
+  pub fn style(mut self, style: impl Into<<S::Theme as ScrollableStyleSheet>::Style>) -> Self {
+    self.style = style.into();
+    self
+  }
+
+  pub fn add(self) -> S::MapOutput where
+    Element<'a, S::Message, S::Theme, S::Renderer>: From<S::Element>,    // For `Scrollable::new`
+    S::Element: From<Scrollable<'a, S::Message, S::Theme, S::Renderer>>, // For `scrollable.into()`
+    S::Message: 'a, // For `scrollable.on_scroll`
+  {
+    self.state.map_last(|content| {
+      let mut scrollable = Scrollable::new(content)
+        .width(self.width)
+        .height(self.height)
+        .direction(self.direction)
+        .style(self.style);
+      if let Some(id) = self.id {
+        scrollable = scrollable.id(id);
+      }
+      if let Some(on_scroll) = self.on_scroll {
+        scrollable = scrollable.on_scroll(on_scroll);
+      }
+      scrollable.into()
+    })
+  }
+}
+
+/// Builder for a [`Container`] widget.
+#[must_use]
+pub struct ContainerBuilder<S: StateMap> where
+  S::Theme: ContainerStyleSheet
+{
+  state: S,
+  id: Option<ContainerId>,
+  padding: Padding,
+  width: Length,
+  height: Length,
+  max_width: f32,
+  max_height: f32,
+  horizontal_alignment: Horizontal,
+  vertical_alignment: Vertical,
+  style: <S::Theme as ContainerStyleSheet>::Style,
+}
+impl<S: StateMap> ContainerBuilder<S> where
+  S::Theme: ContainerStyleSheet
+{
+  fn new(state: S) -> Self {
+    Self {
+      state,
+      id: None,
+      padding: Padding::ZERO,
+      width: Length::Shrink,
+      height: Length::Shrink,
+      max_width: f32::INFINITY,
+      max_height: f32::INFINITY,
+      horizontal_alignment: Horizontal::Left,
+      vertical_alignment: Vertical::Top,
+      style: Default::default(),
+    }
+  }
+
+
+  /// Sets the [`Id`] of the [`Container`].
+  pub fn id(mut self, id: ContainerId) -> Self {
+    self.id = Some(id);
+    self
+  }
+  /// Sets the [`Padding`] of the [`Container`].
+  pub fn padding<P: Into<Padding>>(mut self, padding: P) -> Self {
+    self.padding = padding.into();
+    self
+  }
+  /// Sets the width of the [`Container`].
+  pub fn width(mut self, width: impl Into<Length>) -> Self {
+    self.width = width.into();
+    self
+  }
+  /// Sets the height of the [`Container`].
+  pub fn height(mut self, height: impl Into<Length>) -> Self {
+    self.height = height.into();
+    self
+  }
+  /// Sets the maximum width of the [`Container`].
+  pub fn max_width(mut self, max_width: impl Into<Pixels>) -> Self {
+    self.max_width = max_width.into().0;
+    self
+  }
+  /// Sets the maximum height of the [`Container`].
+  pub fn max_height(mut self, max_height: impl Into<Pixels>) -> Self {
+    self.max_height = max_height.into().0;
+    self
+  }
+  /// Sets the content alignment for the horizontal axis of the [`Container`].
+  pub fn align_x(mut self, alignment: Horizontal) -> Self {
+    self.horizontal_alignment = alignment;
+    self
+  }
+  /// Sets the content alignment for the vertical axis of the [`Container`].
+  pub fn align_y(mut self, alignment: Vertical) -> Self {
+    self.vertical_alignment = alignment;
+    self
+  }
+  /// Centers the contents in the horizontal axis of the [`Container`].
+  pub fn center_x(mut self) -> Self {
+    self.horizontal_alignment = Horizontal::Center;
+    self
+  }
+  /// Centers the contents in the vertical axis of the [`Container`].
+  pub fn center_y(mut self) -> Self {
+    self.vertical_alignment = Vertical::Center;
+    self
+  }
+  /// Sets the style of the [`Container`].
+  pub fn style(mut self, style: impl Into<<S::Theme as ContainerStyleSheet>::Style>) -> Self {
+    self.style = style.into();
+    self
+  }
+
+  pub fn add<'a>(self) -> S::MapOutput where
+    Element<'a, S::Message, S::Theme, S::Renderer>: From<S::Element>,   // For `Container::new`
+    S::Element: From<Container<'a, S::Message, S::Theme, S::Renderer>>, // For `container.into()`
+  {
+    self.state.map_last(|content| {
+      let mut container = Container::new(content)
+        .padding(self.padding)
+        .width(self.width)
+        .height(self.height)
+        .max_width(self.max_width)
+        .max_height(self.max_width)
+        .align_x(self.horizontal_alignment)
+        .align_y(self.vertical_alignment)
+        .style(self.style)
+        ;
+      if let Some(id) = self.id {
+        container = container.id(id);
+      }
+      container.into()
+    })
+  }
+}

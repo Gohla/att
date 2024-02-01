@@ -5,9 +5,6 @@
 //! - Low compile-time overhead.
 //! - Every operation is type-preserving.
 
-use iced::advanced::Renderer;
-use iced::Element;
-
 use super::{Elem, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
 use super::super::WidgetBuilder;
 
@@ -70,18 +67,14 @@ impl<E> HeapList<E> {
 
 // Implement state traits for `HeapList`.
 
-impl<'a, E> State for HeapList<E> where
-  E: Elem
-{
+impl<E: Elem> State for HeapList<E> {
   type Element = E;
   type Message = E::Message;
   type Theme = E::Theme;
   type Renderer = E::Renderer;
 }
 
-impl<E> StateAdd for HeapList<E> where
-  E: Elem
-{
+impl<E: Elem> StateAdd for HeapList<E> {
   type AddOutput = WidgetBuilder<Self>;
   #[inline]
   fn add<I: Into<Self::Element>>(self, into_elem: I) -> Self::AddOutput {
@@ -89,27 +82,19 @@ impl<E> StateAdd for HeapList<E> where
   }
 }
 
-impl<'a, M, T, R> StateConsume<'a> for HeapList<Element<'a, M, T, R>> where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
-{
+impl<E: Elem> StateConsume for HeapList<E> where {
   type ConsumeOutput = WidgetBuilder<Self>;
-  fn consume<F: FnOnce(Vec<Element<'a, M, T, R>>) -> Element<'a, M, T, R>>(self, produce: F) -> Self::ConsumeOutput {
+  fn consume<F: FnOnce(Vec<E>) -> E>(self, produce: F) -> Self::ConsumeOutput {
     let (vec, reserve_additional) = self.unwrap();
     let element = produce(vec);
     WidgetBuilder(HeapList::One(element, reserve_additional))
   }
 }
 
-impl<'a, M, T, R> StateMap<'a> for HeapList<Element<'a, M, T, R>> where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
-{
+impl<E: Elem> StateMap for HeapList<E> {
   type MapOutput = WidgetBuilder<Self>;
   #[inline]
-  fn map_last<F: FnOnce(Element<'a, M, T, R>) -> Element<'a, M, T, R>>(self, map: F) -> Self::MapOutput {
+  fn map_last<F: FnOnce(E) -> E>(self, map: F) -> Self::MapOutput {
     let mapped = match self {
       HeapList::Zero => panic!("builder should have at least 1 element"),
       HeapList::One(element, reserve_additional) => HeapList::One(map(element), reserve_additional),
