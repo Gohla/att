@@ -10,7 +10,7 @@ use crate::widget::table::body::Body;
 
 mod body;
 
-pub struct Table<'a, M, R, F> {
+pub struct Table<'a, M, T, R, F> {
   spacing: f32,
   width: Length,
   height: Length,
@@ -18,7 +18,7 @@ pub struct Table<'a, M, R, F> {
 
   column_constraints: Vec<Constraint>,
 
-  header_elements: Vec<Element<'a, M, R>>,
+  header_elements: Vec<Element<'a, M, T, R>>,
   header_row_height: f32,
 
   body_row_height: f32,
@@ -26,8 +26,8 @@ pub struct Table<'a, M, R, F> {
   cell_to_element: F,
 }
 
-impl<'a, M, R, F> Table<'a, M, R, F> where
-  F: Fn(usize, usize) -> Option<Element<'a, M, R>> + 'a
+impl<'a, M, T, R, F> Table<'a, M, T, R, F> where
+  F: Fn(usize, usize) -> Option<Element<'a, M, T, R>> + 'a
 {
   /// Creates a new table with a `cell_to_element` function to lazily create widget elements for cells.
   pub fn new(cell_to_element: F) -> Self {
@@ -44,7 +44,7 @@ impl<'a, M, R, F> Table<'a, M, R, F> where
   /// the same size as `header_elements`, adding default constraints if needed.
   pub fn with_constraints_and_header_elements(
     mut column_constraints: Vec<Constraint>,
-    header_elements: Vec<Element<'a, M, R>>,
+    header_elements: Vec<Element<'a, M, T, R>>,
     cell_to_element: F,
   ) -> Self {
     column_constraints.resize_with(header_elements.len(), Default::default);
@@ -97,18 +97,20 @@ impl<'a, M, R, F> Table<'a, M, R, F> where
     self
   }
 
-  pub fn push(mut self, column_constraint: impl Into<Constraint>, header_element: impl Into<Element<'a, M, R>>) -> Self {
+  pub fn push(mut self, column_constraint: impl Into<Constraint>, header_element: impl Into<Element<'a, M, T, R>>) -> Self {
     self.column_constraints.push(column_constraint.into());
     self.header_elements.push(header_element.into());
     self
   }
 }
 
-impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Table<'a, M, R, F> where
-  R::Theme: scrollable::StyleSheet,
-  F: Fn(usize, usize) -> Option<Element<'a, M, R>> + 'a
+impl<'a, F, M, T, R> Into<Element<'a, M, T, R>> for Table<'a, M, T, R, F> where
+  M: 'a,
+  T: scrollable::StyleSheet + 'a,
+  R: Renderer + 'a,
+  F: Fn(usize, usize) -> Option<Element<'a, M, T, R>> + 'a
 {
-  fn into(self) -> Element<'a, M, R> {
+  fn into(self) -> Element<'a, M, T, R> {
     let header = ConstrainedRow::with_constraints_and_elements(self.column_constraints.clone(), self.header_elements)
       .spacing(self.spacing)
       .height(self.header_row_height);

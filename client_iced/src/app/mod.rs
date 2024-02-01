@@ -1,6 +1,6 @@
 use std::error::Error;
 
-use iced::{Command, Element, Event, event, executor, Renderer, Subscription, Theme, window};
+use iced::{Command, Element, Event, event, executor, Subscription, Theme, window};
 use iced::window::Id;
 use tracing::error;
 
@@ -94,7 +94,7 @@ impl iced::Application for App {
     exit_subscription
   }
 
-  fn view(&self) -> Element<Message, Renderer<Theme>> {
+  fn view(&self) -> Element<Message> {
     let content = WidgetBuilder::stack()
       .text("All The Things").size(20.0).add()
       .add_space_fill_width()

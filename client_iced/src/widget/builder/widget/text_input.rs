@@ -11,13 +11,14 @@ pub trait TextInputActions<'a, M> {
   fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::Change;
   fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::Change;
 }
-pub trait CreateTextInput<'a, S: StateTypes<'a>> where
+pub trait CreateTextInput<'a, S> where
+  S: StateTypes<'a>,
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
   type Message: Clone;
-  fn create<F>(self, placeholder: &str, value: &str, modify: F) -> Element<'a, S::Message, S::Renderer> where
-    F: FnOnce(TextInput<'a, Self::Message, S::Renderer>) -> TextInput<'a, Self::Message, S::Renderer>;
+  fn create<F>(self, placeholder: &str, value: &str, modify: F) -> Element<'a, S::Message, S::Theme, S::Renderer> where
+    F: FnOnce(TextInput<'a, Self::Message, S::Theme, S::Renderer>) -> TextInput<'a, Self::Message, S::Theme, S::Renderer>;
 }
 
 pub struct TextInputPassthrough;
@@ -36,15 +37,16 @@ impl<'a, M> TextInputActions<'a, M> for TextInputPassthrough {
     TextInputFunctions { on_submit: Some(Box::new(on_submit)), ..Default::default() }
   }
 }
-impl<'a, S: StateTypes<'a>> CreateTextInput<'a, S> for TextInputPassthrough where
+impl<'a, S> CreateTextInput<'a, S> for TextInputPassthrough where
+  S: StateTypes<'a>,
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
   S::Message: Clone,
 {
   type Message = S::Message;
   #[inline]
-  fn create<F>(self, placeholder: &str, value: &str, modify: F) -> Element<'a, S::Message, S::Renderer> where
-    F: FnOnce(TextInput<'a, Self::Message, S::Renderer>) -> TextInput<'a, Self::Message, S::Renderer>
+  fn create<F>(self, placeholder: &str, value: &str, modify: F) -> Element<'a, S::Message, S::Theme, S::Renderer> where
+    F: FnOnce(TextInput<'a, Self::Message, S::Theme, S::Renderer>) -> TextInput<'a, Self::Message, S::Theme, S::Renderer>
   {
     let mut text_input = TextInput::new(placeholder, value);
     text_input = modify(text_input);
@@ -78,14 +80,15 @@ impl<'a, M> TextInputActions<'a, M> for TextInputFunctions<'a, M> {
     self
   }
 }
-impl<'a, S: StateTypes<'a>> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message> where
+impl<'a, S> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message> where
+  S: StateTypes<'a>,
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
 {
   type Message = TextInputAction;
   #[inline]
-  fn create<F>(self, placeholder: &str, value: &str, modify: F) -> Element<'a, S::Message, S::Renderer> where
-    F: FnOnce(TextInput<'a, Self::Message, S::Renderer>) -> TextInput<'a, Self::Message, S::Renderer>
+  fn create<F>(self, placeholder: &str, value: &str, modify: F) -> Element<'a, S::Message, S::Theme, S::Renderer> where
+    F: FnOnce(TextInput<'a, Self::Message, S::Theme, S::Renderer>) -> TextInput<'a, Self::Message, S::Theme, S::Renderer>
   {
     let mut text_input = TextInput::new(placeholder, value);
     text_input = modify(text_input);

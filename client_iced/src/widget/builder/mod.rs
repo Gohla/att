@@ -32,7 +32,7 @@ mod widget;
 #[must_use]
 pub struct WidgetBuilder<S>(S);
 
-impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
+impl<'a, M, T, R> WidgetBuilder<Nil<Element<'a, M, T, R>>> {
   /// Create a new stack-allocated widget builder.
   ///
   /// The advantages of a stack-allocated widget builder are:
@@ -46,11 +46,11 @@ impl<'a, M, R> WidgetBuilder<Nil<Element<'a, M, R>>> {
   /// some cases. For example, using it in a while loop to continually add elements is not possible. In that case, a
   /// [heap-based][heap] builder can be used.
   ///
-  /// [heap]: WidgetBuilder<HeapList<Element<'a, M, R>>>::heap()
+  /// [heap]: WidgetBuilder<HeapList<Element<'a, M, T, R>>>::heap()
   pub fn stack() -> Self { Self(Default::default()) }
 }
 
-impl<'a, M, R> WidgetBuilder<HeapList<Element<'a, M, R>>> {
+impl<'a, M, T, R> WidgetBuilder<HeapList<Element<'a, M, T, R>>> {
   /// Create a new heap-allocated widget builder.
   ///
   /// The advantage of a heap-allocated widget builder is that its type never changes. Therefore, it can be used in the
@@ -66,13 +66,13 @@ impl<'a, M, R> WidgetBuilder<HeapList<Element<'a, M, R>>> {
   ///
   /// Prefer a [stack-allocated][stack] builder if possible.
   ///
-  /// [stack]: WidgetBuilder<Nil<Element<'a, M, R>>>::stack()
+  /// [stack]: WidgetBuilder<Nil<Element<'a, M, T, R>>>::stack()
   pub fn heap() -> Self { Self(Default::default()) }
   /// Create a new heap-allocated widget builder and reserve `capacity` for elements.
   pub fn heap_with_capacity(capacity: usize) -> Self { Self(HeapList::with_capacity(capacity)) }
 }
 
-impl<'a, M, R> WidgetBuilder<PhantomData<Element<'a, M, R>>> {
+impl<'a, M, T, R> WidgetBuilder<PhantomData<Element<'a, M, T, R>>> {
   /// Create a new widget builder that can only be used once to build a single widget.
   pub fn once() -> Self { Self(Default::default()) }
 }
@@ -139,11 +139,11 @@ impl<'a, S: StateAdd<'a>> WidgetBuilder<S> {
   }
 
   /// Build an [`Element`] from `element`.
-  pub fn element<M: 'a>(self, element: impl Into<Element<'a, M, S::Renderer>>) -> ElementBuilder<'a, S, M> {
+  pub fn element<M: 'a>(self, element: impl Into<Element<'a, M, S::Theme, S::Renderer>>) -> ElementBuilder<'a, S, M> {
     ElementBuilder::new(self.0, element.into())
   }
   /// Adds `element` to this builder.
-  pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Renderer>>) -> S::AddOutput {
+  pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Theme, S::Renderer>>) -> S::AddOutput {
     self.element(element).add()
   }
 }
@@ -181,7 +181,7 @@ impl<'a, S: StateMap<'a>> WidgetBuilder<S> {
 
 impl<'a, S: StateTakeAll<'a>> WidgetBuilder<S> {
   /// Take a [`Vec`] with all element out of this builder.
-  pub fn take_all(self) -> Vec<Element<'a, S::Message, S::Renderer>> {
+  pub fn take_all(self) -> Vec<Element<'a, S::Message, S::Theme, S::Renderer>> {
     self.0.take_all()
   }
 }
@@ -190,7 +190,7 @@ impl<'a, S: StateTake<'a>> WidgetBuilder<S> {
   /// Take the single element out of this builder.
   ///
   /// Can only be called when this builder has exactly one element.
-  pub fn take(self) -> Element<'a, S::Message, S::Renderer> {
+  pub fn take(self) -> Element<'a, S::Message, S::Theme, S::Renderer> {
     self.0.take()
   }
 }
@@ -205,14 +205,14 @@ impl<E> WidgetBuilder<HeapList<E>> {
   }
 }
 
-impl<'a, S: StateTakeAll<'a>> Into<Vec<Element<'a, S::Message, S::Renderer>>> for WidgetBuilder<S> {
-  fn into(self) -> Vec<Element<'a, S::Message, S::Renderer>> {
+impl<'a, S: StateTakeAll<'a>> Into<Vec<Element<'a, S::Message, S::Theme, S::Renderer>>> for WidgetBuilder<S> {
+  fn into(self) -> Vec<Element<'a, S::Message, S::Theme, S::Renderer>> {
     self.take_all()
   }
 }
 
-impl<'a, S: StateTake<'a>> Into<Element<'a, S::Message, S::Renderer>> for WidgetBuilder<S> {
-  fn into(self) -> Element<'a, S::Message, S::Renderer> {
+impl<'a, S: StateTake<'a>> Into<Element<'a, S::Message, S::Theme, S::Renderer>> for WidgetBuilder<S> {
+  fn into(self) -> Element<'a, S::Message, S::Theme, S::Renderer> {
     self.take()
   }
 }
@@ -306,7 +306,7 @@ pub struct TextBuilder<'a, S: StateAdd<'a>> where
   S::Theme: TextStyleSheet
 {
   state: S,
-  text: Text<'a, S::Renderer>
+  text: Text<'a, S::Theme, S::Renderer>
 }
 impl<'a, S: StateAdd<'a>> TextBuilder<'a, S> where
   S::Renderer: TextRenderer,
@@ -665,7 +665,7 @@ impl<'a, S: StateTypes<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'
   }
 }
 impl<'a, S: StateAdd<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> where
-  C: Into<Element<'a, A::Message, S::Renderer>>,
+  C: Into<Element<'a, A::Message, S::Theme, S::Renderer>>,
   S::Theme: ButtonStyleSheet
 {
   /// Adds the [`Button`] to the builder and returns the builder.
@@ -689,10 +689,10 @@ impl<'a, S: StateAdd<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> 
 #[must_use]
 pub struct ElementBuilder<'a, S: StateAdd<'a>, M> {
   state: S,
-  element: Element<'a, M, S::Renderer>,
+  element: Element<'a, M, S::Theme, S::Renderer>,
 }
 impl<'a, S: StateAdd<'a>, M: 'a> ElementBuilder<'a, S, M> {
-  fn new(state: S, element: Element<'a, M, S::Renderer>) -> Self {
+  fn new(state: S, element: Element<'a, M, S::Theme, S::Renderer>) -> Self {
     Self { state, element }
   }
 

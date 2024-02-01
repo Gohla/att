@@ -9,7 +9,7 @@ use iced::advanced::widget::{Operation, tree, Tree};
 use iced::event::Status;
 use iced::mouse::{Cursor, Interaction};
 
-pub struct Body<'a, M, R, F> {
+pub struct Body<'a, M, T, R, F> {
   spacing: f32,
   column_count: usize,
   row_height: f32,
@@ -17,17 +17,17 @@ pub struct Body<'a, M, R, F> {
   row_count: usize,
   last_row_index: usize,
   cell_to_element: F,
-  phantom_row: Element<'a, M, R>,
-  element_state: RefCell<ElementState<'a, M, R>>,
+  phantom_row: Element<'a, M, T, R>,
+  element_state: RefCell<ElementState<'a, M, T, R>>,
 }
-impl<'a, M, R, F> Body<'a, M, R, F> {
+impl<'a, M, T, R, F> Body<'a, M, T, R, F> {
   pub fn new(
     spacing: f32,
     column_count: usize,
     row_height: f32,
     row_count: usize,
     cell_to_element: F,
-    phantom_row: Element<'a, M, R>
+    phantom_row: Element<'a, M, T, R>
   ) -> Self {
     Self {
       spacing,
@@ -43,17 +43,17 @@ impl<'a, M, R, F> Body<'a, M, R, F> {
   }
 }
 
-struct ElementState<'a, M, R> {
-  elements: HashMap<(usize, usize), Element<'a, M, R>>,
+struct ElementState<'a, M, T, R> {
+  elements: HashMap<(usize, usize), Element<'a, M, T, R>>,
 }
-impl<'a, M, R> Default for ElementState<'a, M, R> {
+impl<'a, M, T, R> Default for ElementState<'a, M, T, R> {
   fn default() -> Self {
     Self { elements: Default::default(), }
   }
 }
-impl<'a, M, R> ElementState<'a, M, R> {
-  pub fn get_or_insert<F>(&mut self, row: usize, col: usize, cell_to_element: &F) -> &mut Element<'a, M, R> where
-    F: Fn(usize, usize) -> Element<'a, M, R> + 'a
+impl<'a, M, T, R> ElementState<'a, M, T, R> {
+  pub fn get_or_insert<F>(&mut self, row: usize, col: usize, cell_to_element: &F) -> &mut Element<'a, M, T, R> where
+    F: Fn(usize, usize) -> Element<'a, M, T, R> + 'a
   {
     self.elements.entry((row, col))
       .or_insert_with(|| cell_to_element(row, col))
@@ -71,7 +71,7 @@ struct TreeState {
   previous_rows: Range<usize>,
 }
 impl TreeState {
-  pub fn get_or_insert<'a, M, R: Renderer>(&mut self, row: usize, col: usize, element: &Element<'a, M, R>) -> &mut Tree {
+  pub fn get_or_insert<'a, M, T, R: Renderer>(&mut self, row: usize, col: usize, element: &Element<'a, M, T, R>) -> &mut Tree {
     self.trees.entry((row, col))
       .or_insert_with(|| Tree::new(element))
   }
@@ -82,8 +82,9 @@ impl TreeState {
   }
 }
 
-impl<'a, F, M, R: Renderer> Widget<M, R> for Body<'a, M, R, F> where
-  F: Fn(usize, usize) -> Element<'a, M, R> + 'a
+impl<'a, F, M, T, R> Widget<M, T, R> for Body<'a, M, T, R, F> where
+  R: Renderer,
+  F: Fn(usize, usize) -> Element<'a, M, T, R> + 'a,
 {
   fn tag(&self) -> tree::Tag {
     tree::Tag::of::<RefCell<TreeState>>()
@@ -112,7 +113,7 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for Body<'a, M, R, F> where
     &self,
     tree: &Tree,
     renderer: &mut R,
-    theme: &R::Theme,
+    theme: &T,
     style: &renderer::Style,
     layout: Layout,
     cursor: Cursor,
@@ -275,14 +276,14 @@ impl<'a, F, M, R: Renderer> Widget<M, R> for Body<'a, M, R, F> where
   }
 }
 
-struct Cell<'c, 'e, M, R> {
-  element: &'c mut Element<'e, M, R>,
+struct Cell<'c, 'e, M, T, R> {
+  element: &'c mut Element<'e, M, T, R>,
   tree: &'c mut Tree,
   node: Node,
 }
 
-impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
-  F: Fn(usize, usize) -> Element<'a, M, R> + 'a
+impl<'a, F, M, T, R: Renderer> Body<'a, M, T, R, F> where
+  F: Fn(usize, usize) -> Element<'a, M, T, R> + 'a
 {
   /// Gets the cell at (`row`, `col`), with `cell_bounds` (retrieved from the layout of the phantom row).
   fn cell_at<'c>(
@@ -292,9 +293,9 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
     cell_bounds: Rectangle,
     absolute_y: f32,
     renderer: &R,
-    element_state: &'c mut ElementState<'a, M, R>,
+    element_state: &'c mut ElementState<'a, M, T, R>,
     tree_state: &'c mut TreeState,
-  ) -> Cell<'c, 'a, M, R> {
+  ) -> Cell<'c, 'a, M, T, R> {
     let element = element_state.get_or_insert(row, col, &self.cell_to_element);
     let tree = tree_state.get_or_insert(row, col, element);
     tree.diff(element.as_widget());
@@ -314,9 +315,9 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
     layout: Layout,
     absolute_y: f32,
     renderer: &R,
-    element_state: &'c mut ElementState<'a, M, R>,
+    element_state: &'c mut ElementState<'a, M, T, R>,
     tree_state: &'c mut TreeState,
-  ) -> Option<Cell<'c, 'a, M, R>> {
+  ) -> Option<Cell<'c, 'a, M, T, R>> {
     if let Some(row) = self.row_at(position.y) {
       if let Some((col, bounds)) = self.col_and_bounds_at(position.x, layout) {
         return Some(self.cell_at(row, col, bounds, absolute_y, renderer, element_state, tree_state));
@@ -360,10 +361,13 @@ impl<'a, F, M, R: Renderer> Body<'a, M, R, F> where
   }
 }
 
-impl<'a, F, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for Body<'a, M, R, F> where
-  F: Fn(usize, usize) -> Element<'a, M, R> + 'a
+impl<'a, M, T, R, F> Into<Element<'a, M, T, R>> for Body<'a, M, T, R, F> where
+  M: 'a,
+  R: Renderer + 'a,
+  T: 'a,
+  F: Fn(usize, usize) -> Element<'a, M, T, R> + 'a,
 {
-  fn into(self) -> Element<'a, M, R> {
+  fn into(self) -> Element<'a, M, T, R> {
     Element::new(self)
   }
 }

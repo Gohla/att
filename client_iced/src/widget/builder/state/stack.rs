@@ -75,60 +75,79 @@ impl<E> StackList for Nil<E> {
 
 // Implement state traits for all types implementing `StackList`.
 
-impl<'a, M: 'a, R: Renderer + 'a, L> StateTypes<'a> for L where
-  L: StackList<E=Element<'a, M, R>>
+impl<'a, M, T, R, L> StateTypes<'a> for L where
+  M: 'a,
+  R: Renderer + 'a,
+  T: 'a,
+  L: StackList<E=Element<'a, M, T, R>>
 {
   type Message = M;
+  type Theme = T;
   type Renderer = R;
-  type Theme = R::Theme;
 }
 
-impl<'a, M: 'a, R: Renderer + 'a, L> StateAdd<'a> for L where
-  L: StackList<E=Element<'a, M, R>>
+impl<'a, M, T, R, L> StateAdd<'a> for L where
+  M: 'a,
+  R: Renderer + 'a,
+  T: 'a,
+  L: StackList<E=Element<'a, M, T, R>>
 {
-  type AddOutput = WidgetBuilder<Cons<Element<'a, M, R>, Self>>;
+  type AddOutput = WidgetBuilder<Cons<Element<'a, M, T, R>, Self>>;
   #[inline]
-  fn add(self, element: Element<'a, M, R>) -> Self::AddOutput {
+  fn add(self, element: Element<'a, M, T, R>) -> Self::AddOutput {
     WidgetBuilder(StackList::add(self, element))
   }
 }
 
-impl<'a, M: 'a, R: Renderer + 'a, L> StateConsume<'a> for L where
-  L: StackList<E=Element<'a, M, R>>
+impl<'a, M, T, R, L> StateConsume<'a> for L where
+  M: 'a,
+  R: Renderer + 'a,
+  T: 'a,
+  L: StackList<E=Element<'a, M, T, R>>
 {
-  type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>>>;
+  type ConsumeOutput = WidgetBuilder<Cons<Element<'a, M, T, R>, Nil<Element<'a, M, T, R>>>>;
   #[inline]
-  fn consume<F: FnOnce(Vec<Element<'a, M, R>>) -> Element<'a, M, R>>(self, produce: F) -> Self::ConsumeOutput {
+  fn consume<F: FnOnce(Vec<Element<'a, M, T, R>>) -> Element<'a, M, T, R>>(self, produce: F) -> Self::ConsumeOutput {
     let vec = self.to_vec();
     let element = produce(vec);
     WidgetBuilder(Cons(element, Nil::default()))
   }
 }
 
-impl<'a, M: 'a, R: Renderer + 'a, L> StateMap<'a> for Cons<Element<'a, M, R>, L> where
-  L: StackList<E=Element<'a, M, R>>
+impl<'a, M, T, R, L> StateMap<'a> for Cons<Element<'a, M, T, R>, L> where
+  M: 'a,
+  R: Renderer + 'a,
+  T: 'a,
+  L: StackList<E=Element<'a, M, T, R>>
 {
-  type MapOutput = WidgetBuilder<Cons<Element<'a, M, R>, L>>;
+  type MapOutput = WidgetBuilder<Cons<Element<'a, M, T, R>, L>>;
   #[inline]
-  fn map_last<F: FnOnce(Element<'a, M, R>) -> Element<'a, M, R>>(self, map: F) -> Self::MapOutput {
+  fn map_last<F: FnOnce(Element<'a, M, T, R>) -> Element<'a, M, T, R>>(self, map: F) -> Self::MapOutput {
     let Cons(element, rest) = self;
     let element = map(element);
     WidgetBuilder(Cons(element, rest))
   }
 }
 
-impl<'a, M: 'a, R: Renderer + 'a, L> StateTakeAll<'a> for L where
-  L: StackList<E=Element<'a, M, R>>
+impl<'a, M, T, R, L> StateTakeAll<'a> for L where
+  M: 'a,
+  R: Renderer + 'a,
+  T: 'a,
+  L: StackList<E=Element<'a, M, T, R>>,
 {
   #[inline]
-  fn take_all(self) -> Vec<Element<'a, Self::Message, Self::Renderer>> {
+  fn take_all(self) -> Vec<Element<'a, Self::Message, Self::Theme, Self::Renderer>> {
     self.to_vec()
   }
 }
 
-impl<'a, M: 'a, R: Renderer + 'a> StateTake<'a> for Cons<Element<'a, M, R>, Nil<Element<'a, M, R>>> {
+impl<'a, M, T, R> StateTake<'a> for Cons<Element<'a, M, T, R>, Nil<Element<'a, M, T, R>>> where
+  M: 'a,
+  R: Renderer + 'a,
+  T: 'a,
+{
   #[inline]
-  fn take(self) -> Element<'a, M, R> {
+  fn take(self) -> Element<'a, M, T, R> {
     self.0
   }
 }

@@ -6,11 +6,11 @@ use iced::event::Status;
 use iced::mouse::{Cursor, Interaction};
 
 /// A row where [constraints](Constraint) are applied to each element in the row.
-pub struct ConstrainedRow<'a, M, R> {
+pub struct ConstrainedRow<'a, M, T, R> {
   spacing: f32,
   height: f32,
   constraints: Vec<Constraint>,
-  elements: Vec<Element<'a, M, R>>,
+  elements: Vec<Element<'a, M, T, R>>,
 }
 
 /// A constraint to apply to an element in a [constrained row](ConstrainedRow).
@@ -40,7 +40,7 @@ impl From<u32> for Constraint {
   }
 }
 
-impl<'a, M, R> ConstrainedRow<'a, M, R> {
+impl<'a, M, T, R> ConstrainedRow<'a, M, T, R> {
   /// Creates a new constrained row without any constraints and elements. Consider using
   /// [with_constraints_and_elements](Self::with_constraints_and_elements) or [with_capacity](Self::with_capacity) to
   /// reduce [`Vec`] resize allocations.
@@ -53,7 +53,7 @@ impl<'a, M, R> ConstrainedRow<'a, M, R> {
   /// `header_elements`, adding default constraints if needed.
   pub fn with_constraints_and_elements(
     mut constraints: Vec<Constraint>,
-    elements: Vec<Element<'a, M, R>>,
+    elements: Vec<Element<'a, M, T, R>>,
   ) -> Self {
     constraints.resize_with(elements.len(), Default::default);
     Self {
@@ -81,20 +81,24 @@ impl<'a, M, R> ConstrainedRow<'a, M, R> {
   }
 
   /// Appends `constraint` and `element` to the constraints and elements of the row.
-  pub fn push(mut self, constraint: impl Into<Constraint>, element: impl Into<Element<'a, M, R>>) -> Self {
+  pub fn push(mut self, constraint: impl Into<Constraint>, element: impl Into<Element<'a, M, T, R>>) -> Self {
     self.constraints.push(constraint.into());
     self.elements.push(element.into());
     self
   }
 }
 
-impl<'a, M: 'a, R: Renderer + 'a> Into<Element<'a, M, R>> for ConstrainedRow<'a, M, R> {
-  fn into(self) -> Element<'a, M, R> {
+impl<'a, M, T, R> Into<Element<'a, M, T, R>> for ConstrainedRow<'a, M, T, R> where
+  M: 'a,
+  T: 'a,
+  R: Renderer + 'a
+{
+  fn into(self) -> Element<'a, M, T, R> {
     Element::new(self)
   }
 }
 
-impl<'a, M, R: Renderer> Widget<M, R> for ConstrainedRow<'a, M, R> {
+impl<'a, M, T, R: Renderer> Widget<M, T, R> for ConstrainedRow<'a, M, T, R> {
   fn children(&self) -> Vec<Tree> {
     self.elements.iter().map(Tree::new).collect()
   }
@@ -130,7 +134,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for ConstrainedRow<'a, M, R> {
     &self,
     tree: &Tree,
     renderer: &mut R,
-    theme: &R::Theme,
+    theme: &T,
     style: &renderer::Style,
     layout: Layout,
     cursor: Cursor,
@@ -159,7 +163,7 @@ impl<'a, M, R: Renderer> Widget<M, R> for ConstrainedRow<'a, M, R> {
     crate::widget::child::operate(&self.elements, tree, layout, renderer, operation)
   }
 
-  fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout, renderer: &R) -> Option<overlay::Element<'o, M, R>> {
+  fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout, renderer: &R) -> Option<overlay::Element<'o, M, T, R>> {
     crate::widget::child::overlay(&mut self.elements, tree, layout, renderer)
   }
 }

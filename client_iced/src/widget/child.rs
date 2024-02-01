@@ -8,11 +8,11 @@ use iced::event::Status;
 use iced::mouse::{Cursor, Interaction};
 
 /// Propagate [`iced::advanced::widget::Widget::draw`] to child elements.
-pub fn draw<'a, M, R: Renderer>(
-  child_elements: &[Element<'a, M, R>],
+pub fn draw<'a, M, T, R: Renderer>(
+  child_elements: &[Element<'a, M, T, R>],
   tree: &Tree,
   renderer: &mut R,
-  theme: &R::Theme,
+  theme: &T,
   style: &renderer::Style,
   layout: Layout,
   cursor: Cursor,
@@ -27,8 +27,8 @@ pub fn draw<'a, M, R: Renderer>(
 }
 
 /// Propagate [`iced::advanced::widget::Widget::on_event`] to child elements.
-pub fn on_event<'a, M, R: Renderer>(
-  child_elements: &mut [Element<'a, M, R>],
+pub fn on_event<'a, M, T, R: Renderer>(
+  child_elements: &mut [Element<'a, M, T, R>],
   tree: &mut Tree,
   event: Event,
   layout: Layout,
@@ -57,8 +57,8 @@ pub fn on_event<'a, M, R: Renderer>(
 }
 
 /// Propagate [`iced::advanced::widget::Widget::mouse_interaction`] to child elements.
-pub fn mouse_interaction<'a, M, R: Renderer>(
-  child_elements: &[Element<'a, M, R>],
+pub fn mouse_interaction<'a, M, T, R: Renderer>(
+  child_elements: &[Element<'a, M, T, R>],
   tree: &Tree,
   layout: Layout,
   cursor: Cursor,
@@ -76,8 +76,8 @@ pub fn mouse_interaction<'a, M, R: Renderer>(
 }
 
 /// Propagate [`iced::advanced::widget::Widget::operate`] to child elements.
-pub fn operate<'a, M, R: Renderer>(
-  child_elements: &[Element<'a, M, R>],
+pub fn operate<'a, M, T, R: Renderer>(
+  child_elements: &[Element<'a, M, T, R>],
   tree: &mut Tree,
   layout: Layout,
   renderer: &R,
@@ -94,11 +94,11 @@ pub fn operate<'a, M, R: Renderer>(
 }
 
 /// Propagate [`iced::advanced::widget::Widget::overlay`] to child elements.
-pub fn overlay<'a, M, R: Renderer>(
-  child_elements: &'a mut [Element<'_, M, R>],
+pub fn overlay<'a, M, T, R: Renderer>(
+  child_elements: &'a mut [Element<'_, M, T, R>],
   tree: &'a mut Tree,
   layout: Layout,
   renderer: &R,
-) -> Option<overlay::Element<'a, M, R>> {
+) -> Option<overlay::Element<'a, M, T, R>> {
   overlay::from_children(child_elements, tree, layout, renderer)
 }

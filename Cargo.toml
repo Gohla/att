@@ -41,5 +41,5 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-appender = "0.2"
 hashbrown = "0.14"
-iced = { git = "https://github.com/iced-rs/iced.git", rev = "545cc909c9f356dd733d273173694db9b8c28594", default-features = false }
+iced = { git = "https://github.com/iced-rs/iced.git", rev = "7bbe4502170be1942c4e61d222e14401f724aa42", default-features = false }
 http = "1"

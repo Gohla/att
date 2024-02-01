@@ -13,12 +13,16 @@ pub mod font;
 pub mod icon;
 
 /// Widget extensions
-pub trait WidgetExt<'a, M, R> {
-  fn into_element(self) -> Element<'a, M, R>;
+pub trait WidgetExt<'a, M, T, R> {
+  fn into_element(self) -> Element<'a, M, T, R>;
 }
-impl<'a, M: 'a, R: Renderer + 'a, W: Into<Element<'a, M, R>>> WidgetExt<'a, M, R> for W {
+impl<'a, M, T, R, W> WidgetExt<'a, M, T, R> for W where
+  M: 'a,
+  R: Renderer + 'a,
+  W: Into<Element<'a, M, T, R>>
+{
   #[inline]
-  fn into_element(self) -> Element<'a, M, R> {
+  fn into_element(self) -> Element<'a, M, T, R> {
     self.into()
   }
 }

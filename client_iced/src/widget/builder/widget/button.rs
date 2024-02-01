@@ -12,9 +12,9 @@ pub trait CreateButton<'a, S: StateTypes<'a>> where
   S::Theme: ButtonStyleSheet
 {
   type Message: Clone;
-  fn create<E, F>(self, content: E, modify: F) -> Element<'a, S::Message, S::Renderer> where
-    E: Into<Element<'a, Self::Message, S::Renderer>>,
-    F: FnOnce(Button<'a, Self::Message, S::Renderer>) -> Button<'a, Self::Message, S::Renderer>;
+  fn create<E, F>(self, content: E, modify: F) -> Element<'a, S::Message, S::Theme, S::Renderer> where
+    E: Into<Element<'a, Self::Message, S::Theme, S::Renderer>>,
+    F: FnOnce(Button<'a, Self::Message, S::Theme, S::Renderer>) -> Button<'a, Self::Message, S::Theme, S::Renderer>;
 }
 
 pub struct ButtonPassthrough;
@@ -25,15 +25,16 @@ impl<'a, M> ButtonActions<'a, M> for ButtonPassthrough {
     ButtonFunctions { on_press: Box::new(on_press) }
   }
 }
-impl<'a, S: StateTypes<'a>> CreateButton<'a, S> for ButtonPassthrough where
+impl<'a, S> CreateButton<'a, S> for ButtonPassthrough where
+  S: StateTypes<'a>,
   S::Theme: ButtonStyleSheet,
   S::Message: Clone,
 {
   type Message = S::Message;
   #[inline]
-  fn create<E, F>(self, content: E, modify: F) -> Element<'a, S::Message, S::Renderer> where
-    E: Into<Element<'a, Self::Message, S::Renderer>>,
-    F: FnOnce(Button<'a, Self::Message, S::Renderer>) -> Button<'a, Self::Message, S::Renderer>
+  fn create<E, F>(self, content: E, modify: F) -> Element<'a, S::Message, S::Theme, S::Renderer> where
+    E: Into<Element<'a, Self::Message, S::Theme, S::Renderer>>,
+    F: FnOnce(Button<'a, Self::Message, S::Theme, S::Renderer>) -> Button<'a, Self::Message, S::Theme, S::Renderer>
   {
     let mut button = Button::new(content);
     button = modify(button);
@@ -52,14 +53,15 @@ impl<'a, M> ButtonActions<'a, M> for ButtonFunctions<'a, M> {
     self
   }
 }
-impl<'a, S: StateTypes<'a>> CreateButton<'a, S> for ButtonFunctions<'a, S::Message> where
+impl<'a, S> CreateButton<'a, S> for ButtonFunctions<'a, S::Message> where
+  S: StateTypes<'a>,
   S::Theme: ButtonStyleSheet,
 {
   type Message = ();
   #[inline]
-  fn create<E, F>(self, content: E, modify: F) -> Element<'a, S::Message, S::Renderer> where
-    E: Into<Element<'a, Self::Message, S::Renderer>>,
-    F: FnOnce(Button<'a, Self::Message, S::Renderer>) -> Button<'a, Self::Message, S::Renderer>
+  fn create<E, F>(self, content: E, modify: F) -> Element<'a, S::Message, S::Theme, S::Renderer> where
+    E: Into<Element<'a, Self::Message, S::Theme, S::Renderer>>,
+    F: FnOnce(Button<'a, Self::Message, S::Theme, S::Renderer>) -> Button<'a, Self::Message, S::Theme, S::Renderer>
   {
     let mut button = Button::new(content)
       .on_press(());
