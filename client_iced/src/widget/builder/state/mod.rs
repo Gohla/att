@@ -1,4 +1,4 @@
-use iced::advanced::{Renderer, Widget};
+use iced::advanced::Renderer;
 use iced::Element;
 
 pub mod stack;

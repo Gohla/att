@@ -7,33 +7,44 @@ use super::super::state::State;
 
 pub trait TextInputActions<'a, M> {
   type Change;
-  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::Change;
-  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::Change;
-  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::Change;
+
+  fn on_input(self, on_input: impl Fn(String) -> M + 'a) -> Self::Change;
+  fn on_paste(self, on_paste: impl Fn(String) -> M + 'a) -> Self::Change;
+  fn on_submit(self, on_submit: impl Fn() -> M + 'a) -> Self::Change;
 }
+
+type TI<'a, M, S> = TextInput<'a, M, <S as State>::Theme, <S as State>::Renderer>;
+
 pub trait CreateTextInput<'a, S> where
   S: State,
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
   type Message: Clone;
-  fn create<F>(self, placeholder: &str, value: &str, modify: F) -> Element<'a, S::Message, S::Theme, S::Renderer> where
-    F: FnOnce(TextInput<'a, Self::Message, S::Theme, S::Renderer>) -> TextInput<'a, Self::Message, S::Theme, S::Renderer>;
+
+  fn create(
+    self,
+    placeholder: &str,
+    value: &str,
+    modify: impl FnOnce(TI<'a, Self::Message, S>) -> TI<'a, Self::Message, S>,
+  ) -> Element<'a, S::Message, S::Theme, S::Renderer>;
 }
 
+/// Passthrough which does not modify the message type.
 pub struct TextInputPassthrough;
 impl<'a, M> TextInputActions<'a, M> for TextInputPassthrough {
   type Change = TextInputFunctions<'a, M>;
+
   #[inline]
-  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::Change {
+  fn on_input(self, on_input: impl Fn(String) -> M + 'a) -> Self::Change {
     TextInputFunctions { on_input: Some(Box::new(on_input)), ..Default::default() }
   }
   #[inline]
-  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::Change {
+  fn on_paste(self, on_paste: impl Fn(String) -> M + 'a) -> Self::Change {
     TextInputFunctions { on_paste: Some(Box::new(on_paste)), ..Default::default() }
   }
   #[inline]
-  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::Change {
+  fn on_submit(self, on_submit: impl Fn() -> M + 'a) -> Self::Change {
     TextInputFunctions { on_submit: Some(Box::new(on_submit)), ..Default::default() }
   }
 }
@@ -44,16 +55,21 @@ impl<'a, S> CreateTextInput<'a, S> for TextInputPassthrough where
   S::Theme: TextInputStyleSheet,
 {
   type Message = S::Message;
+
   #[inline]
-  fn create<F>(self, placeholder: &str, value: &str, modify: F) -> Element<'a, S::Message, S::Theme, S::Renderer> where
-    F: FnOnce(TextInput<'a, Self::Message, S::Theme, S::Renderer>) -> TextInput<'a, Self::Message, S::Theme, S::Renderer>
-  {
+  fn create(
+    self,
+    placeholder: &str,
+    value: &str,
+    modify: impl FnOnce(TI<'a, Self::Message, S>) -> TI<'a, Self::Message, S>,
+  ) -> Element<'a, S::Message, S::Theme, S::Renderer> {
     let mut text_input = TextInput::new(placeholder, value);
     text_input = modify(text_input);
     Element::new(text_input)
   }
 }
 
+/// Modify message type to [`TextInputAction`] which is [`Clone`], without our callbacks needing to implement clone.
 pub struct TextInputFunctions<'a, M> {
   on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
   on_paste: Option<Box<dyn Fn(String) -> M + 'a>>,
@@ -64,18 +80,19 @@ impl<'a, M> Default for TextInputFunctions<'a, M> {
 }
 impl<'a, M> TextInputActions<'a, M> for TextInputFunctions<'a, M> {
   type Change = Self;
+
   #[inline]
-  fn on_input<F: Fn(String) -> M + 'a>(mut self, on_input: F) -> Self::Change {
+  fn on_input(mut self, on_input: impl Fn(String) -> M + 'a) -> Self::Change {
     self.on_input = Some(Box::new(on_input));
     self
   }
   #[inline]
-  fn on_paste<F: Fn(String) -> M + 'a>(mut self, on_paste: F) -> Self::Change {
+  fn on_paste(mut self, on_paste: impl Fn(String) -> M + 'a) -> Self::Change {
     self.on_paste = Some(Box::new(on_paste));
     self
   }
   #[inline]
-  fn on_submit<F: Fn() -> M + 'a>(mut self, on_submit: F) -> Self::Change {
+  fn on_submit(mut self, on_submit: impl Fn() -> M + 'a) -> Self::Change {
     self.on_submit = Some(Box::new(on_submit));
     self
   }
@@ -86,10 +103,14 @@ impl<'a, S> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message> where
   S::Theme: TextInputStyleSheet,
 {
   type Message = TextInputAction;
+
   #[inline]
-  fn create<F>(self, placeholder: &str, value: &str, modify: F) -> Element<'a, S::Message, S::Theme, S::Renderer> where
-    F: FnOnce(TextInput<'a, Self::Message, S::Theme, S::Renderer>) -> TextInput<'a, Self::Message, S::Theme, S::Renderer>
-  {
+  fn create(
+    self,
+    placeholder: &str,
+    value: &str,
+    modify: impl FnOnce(TI<'a, Self::Message, S>) -> TI<'a, Self::Message, S>,
+  ) -> Element<'a, S::Message, S::Theme, S::Renderer> {
     let mut text_input = TextInput::new(placeholder, value);
     text_input = modify(text_input);
     if self.on_input.is_some() {

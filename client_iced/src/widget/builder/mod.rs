@@ -1,15 +1,12 @@
-#![allow(unused_imports)]
-
 use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use iced::{Alignment, Color, Element, Length, Padding, Pixels};
-use iced::advanced::Renderer;
 use iced::advanced::text::Renderer as TextRenderer;
 use iced::alignment::{Horizontal, Vertical};
 pub use iced::theme::Button as ButtonStyle;
 pub use iced::theme::Theme as BuiltinTheme;
-use iced::widget::{Column, Container, Row, Rule, Scrollable, Space, Text, TextInput};
+use iced::widget::{Column, Container, Row, Rule, Scrollable, Space, Text};
 pub use iced::widget::button::StyleSheet as ButtonStyleSheet;
 pub use iced::widget::container::{Id as ContainerId, StyleSheet as ContainerStyleSheet};
 pub use iced::widget::rule::StyleSheet as RuleStyleSheet;
@@ -49,7 +46,7 @@ impl<E: Elem> WidgetBuilder<Nil<E>> {
   /// some cases. For example, using it in a while loop to continually add elements is not possible. In that case, a
   /// [heap-based][heap] builder can be used.
   ///
-  /// [heap]: WidgetBuilder<HeapList<Element<'a, M, T, R>>>::heap()
+  /// [heap]: WidgetBuilder<HeapList<E>>::heap()
   pub fn stack() -> Self { Self(Default::default()) }
 }
 
@@ -69,7 +66,7 @@ impl<E: Elem> WidgetBuilder<HeapList<E>> {
   ///
   /// Prefer a [stack-allocated][stack] builder if possible.
   ///
-  /// [stack]: WidgetBuilder<Nil<Element<'a, M, T, R>>>::stack()
+  /// [stack]: WidgetBuilder<Nil<E>>::stack()
   pub fn heap() -> Self { Self(Default::default()) }
   /// Create a new heap-allocated widget builder and reserve `capacity` for elements.
   pub fn heap_with_capacity(capacity: usize) -> Self { Self(HeapList::with_capacity(capacity)) }
@@ -87,13 +84,13 @@ impl<S: StateAdd> WidgetBuilder<S> {
   }
   /// Adds a width-filling [`Space`] to this builder.
   pub fn add_space_fill_width(self) -> S::AddOutput where
-    S::Element: From<Space>,
+    S::Element: From<Space>
   {
     self.space().fill_width().add()
   }
   /// Adds a height-filling [`Space`] to this builder.
   pub fn add_space_fill_height(self) -> S::AddOutput where
-    S::Element: From<Space>,
+    S::Element: From<Space>
   {
     self.space().fill_height().add()
   }
@@ -120,7 +117,7 @@ impl<S: StateAdd> WidgetBuilder<S> {
   }
 
   /// Build a [`Text`] widget from `content`.
-  pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<S, Text<'a, S::Theme, S::Renderer>> where
+  pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<'a, S> where
     S::Renderer: TextRenderer,
     S::Theme: TextStyleSheet
   {
@@ -135,14 +132,14 @@ impl<S: StateAdd> WidgetBuilder<S> {
     self.text(content).add()
   }
   /// Build a [`TextInput`] widget from `content`.
-  pub fn text_input<'a>(self, placeholder: &'a str, value: &'a str) -> TextInputBuilder<'a, S, TextInputPassthrough> where
+  pub fn text_input<'a>(self, placeholder: &'a str, value: &'a str) -> TextInputBuilder<'a, S> where
     S::Renderer: TextRenderer,
     S::Theme: TextInputStyleSheet
   {
     TextInputBuilder::new(self.0, placeholder, value)
   }
   /// Build a [`Button`] widget from `content`.
-  pub fn button<C>(self, content: C) -> ButtonBuilder<S, C, ButtonPassthrough> where
+  pub fn button<C>(self, content: C) -> ButtonBuilder<S, C> where
     S::Theme: ButtonStyleSheet
   {
     ButtonBuilder::new(self.0, content)
@@ -269,9 +266,7 @@ pub struct RuleBuilder<S> {
   width_or_height: Pixels,
   is_vertical: bool,
 }
-impl<'a, S: StateAdd> RuleBuilder<S> where
-  S::Theme: RuleStyleSheet
-{
+impl<'a, S: StateAdd> RuleBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -305,11 +300,14 @@ impl<'a, S: StateAdd> RuleBuilder<S> where
 
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<S, T> {
+pub struct TextBuilder<'a, S: State> where
+  S::Renderer: TextRenderer,
+  S::Theme: TextStyleSheet,
+{
   state: S,
-  text: T
+  text: Text<'a, S::Theme, S::Renderer>
 }
-impl<'a, S: StateAdd> TextBuilder<S, Text<'a, S::Theme, S::Renderer>> where
+impl<'a, S: StateAdd> TextBuilder<'a, S> where
   S::Renderer: TextRenderer,
   S::Theme: TextStyleSheet,
 {
@@ -387,7 +385,7 @@ impl<'a, S: StateAdd> TextBuilder<S, Text<'a, S::Theme, S::Renderer>> where
 
 /// Builder for a [`TextInput`] widget.
 #[must_use]
-pub struct TextInputBuilder<'a, S: StateAdd, A> where
+pub struct TextInputBuilder<'a, S: StateAdd, A = TextInputPassthrough> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -405,7 +403,7 @@ pub struct TextInputBuilder<'a, S: StateAdd, A> where
   icon: Option<TextInputIcon<<S::Renderer as TextRenderer>::Font>>,
   style: <S::Theme as TextInputStyleSheet>::Style,
 }
-impl<'a, S: StateAdd> TextInputBuilder<'a, S, TextInputPassthrough> where
+impl<'a, S: StateAdd> TextInputBuilder<'a, S> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -554,7 +552,7 @@ impl<'a, S: StateAdd, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> wher
 
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<S: State, C, A> where
+pub struct ButtonBuilder<S: State, C, A = ButtonPassthrough> where
   S::Theme: ButtonStyleSheet
 {
   state: S,
@@ -566,7 +564,7 @@ pub struct ButtonBuilder<S: State, C, A> where
   padding: Padding,
   style: <S::Theme as ButtonStyleSheet>::Style,
 }
-impl<S: State, C> ButtonBuilder<S, C, ButtonPassthrough> where
+impl<S: State, C> ButtonBuilder<S, C> where
   S::Theme: ButtonStyleSheet
 {
   fn new(state: S, content: C) -> Self {
@@ -703,9 +701,7 @@ impl<'a, S: StateAdd, M> ElementBuilder<'a, S, M> {
 
   pub fn map(self, f: impl Fn(M) -> S::Message + 'a) -> ElementBuilder<'a, S, S::Message> where
     M: 'a,
-    S::Message: 'a,
-    S::Theme: 'a,
-    S::Renderer: 'a,
+    S: 'a
   {
     let element = self.element.map(f);
     ElementBuilder { state: self.state, element }
@@ -730,7 +726,7 @@ pub struct ColumnBuilder<S> {
   max_width: f32,
   align_items: Alignment,
 }
-impl<S> ColumnBuilder<S> {
+impl<S: StateConsume> ColumnBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -796,12 +792,11 @@ impl<S> ColumnBuilder<S> {
   pub fn align_center(self) -> Self {
     self.align_items(Alignment::Center)
   }
-}
-impl<'a, S: StateConsume> ColumnBuilder<S> where
-  Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>, // For `Column::with_children`
-  S::Element: From<Column<'a, S::Message, S::Theme, S::Renderer>>,                    // For `.into()`
-{
-  pub fn add(self) -> S::ConsumeOutput {
+
+  pub fn add<'a>(self) -> S::ConsumeOutput where
+    Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>, // For `Column::with_children`
+    S::Element: From<Column<'a, S::Message, S::Theme, S::Renderer>>,                    // For `.into()`
+  {
     self.state.consume(|vec| {
       Column::with_children(vec)
         .spacing(self.spacing)
@@ -825,7 +820,7 @@ pub struct RowBuilder<S> {
   height: Length,
   align_items: Alignment,
 }
-impl<S> RowBuilder<S> {
+impl<S: StateConsume> RowBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -884,12 +879,11 @@ impl<S> RowBuilder<S> {
   pub fn align_center(self) -> Self {
     self.align_items(Alignment::Center)
   }
-}
-impl<'a, S: StateConsume> RowBuilder<S> where
-  Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>, // For `Row::with_children`
-  S::Element: From<Row<'a, S::Message, S::Theme, S::Renderer>>,                       // For `.into()`
-{
-  pub fn add(self) -> S::ConsumeOutput {
+
+  pub fn add<'a>(self) -> S::ConsumeOutput where
+    Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>, // For `Row::with_children`
+    S::Element: From<Row<'a, S::Message, S::Theme, S::Renderer>>,                       // For `.into()`
+  {
     self.state.consume(|vec| {
       Row::with_children(vec)
         .spacing(self.spacing)
