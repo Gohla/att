@@ -82,15 +82,15 @@ impl<E: Elem, L: StackList<E=E>> State for L {
 impl<E: Elem, L: StackList<E=E>> StateAdd for L {
   type AddOutput = WidgetBuilder<Cons<E, Self>>;
   #[inline]
-  fn add<I: Into<E>>(self, into_elem: I) -> Self::AddOutput {
-    WidgetBuilder(StackList::add(self, into_elem.into()))
+  fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput {
+    WidgetBuilder(StackList::add(self, into.into()))
   }
 }
 
 impl<E: Elem, L: StackList<E=E>> StateConsume for L {
   type ConsumeOutput = WidgetBuilder<Cons<E, Nil<E>>>;
   #[inline]
-  fn consume<F: FnOnce(Vec<E>) -> E>(self, produce: F) -> Self::ConsumeOutput {
+  fn consume(self, produce: impl FnOnce(Vec<E>) -> E) -> Self::ConsumeOutput {
     let vec = self.to_vec();
     let element = produce(vec);
     WidgetBuilder(Cons(element, Nil::default()))
@@ -100,7 +100,7 @@ impl<E: Elem, L: StackList<E=E>> StateConsume for L {
 impl<E: Elem, L: StackList<E=E>> StateMap for Cons<E, L> {
   type MapOutput = WidgetBuilder<Cons<E, L>>;
   #[inline]
-  fn map_last<F: FnOnce(E) -> E>(self, map: F) -> Self::MapOutput {
+  fn map_last(self, map: impl FnOnce(E) -> E) -> Self::MapOutput {
     let Cons(element, rest) = self;
     let element = map(element);
     WidgetBuilder(Cons(element, rest))

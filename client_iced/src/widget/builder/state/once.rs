@@ -12,7 +12,7 @@ impl<E: Elem> State for PhantomData<E> {
 impl<E: Elem> StateAdd for PhantomData<E> {
   type AddOutput = E;
   #[inline]
-  fn add<I: Into<Self::Element>>(self, into_elem: I) -> Self::AddOutput {
-    into_elem.into()
+  fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput {
+    into.into()
   }
 }

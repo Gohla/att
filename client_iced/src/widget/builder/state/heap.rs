@@ -77,14 +77,14 @@ impl<E: Elem> State for HeapList<E> {
 impl<E: Elem> StateAdd for HeapList<E> {
   type AddOutput = WidgetBuilder<Self>;
   #[inline]
-  fn add<I: Into<Self::Element>>(self, into_elem: I) -> Self::AddOutput {
-    WidgetBuilder(self.add(into_elem.into()))
+  fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput {
+    WidgetBuilder(self.add(into.into()))
   }
 }
 
 impl<E: Elem> StateConsume for HeapList<E> where {
   type ConsumeOutput = WidgetBuilder<Self>;
-  fn consume<F: FnOnce(Vec<E>) -> E>(self, produce: F) -> Self::ConsumeOutput {
+  fn consume(self, produce: impl FnOnce(Vec<E>) -> E) -> Self::ConsumeOutput {
     let (vec, reserve_additional) = self.unwrap();
     let element = produce(vec);
     WidgetBuilder(HeapList::One(element, reserve_additional))
@@ -94,7 +94,7 @@ impl<E: Elem> StateConsume for HeapList<E> where {
 impl<E: Elem> StateMap for HeapList<E> {
   type MapOutput = WidgetBuilder<Self>;
   #[inline]
-  fn map_last<F: FnOnce(E) -> E>(self, map: F) -> Self::MapOutput {
+  fn map_last(self, map: impl FnOnce(E) -> E) -> Self::MapOutput {
     let mapped = match self {
       HeapList::Zero => panic!("builder should have at least 1 element"),
       HeapList::One(element, reserve_additional) => HeapList::One(map(element), reserve_additional),

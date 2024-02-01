@@ -160,7 +160,7 @@ impl<S: StateAdd> WidgetBuilder<S> {
   }
 }
 
-impl<'a, S: StateConsume> WidgetBuilder<S> {
+impl<S: StateConsume> WidgetBuilder<S> {
   /// Build a [`Column`] widget that will consume all elements in this builder.
   pub fn column(self) -> ColumnBuilder<S> {
     ColumnBuilder::new(self.0)
@@ -307,7 +307,7 @@ impl<'a, S: StateAdd> RuleBuilder<S> where
 #[must_use]
 pub struct TextBuilder<S, T> {
   state: S,
-  text: T//Text<'a, E::Theme, E::Renderer>
+  text: T
 }
 impl<'a, S: StateAdd> TextBuilder<S, Text<'a, S::Theme, S::Renderer>> where
   S::Renderer: TextRenderer,

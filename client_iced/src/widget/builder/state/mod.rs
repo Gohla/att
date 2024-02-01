@@ -37,7 +37,7 @@ pub trait StateAdd: State {
   /// Type to return from [`Self::add`].
   type AddOutput;
   /// Add `element` onto `self`, then return a [new builder](Self::AddOutput) with those elements.
-  fn add<I: Into<Self::Element>>(self, into_elem: I) -> Self::AddOutput;
+  fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput;
 }
 
 /// Internal trait for consuming widget builder state.
@@ -46,7 +46,7 @@ pub trait StateConsume: State {
   type ConsumeOutput;
   /// Consume all [elements](Element) from `self` into a [`Vec`], call `f` on that [`Vec`] to create a new [`Element`],
   /// then return a [new builder](Self::ConsumeOutput) with that element.
-  fn consume<F: FnOnce(Vec<Self::Element>) -> Self::Element>(self, f: F) -> Self::ConsumeOutput;
+  fn consume(self, f: impl FnOnce(Vec<Self::Element>) -> Self::Element) -> Self::ConsumeOutput;
 }
 
 /// Internal trait for mapping widget builder state.
@@ -55,7 +55,7 @@ pub trait StateMap: State {
   type MapOutput;
   /// Take the last [`Element`] from `self`, call `map` on that [`Element`] to create a new [`Element`], then return
   /// a [new builder](Self::MapOutput) with that element.
-  fn map_last<F: FnOnce(Self::Element) -> Self::Element>(self, map: F) -> Self::MapOutput;
+  fn map_last(self, map: impl FnOnce(Self::Element) -> Self::Element) -> Self::MapOutput;
 }
 
 /// Internal trait taking all widget builder state.
