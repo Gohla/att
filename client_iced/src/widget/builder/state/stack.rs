@@ -20,7 +20,7 @@ use std::marker::PhantomData;
 use iced::advanced::Renderer;
 use iced::Element;
 
-use super::{Elem, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, StateTypes};
+use super::{Elem, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
 use super::super::WidgetBuilder;
 
 /// Algebraic stack list constructor.
@@ -75,7 +75,7 @@ impl<E> StackList for Nil<E> {
 
 // Implement state traits for all types implementing `StackList`.
 
-impl<E, L> StateTypes for L where
+impl<E, L> State for L where
   E: Elem,
   L: StackList<E=E>
 {
@@ -126,25 +126,20 @@ impl<'a, M, T, R, L> StateMap<'a> for Cons<Element<'a, M, T, R>, L> where
   }
 }
 
-impl<'a, M, T, R, L> StateTakeAll<'a> for L where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
-  L: StackList<E=Element<'a, M, T, R>>,
+impl<E, L> StateTakeAll for L where
+  E: Elem,
+  L: StackList<E=E>
 {
   #[inline]
-  fn take_all(self) -> Vec<Element<'a, Self::Message, Self::Theme, Self::Renderer>> {
+  fn take_all(self) -> Vec<E> {
     self.to_vec()
   }
 }
 
-impl<'a, M, T, R> StateTake<'a> for Cons<Element<'a, M, T, R>, Nil<Element<'a, M, T, R>>> where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
+impl<E: Elem> StateTake for Cons<E, Nil<E>> where
 {
   #[inline]
-  fn take(self) -> Element<'a, M, T, R> {
+  fn take(self) -> E {
     self.0
   }
 }

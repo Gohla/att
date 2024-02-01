@@ -3,7 +3,7 @@ use iced::Element;
 use iced::widget::text_input::StyleSheet as TextInputStyleSheet;
 use iced::widget::TextInput;
 
-use super::super::state::StateTypes;
+use super::super::state::State;
 
 pub trait TextInputActions<'a, M> {
   type Change;
@@ -12,7 +12,7 @@ pub trait TextInputActions<'a, M> {
   fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::Change;
 }
 pub trait CreateTextInput<'a, S> where
-  S: StateTypes,
+  S: State,
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -38,7 +38,7 @@ impl<'a, M> TextInputActions<'a, M> for TextInputPassthrough {
   }
 }
 impl<'a, S> CreateTextInput<'a, S> for TextInputPassthrough where
-  S: StateTypes + 'a,
+  S: State + 'a,
   S::Message: Clone,
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
@@ -81,7 +81,7 @@ impl<'a, M> TextInputActions<'a, M> for TextInputFunctions<'a, M> {
   }
 }
 impl<'a, S> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message> where
-  S: StateTypes + 'a,
+  S: State + 'a,
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
 {

@@ -8,7 +8,7 @@
 use iced::advanced::Renderer;
 use iced::Element;
 
-use super::{Elem, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, StateTypes};
+use super::{Elem, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
 use super::super::WidgetBuilder;
 
 /// Heap-allocated list.
@@ -70,7 +70,7 @@ impl<E> HeapList<E> {
 
 // Implement state traits for `HeapList`.
 
-impl<'a, E> StateTypes for HeapList<E> where
+impl<'a, E> State for HeapList<E> where
   E: Elem
 {
   type Element = E;
@@ -82,7 +82,6 @@ impl<'a, E> StateTypes for HeapList<E> where
 impl<E> StateAdd for HeapList<E> where
   E: Elem
 {
-
   type AddOutput = WidgetBuilder<Self>;
   #[inline]
   fn add<I: Into<Self::Element>>(self, into_elem: I) -> Self::AddOutput {
@@ -126,24 +125,16 @@ impl<'a, M, T, R> StateMap<'a> for HeapList<Element<'a, M, T, R>> where
   }
 }
 
-impl<'a, M, T, R> StateTakeAll<'a> for HeapList<Element<'a, M, T, R>> where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
-{
+impl<E: Elem> StateTakeAll for HeapList<E> where {
   #[inline]
-  fn take_all(self) -> Vec<Element<'a, Self::Message, Self::Theme, Self::Renderer>> {
+  fn take_all(self) -> Vec<E> {
     self.unwrap().0
   }
 }
 
-impl<'a, M, T, R> StateTake<'a> for HeapList<Element<'a, M, T, R>> where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
-{
+impl<E: Elem> StateTake for HeapList<E> {
   #[inline]
-  fn take(self) -> Element<'a, M, T, R> {
+  fn take(self) -> E {
     match self {
       HeapList::Zero => panic!("builder should have precisely 1 element, but it has 0"),
       HeapList::One(element, _) => element,

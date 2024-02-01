@@ -10,10 +10,9 @@ pub use iced::theme::Button as ButtonStyle;
 pub use iced::theme::Theme as BuiltinTheme;
 use iced::widget::{Column, Container, Row, Rule, Scrollable, Space, Text, TextInput};
 pub use iced::widget::button::StyleSheet as ButtonStyleSheet;
-pub use iced::widget::container::{Id as ContainerId, StyleSheet as ContainerStyleSheet};
+pub use iced::widget::container::StyleSheet as ContainerStyleSheet;
 pub use iced::widget::rule::StyleSheet as RuleStyleSheet;
-pub use iced::widget::scrollable::{Id as ScrollableId, StyleSheet as ScrollableStyleSheet};
-use iced::widget::scrollable::{Direction, Viewport};
+pub use iced::widget::scrollable::StyleSheet as ScrollableStyleSheet;
 use iced::widget::text::{LineHeight, Shaping};
 pub use iced::widget::text::StyleSheet as TextStyleSheet;
 pub use iced::widget::text_input::{Icon as TextInputIcon, Id as TextInputId, StyleSheet as TextInputStyleSheet};
@@ -24,7 +23,7 @@ use state::stack::Nil;
 use widget::button::{ButtonActions, ButtonPassthrough, CreateButton};
 use widget::text_input::{CreateTextInput, TextInputActions, TextInputPassthrough};
 
-use crate::widget::builder::state::{Elem, StateTypes};
+use crate::widget::builder::state::{Elem, State};
 
 mod state;
 mod widget;
@@ -190,18 +189,18 @@ impl<'a, S: StateConsume<'a>> WidgetBuilder<S> {
 //   }
 // }
 
-impl<'a, S: StateTakeAll<'a>> WidgetBuilder<S> {
+impl<S: StateTakeAll> WidgetBuilder<S> {
   /// Take a [`Vec`] with all element out of this builder.
-  pub fn take_all(self) -> Vec<Element<'a, S::Message, S::Theme, S::Renderer>> {
+  pub fn take_all(self) -> Vec<S::Element> {
     self.0.take_all()
   }
 }
 
-impl<'a, S: StateTake<'a>> WidgetBuilder<S> {
+impl<S: StateTake> WidgetBuilder<S> {
   /// Take the single element out of this builder.
   ///
   /// Can only be called when this builder has exactly one element.
-  pub fn take(self) -> Element<'a, S::Message, S::Theme, S::Renderer> {
+  pub fn take(self) -> S::Element {
     self.0.take()
   }
 }
@@ -213,18 +212,6 @@ impl<E> WidgetBuilder<HeapList<E>> {
   pub fn reserve(mut self, additional: usize) -> Self {
     self.0.reserve(additional);
     self
-  }
-}
-
-impl<'a, S: StateTakeAll<'a>> Into<Vec<Element<'a, S::Message, S::Theme, S::Renderer>>> for WidgetBuilder<S> {
-  fn into(self) -> Vec<Element<'a, S::Message, S::Theme, S::Renderer>> {
-    self.take_all()
-  }
-}
-
-impl<'a, S: StateTake<'a>> Into<Element<'a, S::Message, S::Theme, S::Renderer>> for WidgetBuilder<S> {
-  fn into(self) -> Element<'a, S::Message, S::Theme, S::Renderer> {
-    self.take()
   }
 }
 
@@ -316,11 +303,11 @@ impl<'a, S: StateAdd> RuleBuilder<S> where
 
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<S, T>{
+pub struct TextBuilder<S, T> {
   state: S,
   text: T//Text<'a, E::Theme, E::Renderer>
 }
-impl<'a, S: StateAdd> TextBuilder<S, Text<'a, S::Theme,S::Renderer>> where
+impl<'a, S: StateAdd> TextBuilder<S, Text<'a, S::Theme, S::Renderer>> where
   S::Renderer: TextRenderer,
   S::Theme: TextStyleSheet,
 {
@@ -398,7 +385,7 @@ impl<'a, S: StateAdd> TextBuilder<S, Text<'a, S::Theme,S::Renderer>> where
 
 /// Builder for a [`TextInput`] widget.
 #[must_use]
-pub struct TextInputBuilder<'a, S:StateAdd, A> where
+pub struct TextInputBuilder<'a, S: StateAdd, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -533,7 +520,7 @@ impl<'a, S: StateAdd, A: TextInputActions<'a, S::Message>> TextInputBuilder<'a, 
 impl<'a, S: StateAdd, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
-  //S: StateAdd<Element=Element<'a, <S as StateTypes>::Message, <S as StateTypes>::Theme, <S as StateTypes>::Renderer>>,
+//S: StateAdd<Element=Element<'a, <S as StateTypes>::Message, <S as StateTypes>::Theme, <S as StateTypes>::Renderer>>,
   S::Element: From<Element<'a, S::Message, S::Theme, S::Renderer>>,
 {
   /// Adds the [`TextInput`](iced::widget::TextInput) to the builder and returns the builder.
@@ -566,7 +553,7 @@ impl<'a, S: StateAdd, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> wher
 
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<S: StateTypes, C, A> where
+pub struct ButtonBuilder<S: State, C, A> where
   S::Theme: ButtonStyleSheet
 {
   state: S,
@@ -578,7 +565,7 @@ pub struct ButtonBuilder<S: StateTypes, C, A> where
   padding: Padding,
   style: <S::Theme as ButtonStyleSheet>::Style,
 }
-impl<S: StateTypes, C> ButtonBuilder<S, C, ButtonPassthrough> where
+impl<S: State, C> ButtonBuilder<S, C, ButtonPassthrough> where
   S::Theme: ButtonStyleSheet
 {
   fn new(state: S, content: C) -> Self {
@@ -594,7 +581,7 @@ impl<S: StateTypes, C> ButtonBuilder<S, C, ButtonPassthrough> where
     }
   }
 }
-impl<'a, S: StateTypes, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<S, C, A> where
+impl<'a, S: State, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<S, C, A> where
   S::Theme: ButtonStyleSheet
 {
   /// Sets the width of the [`Button`].

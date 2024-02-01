@@ -1,8 +1,8 @@
 use std::marker::PhantomData;
 
-use super::{Elem, StateAdd, StateTypes};
+use super::{Elem, StateAdd, State};
 
-impl<'a, E> StateTypes for PhantomData<E> where
+impl<'a, E> State for PhantomData<E> where
   E: Elem
 {
   type Element = E;
