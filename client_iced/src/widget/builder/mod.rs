@@ -83,11 +83,15 @@ impl<'a, S: StateAdd<'a>> WidgetBuilder<S> {
     SpaceBuilder::new(self.0)
   }
   /// Adds a width-filling [`Space`] to this builder.
-  pub fn add_space_fill_width(self) -> S::AddOutput {
+  pub fn add_space_fill_width(self) -> S::AddOutput where
+    S::Element: From<Space>,
+  {
     self.space().fill_width().add()
   }
   /// Adds a height-filling [`Space`] to this builder.
-  pub fn add_space_fill_height(self) -> S::AddOutput {
+  pub fn add_space_fill_height(self) -> S::AddOutput where
+    S::Element: From<Space>,
+  {
     self.space().fill_height().add()
   }
 
@@ -99,13 +103,15 @@ impl<'a, S: StateAdd<'a>> WidgetBuilder<S> {
   }
   /// Adds a horizontal [`Rule`] with `height` to this builder.
   pub fn add_horizontal_rule(self, height: impl Into<Pixels>) -> S::AddOutput where
-    S::Theme: RuleStyleSheet
+    S::Theme: RuleStyleSheet,
+    S::Element: From<Rule>,
   {
     self.rule().horizontal(height).add()
   }
   /// Adds a vertical [`Rule`] with `width` to this builder.
   pub fn add_vertical_rule(self, width: impl Into<Pixels>) -> S::AddOutput where
-    S::Theme: RuleStyleSheet
+    S::Theme: RuleStyleSheet,
+    S::Element: From<Rule>,
   {
     self.rule().vertical(width).add()
   }
@@ -120,7 +126,8 @@ impl<'a, S: StateAdd<'a>> WidgetBuilder<S> {
   /// Adds a [`Text`] widget with `content` to this builder.
   pub fn add_text(self, content: impl Into<Cow<'a, str>>) -> S::AddOutput where
     S::Renderer: TextRenderer,
-    S::Theme: TextStyleSheet
+    S::Theme: TextStyleSheet,
+    S::Element: From<Text<'a, S::Theme, S::Renderer>>,
   {
     self.text(content).add()
   }
@@ -143,7 +150,9 @@ impl<'a, S: StateAdd<'a>> WidgetBuilder<S> {
     ElementBuilder::new(self.0, element.into())
   }
   /// Adds `element` to this builder.
-  pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Theme, S::Renderer>>) -> S::AddOutput {
+  pub fn add_element(self, element: impl Into<Element<'a, S::Message, S::Theme, S::Renderer>>) -> S::AddOutput where
+    S: StateAdd<'a, Element = Element<'a, <S as StateTypes<'a>>::Message, <S as StateTypes<'a>>::Theme, <S as StateTypes<'a>>::Renderer>>,
+  {
     self.element(element).add()
   }
 }
@@ -254,7 +263,7 @@ impl<'a, S: StateAdd<'a>> SpaceBuilder<S> {
   }
 
   /// Adds the [`Space`] widget to the builder and returns the builder.
-  pub fn add(self) -> S::AddOutput {
+  pub fn add(self) -> S::AddOutput where S::Element: From<Space> {
     let space = Space::new(self.width, self.height);
     self.state.add(space.into())
   }
@@ -289,7 +298,7 @@ impl<'a, S: StateAdd<'a>> RuleBuilder<S> where
     self
   }
 
-  pub fn add(self) -> S::AddOutput {
+  pub fn add(self) -> S::AddOutput where S::Element: From<Rule> {
     let rule = if self.is_vertical {
       Rule::vertical(self.width_or_height)
     } else {
@@ -377,7 +386,9 @@ impl<'a, S: StateAdd<'a>> TextBuilder<'a, S> where
     self
   }
 
-  pub fn add(self) -> S::AddOutput {
+  pub fn add(self) -> S::AddOutput where
+    S::Element: From<Text<'a, S::Theme, S::Renderer>>,
+  {
     self.state.add(self.text.into())
   }
 }
@@ -518,7 +529,8 @@ impl<'a, S: StateAdd<'a>, A: TextInputActions<'a, S::Message>> TextInputBuilder<
 }
 impl<'a, S: StateAdd<'a>, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet
+  S::Theme: TextInputStyleSheet,
+  S: StateAdd<'a, Element=Element<'a, <S as StateTypes<'a>>::Message, <S as StateTypes<'a>>::Theme, <S as StateTypes<'a>>::Renderer>>,
 {
   /// Adds the [`TextInput`](iced::widget::TextInput) to the builder and returns the builder.
   pub fn add(self) -> S::AddOutput {
@@ -666,7 +678,8 @@ impl<'a, S: StateTypes<'a>, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<'
 }
 impl<'a, S: StateAdd<'a>, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> where
   C: Into<Element<'a, A::Message, S::Theme, S::Renderer>>,
-  S::Theme: ButtonStyleSheet
+  S::Theme: ButtonStyleSheet,
+  S: StateAdd<'a, Element=Element<'a, <S as StateTypes<'a>>::Message, <S as StateTypes<'a>>::Theme, <S as StateTypes<'a>>::Renderer>>,
 {
   /// Adds the [`Button`] to the builder and returns the builder.
   pub fn add(self) -> S::AddOutput {
@@ -701,7 +714,9 @@ impl<'a, S: StateAdd<'a>, M: 'a> ElementBuilder<'a, S, M> {
     ElementBuilder { state: self.state, element }
   }
 }
-impl<'a, S: StateAdd<'a>> ElementBuilder<'a, S, S::Message> {
+impl<'a, S: StateAdd<'a>> ElementBuilder<'a, S, S::Message> where
+  S: StateAdd<'a, Element = Element<'a, <S as StateTypes<'a>>::Message, <S as StateTypes<'a>>::Theme, <S as StateTypes<'a>>::Renderer>>,
+{
   pub fn add(self) -> S::AddOutput {
     self.state.add(self.element)
   }

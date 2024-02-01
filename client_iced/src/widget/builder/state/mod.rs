@@ -5,6 +5,37 @@ pub mod stack;
 pub mod heap;
 pub mod once;
 
+pub trait Elem<'a> {
+  /// [`Element`] message type.
+  type Message: 'a;
+  /// [`Element`] theme type.
+  type Theme: 'a;
+  /// [`Element`] renderer type.
+  type Renderer: Renderer + 'a;
+}
+impl<'a, M: 'a, T: 'a, R: Renderer + 'a> Elem<'a> for Element<'a, M, T, R> {
+  type Message = M;
+  type Theme = T;
+  type Renderer = R;
+}
+
+// pub trait IntoElem<'a> {
+//   type Element: Elem<'a>;
+//   fn into_elem(self) -> Self::Element;
+// }
+// impl<'a, M: 'a, T:'a, R: Renderer + 'a> IntoElem<'a> for Element<'a, M, T, R> {
+//   type Element = Element<'a, M, T, R>;
+//   fn into_elem(self) -> Self::Element {
+//     self
+//   }
+// }
+// impl<'a, M, T, R, W: Widget<M, T, R>> Into<Element<'a, M, T, R>> for  W {
+//   fn into(self) -> Element<'a, M, T, R> {
+//     Element::new(self)
+//   }
+// }
+
+
 /// Internal trait for access to element types.
 pub trait StateTypes<'a> {
   /// [`Element`] message type.
@@ -17,10 +48,11 @@ pub trait StateTypes<'a> {
 
 /// Internal trait for adding to widget builder state.
 pub trait StateAdd<'a>: StateTypes<'a> {
+  type Element: Elem<'a>;
   /// Type to return from [`Self::add`].
   type AddOutput;
   /// Add `element` onto `self`, then return a [new builder](Self::AddOutput) with those elements.
-  fn add(self, element: Element<'a, Self::Message, Self::Theme, Self::Renderer>) -> Self::AddOutput;
+  fn add(self, element: Self::Element) -> Self::AddOutput;
 }
 
 /// Internal trait for consuming widget builder state.

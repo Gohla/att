@@ -8,7 +8,7 @@
 use iced::advanced::Renderer;
 use iced::Element;
 
-use super::{StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, StateTypes};
+use super::{Elem, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, StateTypes};
 use super::super::WidgetBuilder;
 
 /// Heap-allocated list.
@@ -70,24 +70,21 @@ impl<E> HeapList<E> {
 
 // Implement state traits for `HeapList`.
 
-impl<'a, M, T, R> StateTypes<'a> for HeapList<Element<'a, M, T, R>> where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
+impl<'a, E> StateTypes<'a> for HeapList<E> where
+  E: Elem<'a>
 {
-  type Message = M;
-  type Theme = T;
-  type Renderer = R;
+  type Message = E::Message;
+  type Theme = E::Theme;
+  type Renderer = E::Renderer;
 }
 
-impl<'a, M, T, R> StateAdd<'a> for HeapList<Element<'a, M, T, R>> where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
+impl<'a, E> StateAdd<'a> for HeapList<E> where
+  E: Elem<'a>
 {
+  type Element = E;
   type AddOutput = WidgetBuilder<Self>;
   #[inline]
-  fn add(self, element: Element<'a, M, T, R>) -> Self::AddOutput {
+  fn add(self, element: E) -> Self::AddOutput {
     WidgetBuilder(self.add(element))
   }
 }

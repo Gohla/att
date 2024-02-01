@@ -1,28 +1,22 @@
 use std::marker::PhantomData;
 
-use iced::advanced::Renderer;
-use iced::Element;
+use super::{Elem, StateAdd, StateTypes};
 
-use super::{StateAdd, StateTypes};
-
-impl<'a, M, T, R> StateTypes<'a> for PhantomData<Element<'a, M, T, R>> where
-  M: 'a,
-  T: 'a,
-  R: Renderer + 'a
+impl<'a, E> StateTypes<'a> for PhantomData<E> where
+  E: Elem<'a>
 {
-  type Message = M;
-  type Theme = T;
-  type Renderer = R;
+  type Message = E::Message;
+  type Theme = E::Theme;
+  type Renderer = E::Renderer;
 }
 
-impl<'a, M, T, R> StateAdd<'a> for PhantomData<Element<'a, M, T, R>> where
-  M: 'a,
-  T: 'a,
-  R: Renderer + 'a
+impl<'a, E> StateAdd<'a> for PhantomData<E> where
+  E: Elem<'a>
 {
-  type AddOutput = Element<'a, M, T, R>;
+  type Element = E;
+  type AddOutput = E;
   #[inline]
-  fn add(self, element: Element<'a, M, T, R>) -> Self::AddOutput {
+  fn add(self, element: E) -> Self::AddOutput {
     element
   }
 }

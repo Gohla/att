@@ -20,7 +20,7 @@ use std::marker::PhantomData;
 use iced::advanced::Renderer;
 use iced::Element;
 
-use super::{StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, StateTypes};
+use super::{Elem, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll, StateTypes};
 use super::super::WidgetBuilder;
 
 /// Algebraic stack list constructor.
@@ -75,26 +75,23 @@ impl<E> StackList for Nil<E> {
 
 // Implement state traits for all types implementing `StackList`.
 
-impl<'a, M, T, R, L> StateTypes<'a> for L where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
-  L: StackList<E=Element<'a, M, T, R>>
+impl<'a, E, L> StateTypes<'a> for L where
+  E: Elem<'a>,
+  L: StackList<E=E>
 {
-  type Message = M;
-  type Theme = T;
-  type Renderer = R;
+  type Message = E::Message;
+  type Theme = E::Theme;
+  type Renderer = E::Renderer;
 }
 
-impl<'a, M, T, R, L> StateAdd<'a> for L where
-  M: 'a,
-  R: Renderer + 'a,
-  T: 'a,
-  L: StackList<E=Element<'a, M, T, R>>
+impl<'a, E, L> StateAdd<'a> for L where
+  E: Elem<'a>,
+  L: StackList<E=E>
 {
-  type AddOutput = WidgetBuilder<Cons<Element<'a, M, T, R>, Self>>;
+  type Element = E;
+  type AddOutput = WidgetBuilder<Cons<Self::Element, Self>>;
   #[inline]
-  fn add(self, element: Element<'a, M, T, R>) -> Self::AddOutput {
+  fn add(self, element: Self::Element) -> Self::AddOutput {
     WidgetBuilder(StackList::add(self, element))
   }
 }
