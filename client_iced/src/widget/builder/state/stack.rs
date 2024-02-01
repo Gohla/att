@@ -75,24 +75,24 @@ impl<E> StackList for Nil<E> {
 
 // Implement state traits for all types implementing `StackList`.
 
-impl<'a, E, L> StateTypes<'a> for L where
-  E: Elem<'a>,
+impl<E, L> StateTypes for L where
+  E: Elem,
   L: StackList<E=E>
 {
+  type Element = E;
   type Message = E::Message;
   type Theme = E::Theme;
   type Renderer = E::Renderer;
 }
 
-impl<'a, E, L> StateAdd<'a> for L where
-  E: Elem<'a>,
+impl<E, L> StateAdd for L where
+  E: Elem,
   L: StackList<E=E>
 {
-  type Element = E;
-  type AddOutput = WidgetBuilder<Cons<Self::Element, Self>>;
+  type AddOutput = WidgetBuilder<Cons<E, Self>>;
   #[inline]
-  fn add(self, element: Self::Element) -> Self::AddOutput {
-    WidgetBuilder(StackList::add(self, element))
+  fn add<I: Into<E>>(self, into_elem: I) -> Self::AddOutput {
+    WidgetBuilder(StackList::add(self, into_elem.into()))
   }
 }
 

@@ -70,22 +70,23 @@ impl<E> HeapList<E> {
 
 // Implement state traits for `HeapList`.
 
-impl<'a, E> StateTypes<'a> for HeapList<E> where
-  E: Elem<'a>
+impl<'a, E> StateTypes for HeapList<E> where
+  E: Elem
 {
+  type Element = E;
   type Message = E::Message;
   type Theme = E::Theme;
   type Renderer = E::Renderer;
 }
 
-impl<'a, E> StateAdd<'a> for HeapList<E> where
-  E: Elem<'a>
+impl<E> StateAdd for HeapList<E> where
+  E: Elem
 {
-  type Element = E;
+
   type AddOutput = WidgetBuilder<Self>;
   #[inline]
-  fn add(self, element: E) -> Self::AddOutput {
-    WidgetBuilder(self.add(element))
+  fn add<I: Into<Self::Element>>(self, into_elem: I) -> Self::AddOutput {
+    WidgetBuilder(self.add(into_elem.into()))
   }
 }
 
