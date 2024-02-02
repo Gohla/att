@@ -108,23 +108,23 @@ impl<FI, FP, FS> TextInputActions for TextInputFunctions<FI, FP, FS> {
   }
 }
 
-trait Callback<I, M> {
+trait Call<I, M> {
   fn should_register() -> bool;
   fn call(&self, input: I) -> Option<M>;
 }
-impl<M, I> Callback<I, M> for () {
+impl<M, I> Call<I, M> for () {
   #[inline]
   fn should_register() -> bool { false }
   #[inline]
   fn call(&self, _input: I) -> Option<M> { None }
 }
-impl<'a, I, M, F: Fn(I) -> M + 'a> Callback<I, M> for Fn1<F> {
+impl<'a, I, M, F: Fn(I) -> M + 'a> Call<I, M> for Fn1<F> {
   #[inline]
   fn should_register() -> bool { true }
   #[inline]
   fn call(&self, input: I) -> Option<M> { Some(self.0(input)) }
 }
-impl<'a, M, F: Fn() -> M + 'a> Callback<(), M> for Fn0<F> {
+impl<'a, M, F: Fn() -> M + 'a> Call<(), M> for Fn0<F> {
   #[inline]
   fn should_register() -> bool { true }
   #[inline]
@@ -142,9 +142,9 @@ impl<'a, S, FI, FP, FS> CreateTextInput<'a, S> for TextInputFunctions<FI, FP, FS
   S: State + 'a,
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
-  FI: Callback<String, S::Message> + 'a,
-  FP: Callback<String, S::Message> + 'a,
-  FS: Callback<(), S::Message> + 'a,
+  FI: Call<String, S::Message> + 'a,
+  FP: Call<String, S::Message> + 'a,
+  FS: Call<(), S::Message> + 'a,
 {
   type Message = TextInputAction;
 

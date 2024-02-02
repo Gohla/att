@@ -2,14 +2,16 @@ use iced::Element;
 use iced::widget::Button;
 use iced::widget::button::StyleSheet as ButtonStyleSheet;
 
+use crate::widget::builder::state::{Elem, ElemM};
+
 use super::super::state::State;
 
-pub trait ButtonActions<'a, M> {
-  type Change;
-  fn on_press(self, on_press: impl Fn() -> M + 'a) -> Self::Change;
+pub trait ButtonActions {
+  type Change<F>;
+  fn on_press<F>(self, on_press: F) -> Self::Change<F>;
 }
 
-type B<'a, M, S> = Button<'a, M, <S as State>::Theme, <S as State>::Renderer>;
+type Btn<'a, S, C> = Button<'a, <C as CreateButton<'a, S>>::Message, <S as State>::Theme, <S as State>::Renderer>;
 
 pub trait CreateButton<'a, S> where
   S: State,
@@ -18,19 +20,19 @@ pub trait CreateButton<'a, S> where
   type Message: Clone;
   fn create(
     self,
-    content: impl Into<Element<'a, Self::Message, S::Theme, S::Renderer>>,
-    modify: impl FnOnce(B<'a, Self::Message, S>) -> B<'a, Self::Message, S>,
-  ) -> Element<'a, S::Message, S::Theme, S::Renderer>;
+    content: impl Into<ElemM<'a, S, Self::Message>>,
+    modify: impl FnOnce(Btn<'a, S, Self>) -> Btn<'a, S, Self>,
+  ) -> Elem<'a, S>;
 }
 
 /// Passthrough which does not modify the message type, thus the message type must implement [`Clone`].
 pub struct ButtonPassthrough;
-impl<'a, M> ButtonActions<'a, M> for ButtonPassthrough {
-  type Change = ButtonFunctions<'a, M>;
+impl ButtonActions for ButtonPassthrough {
+  type Change<F> = ButtonFunctions<F>;
 
   #[inline]
-  fn on_press(self, on_press: impl Fn() -> M + 'a) -> Self::Change {
-    ButtonFunctions { on_press: Box::new(on_press) }
+  fn on_press<F>(self, on_press: F) -> Self::Change<F> {
+    ButtonFunctions { on_press }
   }
 }
 impl<'a, S> CreateButton<'a, S> for ButtonPassthrough where
@@ -43,9 +45,9 @@ impl<'a, S> CreateButton<'a, S> for ButtonPassthrough where
   #[inline]
   fn create(
     self,
-    content: impl Into<Element<'a, Self::Message, S::Theme, S::Renderer>>,
-    modify: impl FnOnce(B<'a, Self::Message, S>) -> B<'a, Self::Message, S>,
-  ) -> Element<'a, S::Message, S::Theme, S::Renderer> {
+    content: impl Into<ElemM<'a, S, Self::Message>>,
+    modify: impl FnOnce(Btn<'a, S, Self>) -> Btn<'a, S, Self>,
+  ) -> Elem<'a, S> {
     let mut button = Button::new(content);
     button = modify(button);
     Element::new(button)
@@ -53,30 +55,32 @@ impl<'a, S> CreateButton<'a, S> for ButtonPassthrough where
 }
 
 /// Modify message type to `()` which is [`Clone`], without our callback needing to implement clone.
-pub struct ButtonFunctions<'a, M> {
-  on_press: Box<dyn Fn() -> M + 'a>,
+pub struct ButtonFunctions<FP> {
+  on_press: FP,
 }
-impl<'a, M> ButtonActions<'a, M> for ButtonFunctions<'a, M> {
-  type Change = Self;
+
+impl<FP> ButtonActions for ButtonFunctions<FP> {
+  type Change<F> = ButtonFunctions<F>;
 
   #[inline]
-  fn on_press(mut self, on_press: impl Fn() -> M + 'a) -> Self::Change {
-    self.on_press = Box::new(on_press);
-    self
+  fn on_press<F>(self, on_press: F) -> Self::Change<F> {
+    ButtonFunctions { on_press }
   }
 }
-impl<'a, S> CreateButton<'a, S> for ButtonFunctions<'a, S::Message> where
+
+impl<'a, S, FP> CreateButton<'a, S> for ButtonFunctions<FP> where
   S: State + 'a,
   S::Theme: ButtonStyleSheet,
+  FP: Fn() -> S::Message + 'a,
 {
   type Message = ();
 
   #[inline]
   fn create(
     self,
-    content: impl Into<Element<'a, Self::Message, S::Theme, S::Renderer>>,
-    modify: impl FnOnce(B<'a, Self::Message, S>) -> B<'a, Self::Message, S>,
-  ) -> Element<'a, S::Message, S::Theme, S::Renderer> {
+    content: impl Into<ElemM<'a, S, Self::Message>>,
+    modify: impl FnOnce(Btn<'a, S, Self>) -> Btn<'a, S, Self>,
+  ) -> Elem<'a, S> {
     let mut button = Button::new(content)
       .on_press(());
     button = modify(button);

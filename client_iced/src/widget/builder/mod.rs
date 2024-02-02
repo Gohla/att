@@ -578,7 +578,7 @@ impl<S: State, C> ButtonBuilder<S, C> where
     }
   }
 }
-impl<'a, S: State, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<S, C, A> where
+impl<'a, S: State, C, A: ButtonActions> ButtonBuilder<S, C, A> where
   S::Theme: ButtonStyleSheet
 {
   /// Sets the width of the [`Button`].
@@ -597,7 +597,7 @@ impl<'a, S: State, C, A: ButtonActions<'a, S::Message>> ButtonBuilder<S, C, A> w
     self
   }
   /// Sets the function that will be called when the [`Button`] is pressed to `on_paste`.
-  pub fn on_press<F: Fn() -> S::Message + 'a>(self, on_press: F) -> ButtonBuilder<S, C, A::Change> {
+  pub fn on_press<F: Fn() -> S::Message + 'a>(self, on_press: F) -> ButtonBuilder<S, C, A::Change<F>> {
     self.replace_actions(|actions| actions.on_press(on_press))
   }
   /// Sets whether the [`Button`] is `disabled`.
