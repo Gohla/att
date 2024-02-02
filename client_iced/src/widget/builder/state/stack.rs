@@ -17,7 +17,7 @@
 
 use std::marker::PhantomData;
 
-use super::{Elem, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
+use super::{El, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
 use super::super::WidgetBuilder;
 
 /// Algebraic stack list constructor.
@@ -72,14 +72,14 @@ impl<E> StackList for Nil<E> {
 
 // Implement state traits for all types implementing `StackList`.
 
-impl<E: Elem, L: StackList<E=E>> State for L {
+impl<E: El, L: StackList<E=E>> State for L {
   type Element = E;
   type Message = E::Message;
   type Theme = E::Theme;
   type Renderer = E::Renderer;
 }
 
-impl<E: Elem, L: StackList<E=E>> StateAdd for L {
+impl<E: El, L: StackList<E=E>> StateAdd for L {
   type AddOutput = WidgetBuilder<Cons<E, Self>>;
   #[inline]
   fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput {
@@ -87,7 +87,7 @@ impl<E: Elem, L: StackList<E=E>> StateAdd for L {
   }
 }
 
-impl<E: Elem, L: StackList<E=E>> StateConsume for L {
+impl<E: El, L: StackList<E=E>> StateConsume for L {
   type ConsumeOutput = WidgetBuilder<Cons<E, Nil<E>>>;
   #[inline]
   fn consume(self, produce: impl FnOnce(Vec<E>) -> E) -> Self::ConsumeOutput {
@@ -97,7 +97,7 @@ impl<E: Elem, L: StackList<E=E>> StateConsume for L {
   }
 }
 
-impl<E: Elem, L: StackList<E=E>> StateMap for Cons<E, L> {
+impl<E: El, L: StackList<E=E>> StateMap for Cons<E, L> {
   type MapOutput = WidgetBuilder<Cons<E, L>>;
   #[inline]
   fn map_last(self, map: impl FnOnce(E) -> E) -> Self::MapOutput {
@@ -107,14 +107,14 @@ impl<E: Elem, L: StackList<E=E>> StateMap for Cons<E, L> {
   }
 }
 
-impl<E: Elem, L: StackList<E=E>> StateTakeAll for L {
+impl<E: El, L: StackList<E=E>> StateTakeAll for L {
   #[inline]
   fn take_all(self) -> Vec<E> {
     self.to_vec()
   }
 }
 
-impl<E: Elem> StateTake for Cons<E, Nil<E>> {
+impl<E: El> StateTake for Cons<E, Nil<E>> {
   #[inline]
   fn take(self) -> E {
     self.0

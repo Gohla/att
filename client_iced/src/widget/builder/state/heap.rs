@@ -5,7 +5,7 @@
 //! - Low compile-time overhead.
 //! - Every operation is type-preserving.
 
-use super::{Elem, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
+use super::{El, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
 use super::super::WidgetBuilder;
 
 /// Heap-allocated list.
@@ -67,14 +67,14 @@ impl<E> HeapList<E> {
 
 // Implement state traits for `HeapList`.
 
-impl<E: Elem> State for HeapList<E> {
+impl<E: El> State for HeapList<E> {
   type Element = E;
   type Message = E::Message;
   type Theme = E::Theme;
   type Renderer = E::Renderer;
 }
 
-impl<E: Elem> StateAdd for HeapList<E> {
+impl<E: El> StateAdd for HeapList<E> {
   type AddOutput = WidgetBuilder<Self>;
   #[inline]
   fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput {
@@ -82,7 +82,7 @@ impl<E: Elem> StateAdd for HeapList<E> {
   }
 }
 
-impl<E: Elem> StateConsume for HeapList<E> where {
+impl<E: El> StateConsume for HeapList<E> where {
   type ConsumeOutput = WidgetBuilder<Self>;
   fn consume(self, produce: impl FnOnce(Vec<E>) -> E) -> Self::ConsumeOutput {
     let (vec, reserve_additional) = self.unwrap();
@@ -91,7 +91,7 @@ impl<E: Elem> StateConsume for HeapList<E> where {
   }
 }
 
-impl<E: Elem> StateMap for HeapList<E> {
+impl<E: El> StateMap for HeapList<E> {
   type MapOutput = WidgetBuilder<Self>;
   #[inline]
   fn map_last(self, map: impl FnOnce(E) -> E) -> Self::MapOutput {
@@ -110,14 +110,14 @@ impl<E: Elem> StateMap for HeapList<E> {
   }
 }
 
-impl<E: Elem> StateTakeAll for HeapList<E> where {
+impl<E: El> StateTakeAll for HeapList<E> where {
   #[inline]
   fn take_all(self) -> Vec<E> {
     self.unwrap().0
   }
 }
 
-impl<E: Elem> StateTake for HeapList<E> {
+impl<E: El> StateTake for HeapList<E> {
   #[inline]
   fn take(self) -> E {
     match self {

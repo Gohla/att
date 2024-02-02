@@ -5,7 +5,8 @@ pub mod stack;
 pub mod heap;
 pub mod once;
 
-pub trait Elem {
+/// Internal trait for element types.
+pub trait El {
   /// [`Element`] message type.
   type Message;
   /// [`Element`] theme type.
@@ -13,7 +14,7 @@ pub trait Elem {
   /// [`Element`] renderer type.
   type Renderer: Renderer;
 }
-impl<'a, M, T, R: Renderer> Elem for Element<'a, M, T, R> {
+impl<'a, M, T, R: Renderer> El for Element<'a, M, T, R> {
   type Message = M;
   type Theme = T;
   type Renderer = R;
@@ -22,7 +23,7 @@ impl<'a, M, T, R: Renderer> Elem for Element<'a, M, T, R> {
 /// Internal trait for widget builder state.
 pub trait State {
   /// Type of [elements](Element) contained in this state.
-  type Element: Elem;
+  type Element: El<Message=Self::Message, Theme=Self::Theme, Renderer=Self::Renderer>;
 
   /// [`Element`] message type.
   type Message;
@@ -31,6 +32,13 @@ pub trait State {
   /// [`Element`] renderer type.
   type Renderer: Renderer;
 }
+
+/// Internal type alias for [elements](Element) with lifetime `'a`, message type `M`, theme type `S::Theme`, and
+/// renderer type `S::Renderer`.
+pub type ElemM<'a, S, M> = Element<'a, M, <S as State>::Theme, <S as State>::Renderer>;
+/// Internal type alias for [elements](Element) with lifetime `'a`, message type `S::Message`, theme type `S::Theme`,
+/// and renderer type `S::Renderer`.
+pub type Elem<'a, S> = ElemM<'a, S, <S as State>::Message>;
 
 /// Internal trait for adding to widget builder state.
 pub trait StateAdd: State {
