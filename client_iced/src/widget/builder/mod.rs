@@ -423,7 +423,7 @@ impl<'a, S: StateAdd> TextInputBuilder<'a, S> where
     }
   }
 }
-impl<'a, S: StateAdd, A: TextInputActions<'a, S::Message>> TextInputBuilder<'a, S, A> where
+impl<'a, S: StateAdd, A: TextInputActions> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {

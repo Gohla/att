@@ -7,15 +7,15 @@ use crate::widget::builder::state::Elem;
 
 use super::super::state::State;
 
-pub trait TextInputActions<'a, M> {
-  type ChangeOnInput<F> where F: 'a;
-  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::ChangeOnInput<F>;
+pub trait TextInputActions {
+  type ChangeOnInput<F>;
+  fn on_input<F>(self, on_input: F) -> Self::ChangeOnInput<F>;
 
-  type ChangeOnPaste<F> where F: 'a;
-  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::ChangeOnPaste<F>;
+  type ChangeOnPaste<F>;
+  fn on_paste<F>(self, on_paste: F) -> Self::ChangeOnPaste<F>;
 
-  type ChangeOnSubmit<F> where F: 'a;
-  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::ChangeOnSubmit<F>;
+  type ChangeOnSubmit<F>;
+  fn on_submit<F>(self, on_submit: F) -> Self::ChangeOnSubmit<F>;
 }
 
 type TextIn<'a, S, C> = TextInput<'a, <C as CreateTextInput<'a, S>>::Message, <S as State>::Theme, <S as State>::Renderer>;
@@ -32,27 +32,27 @@ pub trait CreateTextInput<'a, S> where
     placeholder: &str,
     value: &str,
     modify: impl FnOnce(TextIn<'a, S, Self>) -> TextIn<'a, S, Self>,
-  ) -> Element<'a, S::Message, S::Theme, S::Renderer>;
+  ) -> Elem<'a, S>;
 }
 
 /// Passthrough which does not modify the message type, thus the message type must implement [`Clone`].
 pub struct TextInputPassthrough;
-impl<'a, M> TextInputActions<'a, M> for TextInputPassthrough {
-  type ChangeOnInput<F: 'a> = <TextInputFunctions as TextInputActions<'a, M>>::ChangeOnInput<F>;
+impl TextInputActions for TextInputPassthrough {
+  type ChangeOnInput<F> = <TextInputFunctions as TextInputActions>::ChangeOnInput<F>;
   #[inline]
-  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::ChangeOnInput<F> {
+  fn on_input<F>(self, on_input: F) -> Self::ChangeOnInput<F> {
     TextInputFunctions::default().on_input(on_input)
   }
 
-  type ChangeOnPaste<F: 'a> = <TextInputFunctions as TextInputActions<'a, M>>::ChangeOnPaste<F>;
+  type ChangeOnPaste<F> = <TextInputFunctions as TextInputActions>::ChangeOnPaste<F>;
   #[inline]
-  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::ChangeOnPaste<F> {
+  fn on_paste<F>(self, on_paste: F) -> Self::ChangeOnPaste<F> {
     TextInputFunctions::default().on_paste(on_paste)
   }
 
-  type ChangeOnSubmit<F: 'a> = <TextInputFunctions as TextInputActions<'a, M>>::ChangeOnSubmit<F>;
+  type ChangeOnSubmit<F> = <TextInputFunctions as TextInputActions>::ChangeOnSubmit<F>;
   #[inline]
-  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::ChangeOnSubmit<F> {
+  fn on_submit<F>(self, on_submit: F) -> Self::ChangeOnSubmit<F> {
     TextInputFunctions::default().on_submit(on_submit)
   }
 }
@@ -91,19 +91,19 @@ impl Default for TextInputFunctions {
 pub struct Fn1<F>(F);
 pub struct Fn0<F>(F);
 
-impl<'a, M, FI, FP, FS> TextInputActions<'a, M> for TextInputFunctions<FI, FP, FS> {
-  type ChangeOnInput<F: 'a> = TextInputFunctions<Fn1<F>, FP, FS>;
-  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::ChangeOnInput<F> {
+impl<FI, FP, FS> TextInputActions for TextInputFunctions<FI, FP, FS> {
+  type ChangeOnInput<F> = TextInputFunctions<Fn1<F>, FP, FS>;
+  fn on_input<F>(self, on_input: F) -> Self::ChangeOnInput<F> {
     TextInputFunctions { on_input: Fn1(on_input), on_paste: self.on_paste, on_submit: self.on_submit }
   }
 
-  type ChangeOnPaste<F: 'a> = TextInputFunctions<FI, Fn1<F>, FS>;
-  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::ChangeOnPaste<F> {
+  type ChangeOnPaste<F> = TextInputFunctions<FI, Fn1<F>, FS>;
+  fn on_paste<F>(self, on_paste: F) -> Self::ChangeOnPaste<F> {
     TextInputFunctions { on_input: self.on_input, on_paste: Fn1(on_paste), on_submit: self.on_submit }
   }
 
-  type ChangeOnSubmit<F: 'a> = TextInputFunctions<FI, FP, Fn0<F>>;
-  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::ChangeOnSubmit<F> {
+  type ChangeOnSubmit<F> = TextInputFunctions<FI, FP, Fn0<F>>;
+  fn on_submit<F>(self, on_submit: F) -> Self::ChangeOnSubmit<F> {
     TextInputFunctions { on_input: self.on_input, on_paste: self.on_paste, on_submit: Fn0(on_submit) }
   }
 }
