@@ -16,7 +16,7 @@ use iced::widget::text::{LineHeight, Shaping};
 pub use iced::widget::text::StyleSheet as TextStyleSheet;
 pub use iced::widget::text_input::{Icon as TextInputIcon, Id as TextInputId, StyleSheet as TextInputStyleSheet};
 
-use state::{Elem, ElemM, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
+use state::{Elem, ElemM, State, StateAppend, StateMap, StateReduce, StateTake, StateTakeAll};
 use state::heap::HeapList;
 use state::stack::Nil;
 use widget::button::{ButtonActions, ButtonPassthrough, CreateButton};
@@ -75,7 +75,7 @@ impl<E> WidgetBuilder<PhantomData<E>> {
   pub fn once() -> Self { Self(Default::default()) }
 }
 
-impl<S: StateAdd> WidgetBuilder<S> {
+impl<S: StateAppend> WidgetBuilder<S> {
   /// Build a [`Space`] widget.
   pub fn space(self) -> SpaceBuilder<S> {
     SpaceBuilder::new(self.0)
@@ -155,7 +155,7 @@ impl<S: StateAdd> WidgetBuilder<S> {
   }
 }
 
-impl<S: StateConsume> WidgetBuilder<S> {
+impl<S: StateReduce> WidgetBuilder<S> {
   /// Build a [`Column`] widget that will consume all elements in this builder.
   pub fn column(self) -> ColumnBuilder<S> {
     ColumnBuilder::new(self.0)
@@ -166,11 +166,11 @@ impl<S: StateConsume> WidgetBuilder<S> {
   }
 }
 
-impl<'a, S: StateMap> WidgetBuilder<S> {
+impl<S: StateMap> WidgetBuilder<S> {
   /// Build a [`Scrollable`] widget that will consume the last element in this builder.
   ///
   /// Can only be called when this builder has at least one element.
-  pub fn scrollable(self) -> ScrollableBuilder<'a, S> where
+  pub fn scrollable<F>(self) -> ScrollableBuilder<S, F> where
     S::Theme: ScrollableStyleSheet,
   {
     ScrollableBuilder::new(self.0)
@@ -220,7 +220,7 @@ pub struct SpaceBuilder<S> {
   width: Length,
   height: Length,
 }
-impl<S: StateAdd> SpaceBuilder<S> {
+impl<S: StateAppend> SpaceBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -253,7 +253,7 @@ impl<S: StateAdd> SpaceBuilder<S> {
     Space: Into<S::Element>,
   {
     let space = Space::new(self.width, self.height);
-    self.state.add(space)
+    self.state.append(space)
   }
 }
 
@@ -264,7 +264,7 @@ pub struct RuleBuilder<S> {
   width_or_height: Pixels,
   is_vertical: bool,
 }
-impl<'a, S: StateAdd> RuleBuilder<S> {
+impl<'a, S: StateAppend> RuleBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -292,20 +292,20 @@ impl<'a, S: StateAdd> RuleBuilder<S> {
     } else {
       Rule::horizontal(self.width_or_height)
     };
-    self.state.add(rule)
+    self.state.append(rule)
   }
 }
 
 /// Builder for a [`Text`] widget.
 #[must_use]
-pub struct TextBuilder<'a, S: StateAdd> where
+pub struct TextBuilder<'a, S: StateAppend> where
   S::Renderer: TextRenderer,
   S::Theme: TextStyleSheet,
 {
   state: S,
   text: Text<'a, S::Theme, S::Renderer>
 }
-impl<'a, S: StateAdd> TextBuilder<'a, S> where
+impl<'a, S: StateAppend> TextBuilder<'a, S> where
   S::Renderer: TextRenderer,
   S::Theme: TextStyleSheet,
 {
@@ -344,7 +344,7 @@ impl<'a, S: StateAdd> TextBuilder<'a, S> where
   ///
   /// Only available when the [`BuiltinTheme`] is used.
   pub fn style_color(self, color: impl Into<Color>) -> Self where
-    S: StateAdd<Theme=BuiltinTheme>
+    S: StateAppend<Theme=BuiltinTheme>
   {
     self.style(color.into())
   }
@@ -377,13 +377,13 @@ impl<'a, S: StateAdd> TextBuilder<'a, S> where
   pub fn add(self) -> S::AddOutput where
     Text<'a, S::Theme, S::Renderer>: Into<S::Element>,
   {
-    self.state.add(self.text)
+    self.state.append(self.text)
   }
 }
 
 /// Builder for a [`TextInput`] widget.
 #[must_use]
-pub struct TextInputBuilder<'a, S: StateAdd, A = TextInputPassthrough> where
+pub struct TextInputBuilder<'a, S: StateAppend, A = TextInputPassthrough> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -401,7 +401,7 @@ pub struct TextInputBuilder<'a, S: StateAdd, A = TextInputPassthrough> where
   icon: Option<TextInputIcon<<S::Renderer as TextRenderer>::Font>>,
   style: <S::Theme as TextInputStyleSheet>::Style,
 }
-impl<'a, S: StateAdd> TextInputBuilder<'a, S> where
+impl<'a, S: StateAppend> TextInputBuilder<'a, S> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -423,7 +423,7 @@ impl<'a, S: StateAdd> TextInputBuilder<'a, S> where
     }
   }
 }
-impl<'a, S: StateAdd, A: TextInputActions> TextInputBuilder<'a, S, A> where
+impl<'a, S: StateAppend, A: TextInputActions> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet
 {
@@ -515,7 +515,7 @@ impl<'a, S: StateAdd, A: TextInputActions> TextInputBuilder<'a, S, A> where
     }
   }
 }
-impl<'a, S: StateAdd, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> where
+impl<'a, S: StateAppend, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
   Elem<'a, S>: Into<S::Element>,
@@ -544,7 +544,7 @@ impl<'a, S: StateAdd, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> wher
         .line_height(self.line_height)
         .style(self.style)
     });
-    self.state.add(element)
+    self.state.append(element)
   }
 }
 
@@ -615,38 +615,38 @@ impl<'a, S: State, C, A: ButtonActions> ButtonBuilder<S, C, A> where
   /// Sets the style of the [`Button`] to [`ButtonStyle::Primary`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn primary_style(self) -> Self where S: StateAdd<Theme=BuiltinTheme> {
+  pub fn primary_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
     self.style(ButtonStyle::Secondary)
   }
   /// Sets the style of the [`Button`] to [`ButtonStyle::Secondary`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn secondary_style(self) -> Self where S: StateAdd<Theme=BuiltinTheme> {
+  pub fn secondary_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
     self.style(ButtonStyle::Secondary)
   }
   /// Sets the style of the [`Button`] to [`ButtonStyle::Positive`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn positive_style(self) -> Self where S: StateAdd<Theme=BuiltinTheme> {
+  pub fn positive_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
     self.style(ButtonStyle::Positive)
   }
   /// Sets the style of the [`Button`] to [`ButtonStyle::Destructive`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn destructive_style(self) -> Self where S: StateAdd<Theme=BuiltinTheme> {
+  pub fn destructive_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
     self.style(ButtonStyle::Destructive)
   }
   /// Sets the style of the [`Button`] to [`ButtonStyle::Text`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn text_style(self) -> Self where S: StateAdd<Theme=BuiltinTheme> {
+  pub fn text_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
     self.style(ButtonStyle::Text)
   }
   /// Sets the style of the [`Button`] to a custom [`ButtonStyleSheet`] implementation.
   ///
   /// Only available when the [`BuiltinTheme`] is used.
   pub fn custom_style(self, style_sheet: impl ButtonStyleSheet<Style=BuiltinTheme> + 'static) -> Self where
-    S: StateAdd<Theme=BuiltinTheme>
+    S: StateAppend<Theme=BuiltinTheme>
   {
     self.style(ButtonStyle::custom(style_sheet))
   }
@@ -664,7 +664,7 @@ impl<'a, S: State, C, A: ButtonActions> ButtonBuilder<S, C, A> where
     }
   }
 }
-impl<'a, S: StateAdd, C, A: CreateButton<'a, S>> ButtonBuilder<S, C, A> where
+impl<'a, S: StateAppend, C, A: CreateButton<'a, S>> ButtonBuilder<S, C, A> where
   S::Theme: ButtonStyleSheet,
   Elem<'a, S>: Into<S::Element>,
   C: Into<ElemM<'a, S, A::Message>>,
@@ -682,17 +682,17 @@ impl<'a, S: StateAdd, C, A: CreateButton<'a, S>> ButtonBuilder<S, C, A> where
       }
       button
     });
-    self.state.add(element)
+    self.state.append(element)
   }
 }
 
 /// Builder for an [`Element`].
 #[must_use]
-pub struct ElementBuilder<'a, S: StateAdd, M> {
+pub struct ElementBuilder<'a, S: StateAppend, M> {
   state: S,
   element: ElemM<'a, S, M>,
 }
-impl<'a, S: StateAdd, M> ElementBuilder<'a, S, M> {
+impl<'a, S: StateAppend, M> ElementBuilder<'a, S, M> {
   fn new(state: S, element: Element<'a, M, S::Theme, S::Renderer>) -> Self {
     Self { state, element }
   }
@@ -705,11 +705,11 @@ impl<'a, S: StateAdd, M> ElementBuilder<'a, S, M> {
     ElementBuilder { state: self.state, element }
   }
 }
-impl<'a, S: StateAdd> ElementBuilder<'a, S, S::Message> where
+impl<'a, S: StateAppend> ElementBuilder<'a, S, S::Message> where
   Elem<'a, S>: Into<S::Element>,
 {
   pub fn add(self) -> S::AddOutput {
-    self.state.add(self.element)
+    self.state.append(self.element)
   }
 }
 
@@ -724,7 +724,7 @@ pub struct ColumnBuilder<S> {
   max_width: f32,
   align_items: Alignment,
 }
-impl<S: StateConsume> ColumnBuilder<S> {
+impl<S: StateReduce> ColumnBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -791,11 +791,12 @@ impl<S: StateConsume> ColumnBuilder<S> {
     self.align_items(Alignment::Center)
   }
 
-  pub fn add<'a>(self) -> S::ConsumeOutput where
-    Vec<S::Element>: IntoIterator<Item=Elem<'a, S>>, // For `Column::with_children`
+  pub fn add<'a>(self) -> S::ReduceOutput where
+  // For `Column::with_children`. Can't use `Elem<'a, S>` due to it crashing RustRover.
+    Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>,
     Column<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `.into()`
   {
-    self.state.consume(|vec| {
+    self.state.reduce(|vec| {
       Column::with_children(vec)
         .spacing(self.spacing)
         .padding(self.padding)
@@ -818,7 +819,7 @@ pub struct RowBuilder<S> {
   height: Length,
   align_items: Alignment,
 }
-impl<S: StateConsume> RowBuilder<S> {
+impl<S: StateReduce> RowBuilder<S> {
   fn new(state: S) -> Self {
     Self {
       state,
@@ -878,11 +879,12 @@ impl<S: StateConsume> RowBuilder<S> {
     self.align_items(Alignment::Center)
   }
 
-  pub fn add<'a>(self) -> S::ConsumeOutput where
-    Vec<S::Element>: IntoIterator<Item=Elem<'a, S>>, // For `Row::with_children`
+  pub fn add<'a>(self) -> S::ReduceOutput where
+  // For `Row::with_children`. Can't use `Elem<'a, S>` due to it crashing RustRover.
+    Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>,
     Row<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `.into()`
   {
-    self.state.consume(|vec| {
+    self.state.reduce(|vec| {
       Row::with_children(vec)
         .spacing(self.spacing)
         .padding(self.padding)
@@ -896,7 +898,7 @@ impl<S: StateConsume> RowBuilder<S> {
 
 /// Builder for a [`Scrollable`] widget.
 #[must_use]
-pub struct ScrollableBuilder<'a, S: StateMap> where
+pub struct ScrollableBuilder<S: StateMap, F> where
   S::Theme: ScrollableStyleSheet
 {
   state: S,
@@ -904,10 +906,10 @@ pub struct ScrollableBuilder<'a, S: StateMap> where
   width: Length,
   height: Length,
   direction: Direction,
-  on_scroll: Option<Box<dyn Fn(Viewport) -> S::Message + 'a>>,
+  on_scroll: Option<F>,
   style: <S::Theme as ScrollableStyleSheet>::Style,
 }
-impl<'a, S: StateMap> ScrollableBuilder<'a, S> where
+impl<'a, S: StateMap, F> ScrollableBuilder<S, F> where
   S::Theme: ScrollableStyleSheet
 {
   fn new(state: S) -> Self {
@@ -945,8 +947,8 @@ impl<'a, S: StateMap> ScrollableBuilder<'a, S> where
   /// Sets a function to call when the [`Scrollable`] is scrolled.
   ///
   /// The function takes the [`Viewport`] of the [`Scrollable`].
-  pub fn on_scroll(mut self, f: impl Fn(Viewport) -> S::Message + 'a) -> Self {
-    self.on_scroll = Some(Box::new(f));
+  pub fn on_scroll(mut self, f: F) -> Self {
+    self.on_scroll = Some(f);
     self
   }
   /// Sets the style of the [`Scrollable`] .
@@ -959,6 +961,7 @@ impl<'a, S: StateMap> ScrollableBuilder<'a, S> where
     S::Element: Into<Elem<'a, S>>, // For `Scrollable::new`
     Scrollable<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `scrollable.into()`
     S::Message: 'a, // For `scrollable.on_scroll`
+    F: Fn(Viewport) -> S::Message + 'a, // TODO: this requires F to be always given
   {
     self.state.map_last(|content| {
       let mut scrollable = Scrollable::new(content)

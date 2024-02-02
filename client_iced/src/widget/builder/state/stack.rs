@@ -17,11 +17,18 @@
 
 use std::marker::PhantomData;
 
-use super::{El, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
+use super::{El, State, StateAppend, StateMap, StateReduce, StateTake, StateTakeAll};
 use super::super::WidgetBuilder;
 
 /// Algebraic stack list constructor.
 pub struct Cons<E, Rest>(E, Rest);
+impl<E, Rest> Cons<E, Rest> {
+  #[inline]
+  fn map(mut self, map_fn: impl FnOnce(E) -> E) -> Self {
+    self.0 = map_fn(self.0);
+    self
+  }
+}
 /// Empty list.
 #[repr(transparent)]
 pub struct Nil<E>(PhantomData<E>);
@@ -36,9 +43,14 @@ trait StackList: Sized {
   type E;
   /// The length of this list.
   const LEN: usize;
-  /// Return a new list with `element` added to it.
+
   #[inline]
-  fn add(self, element: Self::E) -> Cons<Self::E, Self> {
+  fn one(element: Self::E) -> Cons<Self::E, Nil<Self::E>> {
+    Cons(element, Nil::default())
+  }
+  /// Return a new list with `element` appended to it.
+  #[inline]
+  fn append(self, element: Self::E) -> Cons<Self::E, Self> {
     Cons(element, self)
   }
   /// Collect the elements from this list into a [`Vec`].
@@ -57,7 +69,7 @@ impl<E, Rest: StackList<E=E>> StackList for Cons<E, Rest> {
   const LEN: usize = 1 + Rest::LEN;
   #[inline]
   fn add_to_vec(self, vec: &mut Vec<Self::E>) {
-    // Note: visiting in reverse order to get Vec that is correctly ordered w.r.t. `add`.
+    // Note: visiting in reverse order to get Vec that is correctly ordered w.r.t. `append`.
     self.1.add_to_vec(vec);
     vec.push(self.0);
   }
@@ -79,31 +91,27 @@ impl<E: El, L: StackList<E=E>> State for L {
   type Renderer = E::Renderer;
 }
 
-impl<E: El, L: StackList<E=E>> StateAdd for L {
+impl<E: El, L: StackList<E=E>> StateAppend for L {
   type AddOutput = WidgetBuilder<Cons<E, Self>>;
   #[inline]
-  fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput {
-    WidgetBuilder(StackList::add(self, into.into()))
+  fn append(self, into_element: impl Into<E>) -> Self::AddOutput {
+    WidgetBuilder(self.append(into_element.into()))
   }
 }
 
-impl<E: El, L: StackList<E=E>> StateConsume for L {
-  type ConsumeOutput = WidgetBuilder<Cons<E, Nil<E>>>;
+impl<E: El, L: StackList<E=E>> StateReduce for L {
+  type ReduceOutput = WidgetBuilder<Cons<E, Nil<E>>>;
   #[inline]
-  fn consume(self, produce: impl FnOnce(Vec<E>) -> E) -> Self::ConsumeOutput {
-    let vec = self.to_vec();
-    let element = produce(vec);
-    WidgetBuilder(Cons(element, Nil::default()))
+  fn reduce(self, reduce_fn: impl FnOnce(Vec<E>) -> E) -> Self::ReduceOutput {
+    WidgetBuilder(Self::one(reduce_fn(self.to_vec())))
   }
 }
 
 impl<E: El, L: StackList<E=E>> StateMap for Cons<E, L> {
   type MapOutput = WidgetBuilder<Cons<E, L>>;
   #[inline]
-  fn map_last(self, map: impl FnOnce(E) -> E) -> Self::MapOutput {
-    let Cons(element, rest) = self;
-    let element = map(element);
-    WidgetBuilder(Cons(element, rest))
+  fn map_last(self, map_fn: impl FnOnce(E) -> E) -> Self::MapOutput {
+    WidgetBuilder(self.map(map_fn))
   }
 }
 

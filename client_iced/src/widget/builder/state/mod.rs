@@ -41,20 +41,20 @@ pub type ElemM<'a, S, M> = Element<'a, M, <S as State>::Theme, <S as State>::Ren
 pub type Elem<'a, S> = ElemM<'a, S, <S as State>::Message>;
 
 /// Internal trait for adding to widget builder state.
-pub trait StateAdd: State {
-  /// Type to return from [`Self::add`].
+pub trait StateAppend: State {
+  /// Type to return from [`Self::append`].
   type AddOutput;
-  /// Add `element` onto `self`, then return a [new builder](Self::AddOutput) with those elements.
-  fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput;
+  /// Append `into_element` onto `self`, then return a [new builder](Self::AddOutput) with those elements.
+  fn append(self, into_element: impl Into<Self::Element>) -> Self::AddOutput;
 }
 
-/// Internal trait for consuming widget builder state.
-pub trait StateConsume: State {
-  /// Type to return from [`Self::consume`].
-  type ConsumeOutput;
-  /// Consume all [elements](Element) from `self` into a [`Vec`], call `f` on that [`Vec`] to create a new [`Element`],
-  /// then return a [new builder](Self::ConsumeOutput) with that element.
-  fn consume(self, f: impl FnOnce(Vec<Self::Element>) -> Self::Element) -> Self::ConsumeOutput;
+/// Internal trait for reducing widget builder state.
+pub trait StateReduce: State {
+  /// Type to return from [`Self::reduce`].
+  type ReduceOutput;
+  /// Collect all [elements](Element) from `self` into a [`Vec`], call `reduce` on that [`Vec`] to create a new
+  /// [`Element`], then return a [new builder](Self::ReduceOutput) with that element.
+  fn reduce(self, reduce_fn: impl FnOnce(Vec<Self::Element>) -> Self::Element) -> Self::ReduceOutput;
 }
 
 /// Internal trait for mapping widget builder state.
@@ -63,7 +63,7 @@ pub trait StateMap: State {
   type MapOutput;
   /// Take the last [`Element`] from `self`, call `map` on that [`Element`] to create a new [`Element`], then return
   /// a [new builder](Self::MapOutput) with that element.
-  fn map_last(self, map: impl FnOnce(Self::Element) -> Self::Element) -> Self::MapOutput;
+  fn map_last(self, map_fn: impl FnOnce(Self::Element) -> Self::Element) -> Self::MapOutput;
 }
 
 /// Internal trait taking all widget builder state.

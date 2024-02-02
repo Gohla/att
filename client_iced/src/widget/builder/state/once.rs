@@ -1,6 +1,6 @@
 use std::marker::PhantomData;
 
-use super::{El, State, StateAdd};
+use super::{El, State, StateAppend};
 
 impl<E: El> State for PhantomData<E> {
   type Element = E;
@@ -9,10 +9,10 @@ impl<E: El> State for PhantomData<E> {
   type Renderer = E::Renderer;
 }
 
-impl<E: El> StateAdd for PhantomData<E> {
+impl<E: El> StateAppend for PhantomData<E> {
   type AddOutput = E;
   #[inline]
-  fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput {
-    into.into()
+  fn append(self, into_element: impl Into<Self::Element>) -> Self::AddOutput {
+    into_element.into()
   }
 }

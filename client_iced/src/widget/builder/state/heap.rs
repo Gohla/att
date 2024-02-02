@@ -5,7 +5,7 @@
 //! - Low compile-time overhead.
 //! - Every operation is type-preserving.
 
-use super::{El, State, StateAdd, StateConsume, StateMap, StateTake, StateTakeAll};
+use super::{El, State, StateAppend, StateMap, StateReduce, StateTake, StateTakeAll};
 use super::super::WidgetBuilder;
 
 /// Heap-allocated list.
@@ -74,19 +74,19 @@ impl<E: El> State for HeapList<E> {
   type Renderer = E::Renderer;
 }
 
-impl<E: El> StateAdd for HeapList<E> {
+impl<E: El> StateAppend for HeapList<E> {
   type AddOutput = WidgetBuilder<Self>;
   #[inline]
-  fn add(self, into: impl Into<Self::Element>) -> Self::AddOutput {
-    WidgetBuilder(self.add(into.into()))
+  fn append(self, into_element: impl Into<Self::Element>) -> Self::AddOutput {
+    WidgetBuilder(self.add(into_element.into()))
   }
 }
 
-impl<E: El> StateConsume for HeapList<E> where {
-  type ConsumeOutput = WidgetBuilder<Self>;
-  fn consume(self, produce: impl FnOnce(Vec<E>) -> E) -> Self::ConsumeOutput {
+impl<E: El> StateReduce for HeapList<E> where {
+  type ReduceOutput = WidgetBuilder<Self>;
+  fn reduce(self, reduce_fn: impl FnOnce(Vec<E>) -> E) -> Self::ReduceOutput {
     let (vec, reserve_additional) = self.unwrap();
-    let element = produce(vec);
+    let element = reduce_fn(vec);
     WidgetBuilder(HeapList::One(element, reserve_additional))
   }
 }
@@ -94,14 +94,14 @@ impl<E: El> StateConsume for HeapList<E> where {
 impl<E: El> StateMap for HeapList<E> {
   type MapOutput = WidgetBuilder<Self>;
   #[inline]
-  fn map_last(self, map: impl FnOnce(E) -> E) -> Self::MapOutput {
+  fn map_last(self, map_fn: impl FnOnce(E) -> E) -> Self::MapOutput {
     let mapped = match self {
       HeapList::Zero => panic!("builder should have at least 1 element"),
-      HeapList::One(element, reserve_additional) => HeapList::One(map(element), reserve_additional),
+      HeapList::One(element, reserve_additional) => HeapList::One(map_fn(element), reserve_additional),
       HeapList::Many(mut vec) => {
         let element = vec.pop()
           .unwrap_or_else(|| panic!("builder should have at least 1 element"));
-        let element = map(element);
+        let element = map_fn(element);
         vec.push(element);
         HeapList::Many(vec)
       }

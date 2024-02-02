@@ -109,24 +109,21 @@ impl<FI, FP, FS> TextInputActions for TextInputFunctions<FI, FP, FS> {
 }
 
 trait Call<I, M> {
-  fn should_register() -> bool;
+  const SHOULD_REGISTER: bool;
   fn call(&self, input: I) -> Option<M>;
 }
 impl<M, I> Call<I, M> for () {
-  #[inline]
-  fn should_register() -> bool { false }
+  const SHOULD_REGISTER: bool = false;
   #[inline]
   fn call(&self, _input: I) -> Option<M> { None }
 }
 impl<'a, I, M, F: Fn(I) -> M + 'a> Call<I, M> for Fn1<F> {
-  #[inline]
-  fn should_register() -> bool { true }
+  const SHOULD_REGISTER: bool = true;
   #[inline]
   fn call(&self, input: I) -> Option<M> { Some(self.0(input)) }
 }
 impl<'a, M, F: Fn() -> M + 'a> Call<(), M> for Fn0<F> {
-  #[inline]
-  fn should_register() -> bool { true }
+  const SHOULD_REGISTER: bool = true;
   #[inline]
   fn call(&self, _input: ()) -> Option<M> { Some(self.0()) }
 }
@@ -157,13 +154,13 @@ impl<'a, S, FI, FP, FS> CreateTextInput<'a, S> for TextInputFunctions<FI, FP, FS
   ) -> Elem<'a, S> {
     let mut text_input = TextInput::new(placeholder, value);
     text_input = modify(text_input);
-    if FI::should_register() {
+    if FI::SHOULD_REGISTER {
       text_input = text_input.on_input(TextInputAction::Input);
     }
-    if FP::should_register() {
+    if FP::SHOULD_REGISTER {
       text_input = text_input.on_paste(TextInputAction::Paste);
     }
-    if FS::should_register() {
+    if FS::SHOULD_REGISTER {
       text_input = text_input.on_submit(TextInputAction::Submit);
     }
     Element::new(text_input)
