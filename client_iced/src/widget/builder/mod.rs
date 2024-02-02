@@ -484,16 +484,16 @@ impl<'a, S: StateAdd, A: TextInputActions<'a, S::Message>> TextInputBuilder<'a, 
   /// Sets the function that will be called when text is typed into the [`TextInput`] to `on_input`.
   ///
   /// If this method is not called, the [`TextInput`] will be disabled.
-  pub fn on_input<F: Fn(String) -> S::Message + 'a>(self, on_input: F) -> TextInputBuilder<'a, S, A::Change> {
+  pub fn on_input<F: Fn(String) -> S::Message + 'a>(self, on_input: F) -> TextInputBuilder<'a, S, A::ChangeOnInput<F>> {
     self.replace_actions(|actions| actions.on_input(on_input))
   }
   /// Sets the function that will be called when text is pasted into the [`TextInput`] to `on_paste`.
-  pub fn on_paste<F: Fn(String) -> S::Message + 'a>(self, on_paste: F) -> TextInputBuilder<'a, S, A::Change> {
+  pub fn on_paste<F: Fn(String) -> S::Message + 'a>(self, on_paste: F) -> TextInputBuilder<'a, S, A::ChangeOnPaste<F>> {
     self.replace_actions(|actions| actions.on_paste(on_paste))
   }
   /// Sets the function that will be called when the [`TextInput`] is focussed and the enter key is pressed to
   /// `on_paste`.
-  pub fn on_submit<F: Fn() -> S::Message + 'a>(self, on_submit: F) -> TextInputBuilder<'a, S, A::Change> {
+  pub fn on_submit<F: Fn() -> S::Message + 'a>(self, on_submit: F) -> TextInputBuilder<'a, S, A::ChangeOnSubmit<F>> {
     self.replace_actions(|actions| actions.on_submit(on_submit))
   }
 

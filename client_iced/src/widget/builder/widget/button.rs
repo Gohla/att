@@ -23,7 +23,7 @@ pub trait CreateButton<'a, S> where
   ) -> Element<'a, S::Message, S::Theme, S::Renderer>;
 }
 
-/// Passthrough which does not modify the message type.
+/// Passthrough which does not modify the message type, thus the message type must implement [`Clone`].
 pub struct ButtonPassthrough;
 impl<'a, M> ButtonActions<'a, M> for ButtonPassthrough {
   type Change = ButtonFunctions<'a, M>;

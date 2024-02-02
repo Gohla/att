@@ -3,22 +3,27 @@ use iced::Element;
 use iced::widget::text_input::StyleSheet as TextInputStyleSheet;
 use iced::widget::TextInput;
 
+use crate::widget::builder::state::Elem;
+
 use super::super::state::State;
 
 pub trait TextInputActions<'a, M> {
-  type Change;
+  type ChangeOnInput<F> where F: 'a;
+  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::ChangeOnInput<F>;
 
-  fn on_input(self, on_input: impl Fn(String) -> M + 'a) -> Self::Change;
-  fn on_paste(self, on_paste: impl Fn(String) -> M + 'a) -> Self::Change;
-  fn on_submit(self, on_submit: impl Fn() -> M + 'a) -> Self::Change;
+  type ChangeOnPaste<F> where F: 'a;
+  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::ChangeOnPaste<F>;
+
+  type ChangeOnSubmit<F> where F: 'a;
+  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::ChangeOnSubmit<F>;
 }
 
-type TI<'a, M, S> = TextInput<'a, M, <S as State>::Theme, <S as State>::Renderer>;
+type TextIn<'a, S, C> = TextInput<'a, <C as CreateTextInput<'a, S>>::Message, <S as State>::Theme, <S as State>::Renderer>;
 
 pub trait CreateTextInput<'a, S> where
   S: State,
   S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet
+  S::Theme: TextInputStyleSheet,
 {
   type Message: Clone;
 
@@ -26,26 +31,29 @@ pub trait CreateTextInput<'a, S> where
     self,
     placeholder: &str,
     value: &str,
-    modify: impl FnOnce(TI<'a, Self::Message, S>) -> TI<'a, Self::Message, S>,
+    modify: impl FnOnce(TextIn<'a, S, Self>) -> TextIn<'a, S, Self>,
   ) -> Element<'a, S::Message, S::Theme, S::Renderer>;
 }
 
-/// Passthrough which does not modify the message type.
+/// Passthrough which does not modify the message type, thus the message type must implement [`Clone`].
 pub struct TextInputPassthrough;
 impl<'a, M> TextInputActions<'a, M> for TextInputPassthrough {
-  type Change = TextInputFunctions<'a, M>;
+  type ChangeOnInput<F: 'a> = <TextInputFunctions as TextInputActions<'a, M>>::ChangeOnInput<F>;
+  #[inline]
+  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::ChangeOnInput<F> {
+    TextInputFunctions::default().on_input(on_input)
+  }
 
+  type ChangeOnPaste<F: 'a> = <TextInputFunctions as TextInputActions<'a, M>>::ChangeOnPaste<F>;
   #[inline]
-  fn on_input(self, on_input: impl Fn(String) -> M + 'a) -> Self::Change {
-    TextInputFunctions { on_input: Some(Box::new(on_input)), ..Default::default() }
+  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::ChangeOnPaste<F> {
+    TextInputFunctions::default().on_paste(on_paste)
   }
+
+  type ChangeOnSubmit<F: 'a> = <TextInputFunctions as TextInputActions<'a, M>>::ChangeOnSubmit<F>;
   #[inline]
-  fn on_paste(self, on_paste: impl Fn(String) -> M + 'a) -> Self::Change {
-    TextInputFunctions { on_paste: Some(Box::new(on_paste)), ..Default::default() }
-  }
-  #[inline]
-  fn on_submit(self, on_submit: impl Fn() -> M + 'a) -> Self::Change {
-    TextInputFunctions { on_submit: Some(Box::new(on_submit)), ..Default::default() }
+  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::ChangeOnSubmit<F> {
+    TextInputFunctions::default().on_submit(on_submit)
   }
 }
 impl<'a, S> CreateTextInput<'a, S> for TextInputPassthrough where
@@ -61,8 +69,8 @@ impl<'a, S> CreateTextInput<'a, S> for TextInputPassthrough where
     self,
     placeholder: &str,
     value: &str,
-    modify: impl FnOnce(TI<'a, Self::Message, S>) -> TI<'a, Self::Message, S>,
-  ) -> Element<'a, S::Message, S::Theme, S::Renderer> {
+    modify: impl FnOnce(TextIn<'a, S, Self>) -> TextIn<'a, S, Self>,
+  ) -> Elem<'a, S> {
     let mut text_input = TextInput::new(placeholder, value);
     text_input = modify(text_input);
     Element::new(text_input)
@@ -70,65 +78,57 @@ impl<'a, S> CreateTextInput<'a, S> for TextInputPassthrough where
 }
 
 /// Modify message type to [`TextInputAction`] which is [`Clone`], without our callbacks needing to implement clone.
-pub struct TextInputFunctions<'a, M> {
-  on_input: Option<Box<dyn Fn(String) -> M + 'a>>,
-  on_paste: Option<Box<dyn Fn(String) -> M + 'a>>,
-  on_submit: Option<Box<dyn Fn() -> M + 'a>>,
+pub struct TextInputFunctions<FI = (), FP = (), FS = ()> {
+  on_input: FI,
+  on_paste: FP,
+  on_submit: FS,
 }
-impl<'a, M> Default for TextInputFunctions<'a, M> {
-  fn default() -> Self { Self { on_input: None, on_paste: None, on_submit: None } }
+impl Default for TextInputFunctions {
+  #[inline]
+  fn default() -> Self { Self { on_input: (), on_paste: (), on_submit: (), } }
 }
-impl<'a, M> TextInputActions<'a, M> for TextInputFunctions<'a, M> {
-  type Change = Self;
 
-  #[inline]
-  fn on_input(mut self, on_input: impl Fn(String) -> M + 'a) -> Self::Change {
-    self.on_input = Some(Box::new(on_input));
-    self
+pub struct Fn1<F>(F);
+pub struct Fn0<F>(F);
+
+impl<'a, M, FI, FP, FS> TextInputActions<'a, M> for TextInputFunctions<FI, FP, FS> {
+  type ChangeOnInput<F: 'a> = TextInputFunctions<Fn1<F>, FP, FS>;
+  fn on_input<F: Fn(String) -> M + 'a>(self, on_input: F) -> Self::ChangeOnInput<F> {
+    TextInputFunctions { on_input: Fn1(on_input), on_paste: self.on_paste, on_submit: self.on_submit }
   }
-  #[inline]
-  fn on_paste(mut self, on_paste: impl Fn(String) -> M + 'a) -> Self::Change {
-    self.on_paste = Some(Box::new(on_paste));
-    self
+
+  type ChangeOnPaste<F: 'a> = TextInputFunctions<FI, Fn1<F>, FS>;
+  fn on_paste<F: Fn(String) -> M + 'a>(self, on_paste: F) -> Self::ChangeOnPaste<F> {
+    TextInputFunctions { on_input: self.on_input, on_paste: Fn1(on_paste), on_submit: self.on_submit }
   }
-  #[inline]
-  fn on_submit(mut self, on_submit: impl Fn() -> M + 'a) -> Self::Change {
-    self.on_submit = Some(Box::new(on_submit));
-    self
+
+  type ChangeOnSubmit<F: 'a> = TextInputFunctions<FI, FP, Fn0<F>>;
+  fn on_submit<F: Fn() -> M + 'a>(self, on_submit: F) -> Self::ChangeOnSubmit<F> {
+    TextInputFunctions { on_input: self.on_input, on_paste: self.on_paste, on_submit: Fn0(on_submit) }
   }
 }
-impl<'a, S> CreateTextInput<'a, S> for TextInputFunctions<'a, S::Message> where
-  S: State + 'a,
-  S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet,
-{
-  type Message = TextInputAction;
 
+trait Callback<I, M> {
+  fn should_register() -> bool;
+  fn call(&self, input: I) -> Option<M>;
+}
+impl<M, I> Callback<I, M> for () {
   #[inline]
-  fn create(
-    self,
-    placeholder: &str,
-    value: &str,
-    modify: impl FnOnce(TI<'a, Self::Message, S>) -> TI<'a, Self::Message, S>,
-  ) -> Element<'a, S::Message, S::Theme, S::Renderer> {
-    let mut text_input = TextInput::new(placeholder, value);
-    text_input = modify(text_input);
-    if self.on_input.is_some() {
-      text_input = text_input.on_input(TextInputAction::Input);
-    }
-    if self.on_paste.is_some() {
-      text_input = text_input.on_paste(TextInputAction::Paste);
-    }
-    if self.on_submit.is_some() {
-      text_input = text_input.on_submit(TextInputAction::Submit);
-    }
-    Element::new(text_input)
-      .map(move |m| match m {
-        TextInputAction::Input(input) => (self.on_input.as_ref().unwrap())(input),
-        TextInputAction::Paste(input) => (self.on_paste.as_ref().unwrap())(input),
-        TextInputAction::Submit => (self.on_submit.as_ref().unwrap())(),
-      })
-  }
+  fn should_register() -> bool { false }
+  #[inline]
+  fn call(&self, _input: I) -> Option<M> { None }
+}
+impl<'a, I, M, F: Fn(I) -> M + 'a> Callback<I, M> for Fn1<F> {
+  #[inline]
+  fn should_register() -> bool { true }
+  #[inline]
+  fn call(&self, input: I) -> Option<M> { Some(self.0(input)) }
+}
+impl<'a, M, F: Fn() -> M + 'a> Callback<(), M> for Fn0<F> {
+  #[inline]
+  fn should_register() -> bool { true }
+  #[inline]
+  fn call(&self, _input: ()) -> Option<M> { Some(self.0()) }
 }
 
 #[derive(Clone)]
@@ -137,3 +137,41 @@ pub enum TextInputAction {
   Paste(String),
   Submit,
 }
+
+impl<'a, S, FI, FP, FS> CreateTextInput<'a, S> for TextInputFunctions<FI, FP, FS> where
+  S: State + 'a,
+  S::Renderer: TextRenderer,
+  S::Theme: TextInputStyleSheet,
+  FI: Callback<String, S::Message> + 'a,
+  FP: Callback<String, S::Message> + 'a,
+  FS: Callback<(), S::Message> + 'a,
+{
+  type Message = TextInputAction;
+
+  #[inline]
+  fn create(
+    self,
+    placeholder: &str,
+    value: &str,
+    modify: impl FnOnce(TextIn<'a, S, Self>) -> TextIn<'a, S, Self>,
+  ) -> Elem<'a, S> {
+    let mut text_input = TextInput::new(placeholder, value);
+    text_input = modify(text_input);
+    if FI::should_register() {
+      text_input = text_input.on_input(TextInputAction::Input);
+    }
+    if FP::should_register() {
+      text_input = text_input.on_paste(TextInputAction::Paste);
+    }
+    if FS::should_register() {
+      text_input = text_input.on_submit(TextInputAction::Submit);
+    }
+    Element::new(text_input)
+      .map(move |m| match m {
+        TextInputAction::Input(input) => self.on_input.call(input).unwrap(),
+        TextInputAction::Paste(input) => self.on_paste.call(input).unwrap(),
+        TextInputAction::Submit => self.on_submit.call(()).unwrap(),
+      })
+  }
+}
+
