@@ -27,11 +27,13 @@ pub trait CreateButton<'a, S> where
 
 /// Passthrough which does not modify the message type, thus the message type must implement [`Clone`].
 pub struct ButtonPassthrough;
+
 impl ButtonActions for ButtonPassthrough {
   type Change<F> = ButtonFunctions<F>;
   #[inline]
   fn on_press<F>(self, on_press: F) -> Self::Change<F> { ButtonFunctions { on_press } }
 }
+
 impl<'a, S> CreateButton<'a, S> for ButtonPassthrough where
   S: State + 'a,
   S::Message: Clone,

@@ -31,7 +31,7 @@ impl<T> TOption<T> for TNone {
   fn map_or_else<O>(self, _some_fn: impl FnOnce(T) -> O, none_fn: impl FnOnce() -> O) -> O { none_fn() }
 
   #[inline]
-  fn unwrap(self) -> T { panic!("called `TOption::unwrap()` on a `TNone` value") }
+  fn unwrap(self) -> T { panic!("called `TOption::unwrap()` on a `TNone` value"); }
   #[inline]
   fn unwrap_or(self, none_output: T) -> T { none_output }
   #[inline]

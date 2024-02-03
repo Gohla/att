@@ -35,6 +35,7 @@ pub trait CreateTextInput<'a, S> where
 
 /// Passthrough which does not modify the message type, thus the message type must implement [`Clone`].
 pub struct TextInputPassthrough;
+
 impl TextInputActions for TextInputPassthrough {
   type ChangeOnInput<F> = <TextInputFunctions as TextInputActions>::ChangeOnInput<F>;
   #[inline]
@@ -46,6 +47,7 @@ impl TextInputActions for TextInputPassthrough {
   #[inline]
   fn on_submit<F>(self, on_submit: F) -> Self::ChangeOnSubmit<F> { TextInputFunctions::default().on_submit(on_submit) }
 }
+
 impl<'a, S> CreateTextInput<'a, S> for TextInputPassthrough where
   S: State + 'a,
   S::Message: Clone,
@@ -70,6 +72,7 @@ pub struct TextInputFunctions<FI = TNone, FP = TNone, FS = TNone> {
   on_paste: FP,
   on_submit: FS,
 }
+
 impl Default for TextInputFunctions {
   #[inline]
   fn default() -> Self { Self { on_input: TNone, on_paste: TNone, on_submit: TNone, } }
