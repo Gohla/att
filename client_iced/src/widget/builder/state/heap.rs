@@ -112,9 +112,7 @@ impl<E: El> StateMap for HeapList<E> {
 
 impl<E: El> StateTakeAll for HeapList<E> where {
   #[inline]
-  fn take_all(self) -> Vec<E> {
-    self.unwrap().0
-  }
+  fn take_all(self) -> Vec<E> { self.unwrap().0 }
 }
 
 impl<E: El> StateTake for HeapList<E> {

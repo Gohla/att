@@ -12,7 +12,5 @@ impl<E: El> State for PhantomData<E> {
 impl<E: El> StateAppend for PhantomData<E> {
   type AddOutput = E;
   #[inline]
-  fn append(self, into_element: impl Into<Self::Element>) -> Self::AddOutput {
-    into_element.into()
-  }
+  fn append(self, into_element: impl Into<Self::Element>) -> Self::AddOutput { into_element.into() }
 }
