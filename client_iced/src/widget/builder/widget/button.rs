@@ -11,7 +11,7 @@ pub trait ButtonActions {
   fn on_press<F>(self, on_press: F) -> Self::Change<F>;
 }
 
-type Btn<'a, S, C> = Button<'a, <C as CreateButton<'a, S>>::Message, <S as State>::Theme, <S as State>::Renderer>;
+type Btn<'a, S, M> = Button<'a, M, <S as State>::Theme, <S as State>::Renderer>;
 
 pub trait CreateButton<'a, S> where
   S: State,
@@ -21,7 +21,7 @@ pub trait CreateButton<'a, S> where
   fn create(
     self,
     content: impl Into<ElemM<'a, S, Self::Message>>,
-    modify: impl FnOnce(Btn<'a, S, Self>) -> Btn<'a, S, Self>,
+    modify: impl FnOnce(Btn<'a, S, Self::Message>) -> Btn<'a, S, Self::Message>,
   ) -> Elem<'a, S>;
 }
 
@@ -29,11 +29,8 @@ pub trait CreateButton<'a, S> where
 pub struct ButtonPassthrough;
 impl ButtonActions for ButtonPassthrough {
   type Change<F> = ButtonFunctions<F>;
-
   #[inline]
-  fn on_press<F>(self, on_press: F) -> Self::Change<F> {
-    ButtonFunctions { on_press }
-  }
+  fn on_press<F>(self, on_press: F) -> Self::Change<F> { ButtonFunctions { on_press } }
 }
 impl<'a, S> CreateButton<'a, S> for ButtonPassthrough where
   S: State + 'a,
@@ -41,16 +38,13 @@ impl<'a, S> CreateButton<'a, S> for ButtonPassthrough where
   S::Theme: ButtonStyleSheet,
 {
   type Message = S::Message;
-
   #[inline]
   fn create(
     self,
     content: impl Into<ElemM<'a, S, Self::Message>>,
-    modify: impl FnOnce(Btn<'a, S, Self>) -> Btn<'a, S, Self>,
+    modify: impl FnOnce(Btn<'a, S, Self::Message>) -> Btn<'a, S, Self::Message>,
   ) -> Elem<'a, S> {
-    let mut button = Button::new(content);
-    button = modify(button);
-    Element::new(button)
+    Element::new(modify(Button::new(content)))
   }
 }
 
@@ -61,11 +55,8 @@ pub struct ButtonFunctions<FP> {
 
 impl<FP> ButtonActions for ButtonFunctions<FP> {
   type Change<F> = ButtonFunctions<F>;
-
   #[inline]
-  fn on_press<F>(self, on_press: F) -> Self::Change<F> {
-    ButtonFunctions { on_press }
-  }
+  fn on_press<F>(self, on_press: F) -> Self::Change<F> { ButtonFunctions { on_press } }
 }
 
 impl<'a, S, FP> CreateButton<'a, S> for ButtonFunctions<FP> where
@@ -74,16 +65,14 @@ impl<'a, S, FP> CreateButton<'a, S> for ButtonFunctions<FP> where
   FP: Fn() -> S::Message + 'a,
 {
   type Message = ();
-
   #[inline]
   fn create(
     self,
     content: impl Into<ElemM<'a, S, Self::Message>>,
-    modify: impl FnOnce(Btn<'a, S, Self>) -> Btn<'a, S, Self>,
+    modify: impl FnOnce(Btn<'a, S, Self::Message>) -> Btn<'a, S, Self::Message>,
   ) -> Elem<'a, S> {
-    let mut button = Button::new(content)
-      .on_press(());
-    button = modify(button);
+    let button = modify(Button::new(content));
+    let button = button.on_press(());
     Element::new(button).map(move |_| (self.on_press)())
   }
 }

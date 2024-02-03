@@ -22,8 +22,11 @@ use state::stack::Nil;
 use widget::button::{ButtonActions, ButtonPassthrough, CreateButton};
 use widget::text_input::{CreateTextInput, TextInputActions, TextInputPassthrough};
 
+use crate::widget::builder::util::{IsSome, TNone, TOption, TSome};
+
 mod state;
 mod widget;
+mod util;
 
 /// Widget builder.
 #[repr(transparent)]
@@ -170,7 +173,7 @@ impl<S: StateMap> WidgetBuilder<S> {
   /// Build a [`Scrollable`] widget that will consume the last element in this builder.
   ///
   /// Can only be called when this builder has at least one element.
-  pub fn scrollable<F>(self) -> ScrollableBuilder<S, F> where
+  pub fn scrollable<F>(self) -> ScrollableBuilder<S> where
     S::Theme: ScrollableStyleSheet,
   {
     ScrollableBuilder::new(self.0)
@@ -898,7 +901,7 @@ impl<S: StateReduce> RowBuilder<S> {
 
 /// Builder for a [`Scrollable`] widget.
 #[must_use]
-pub struct ScrollableBuilder<S: StateMap, F> where
+pub struct ScrollableBuilder<S: StateMap, FS = TNone> where
   S::Theme: ScrollableStyleSheet
 {
   state: S,
@@ -906,10 +909,10 @@ pub struct ScrollableBuilder<S: StateMap, F> where
   width: Length,
   height: Length,
   direction: Direction,
-  on_scroll: Option<F>,
+  on_scroll: FS,
   style: <S::Theme as ScrollableStyleSheet>::Style,
 }
-impl<'a, S: StateMap, F> ScrollableBuilder<S, F> where
+impl<'a, S: StateMap> ScrollableBuilder<S> where
   S::Theme: ScrollableStyleSheet
 {
   fn new(state: S) -> Self {
@@ -919,11 +922,14 @@ impl<'a, S: StateMap, F> ScrollableBuilder<S, F> where
       width: Length::Shrink,
       height: Length::Shrink,
       direction: Default::default(),
-      on_scroll: None,
+      on_scroll: TNone,
       style: Default::default(),
     }
   }
-
+}
+impl<'a, S: StateMap, FS> ScrollableBuilder<S, FS> where
+  S::Theme: ScrollableStyleSheet
+{
   /// Sets the [`Id`] of the [`Scrollable`].
   pub fn id(mut self, id: ScrollableId) -> Self {
     self.id = Some(id);
@@ -947,9 +953,16 @@ impl<'a, S: StateMap, F> ScrollableBuilder<S, F> where
   /// Sets a function to call when the [`Scrollable`] is scrolled.
   ///
   /// The function takes the [`Viewport`] of the [`Scrollable`].
-  pub fn on_scroll(mut self, f: F) -> Self {
-    self.on_scroll = Some(f);
-    self
+  pub fn on_scroll<F: Fn(Viewport) -> S::Message + 'a>(self, on_scroll: F) -> ScrollableBuilder<S, TSome<F>> {
+    ScrollableBuilder {
+      state: self.state,
+      id: self.id,
+      width: self.width,
+      height: self.height,
+      direction: self.direction,
+      on_scroll: TSome(on_scroll),
+      style: self.style,
+    }
   }
   /// Sets the style of the [`Scrollable`] .
   pub fn style(mut self, style: impl Into<<S::Theme as ScrollableStyleSheet>::Style>) -> Self {
@@ -957,11 +970,13 @@ impl<'a, S: StateMap, F> ScrollableBuilder<S, F> where
     self
   }
 
-  pub fn add(self) -> S::MapOutput where
+
+  pub fn add<FSS>(self) -> S::MapOutput where
     S::Element: Into<Elem<'a, S>>, // For `Scrollable::new`
     Scrollable<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `scrollable.into()`
     S::Message: 'a, // For `scrollable.on_scroll`
-    F: Fn(Viewport) -> S::Message + 'a, // TODO: this requires F to be always given
+    FSS: Fn(Viewport) -> S::Message + 'a,
+    FS: IsSome + TOption<FSS> + 'a,
   {
     self.state.map_last(|content| {
       let mut scrollable = Scrollable::new(content)
@@ -972,8 +987,8 @@ impl<'a, S: StateMap, F> ScrollableBuilder<S, F> where
       if let Some(id) = self.id {
         scrollable = scrollable.id(id);
       }
-      if let Some(on_scroll) = self.on_scroll {
-        scrollable = scrollable.on_scroll(on_scroll);
+      if FS::IS_SOME {
+        scrollable = scrollable.on_scroll(self.on_scroll.unwrap());
       }
       scrollable.into()
     })
