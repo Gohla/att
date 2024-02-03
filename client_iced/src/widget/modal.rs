@@ -1,6 +1,6 @@
 use std::rc::Rc;
 
-use iced::{Background, Border, Color, Element, Event, keyboard, Length, Point, Rectangle, Size, Theme, Vector};
+use iced::{Background, Border, Color, Element, Event, keyboard, Length, Rectangle, Size, Theme, Vector};
 use iced::advanced::{Clipboard, Renderer, Shell};
 use iced::advanced::graphics::core::touch;
 use iced::advanced::layout::{Layout, Limits, Node};
@@ -185,7 +185,9 @@ impl<M, T, R, S> Widget<M, T, R> for Modal<'_, M, T, R, S> where
     tree.diff_children(&[&self.underlay, &self.overlay]);
   }
 
-  fn size(&self) -> Size<Length> { self.underlay.as_widget().size() }
+  fn size(&self) -> Size<Length> {
+    self.underlay.as_widget().size()
+  }
   fn layout(
     &self,
     tree: &mut Tree,
@@ -203,20 +205,21 @@ impl<M, T, R, S> Widget<M, T, R> for Modal<'_, M, T, R, S> where
     tree: &'o mut Tree,
     layout: Layout<'_>,
     _renderer: &R,
+    translation: Vector,
   ) -> Option<overlay::Element<'o, M, T, R>> {
     let modal_overlay = ModalOverlay {
+      underlay_bounds: layout.bounds() + translation,
+      horizontal_alignment: self.horizontal_alignment,
+      vertical_alignment: self.vertical_alignment,
       overlay: &mut self.overlay,
       overlay_tree: &mut tree.children[1],
 
       on_press_underlay_area: self.on_press_underlay_area.clone(),
       on_esc_pressed: self.on_esc_pressed.clone(),
 
-      horizontal_alignment: self.horizontal_alignment,
-      vertical_alignment: self.vertical_alignment,
-
       style: self.style.clone(),
     };
-    Some(overlay::Element::new(layout.position(), Box::new(modal_overlay)))
+    Some(overlay::Element::new(Box::new(modal_overlay)))
   }
 
   // Note: did not override `on_event`, `mouse_interaction`, and `operate` as the modal overlay disables the underlay.
@@ -245,14 +248,14 @@ impl<M, T, R, S> Widget<M, T, R> for Modal<'_, M, T, R, S> where
 
 // Overlay implementation
 struct ModalOverlay<'a, 'o, M, T, R, S> {
+  underlay_bounds: Rectangle,
+  horizontal_alignment: Horizontal,
+  vertical_alignment: Vertical,
   overlay: &'o mut Element<'a, M, T, R>,
   overlay_tree: &'o mut Tree,
 
   on_press_underlay_area: Option<Rc<dyn Fn() -> M>>,
   on_esc_pressed: Option<Rc<dyn Fn() -> M>>,
-
-  horizontal_alignment: Horizontal,
-  vertical_alignment: Vertical,
 
   style: S,
 }
@@ -263,11 +266,9 @@ impl<M, T, R, S> overlay::Overlay<M, T, R> for ModalOverlay<'_, '_, M, T, R, S> 
   fn layout(
     &mut self,
     renderer: &R,
-    bounds: Size,
-    _position: Point,
-    _translation: Vector,
+    _bounds: Size,
   ) -> Node {
-    let limits = Limits::new(Size::ZERO, bounds);
+    let limits = Limits::new(Size::ZERO, self.underlay_bounds.size());
     let max_size = limits.max();
     let overlay_node = self.overlay.as_widget()
       .layout(self.overlay_tree, renderer, &limits)
@@ -276,7 +277,8 @@ impl<M, T, R, S> overlay::Overlay<M, T, R> for ModalOverlay<'_, '_, M, T, R, S> 
         self.vertical_alignment.into(),
         max_size,
       );
-    Node::with_children(max_size, vec![overlay_node])
+    let node = Node::with_children(max_size, vec![overlay_node]);
+    node.move_to(self.underlay_bounds.position())
   }
   fn overlay(
     &mut self,
@@ -288,6 +290,7 @@ impl<M, T, R, S> overlay::Overlay<M, T, R> for ModalOverlay<'_, '_, M, T, R, S> 
       self.overlay_tree,
       overlay_layout,
       renderer,
+      Vector::ZERO,
     )
   }
 

@@ -1,6 +1,6 @@
 //! Propagate [`iced::advanced::widget::Widget`] functions to child elements.
 
-use iced::{Event, Rectangle};
+use iced::{Event, Rectangle, Vector};
 use iced::advanced::{Clipboard, Layout, overlay, Renderer, renderer, Shell};
 use iced::advanced::graphics::core::Element;
 use iced::advanced::widget::{Operation, Tree};
@@ -99,6 +99,7 @@ pub fn overlay<'a, M, T, R: Renderer>(
   tree: &'a mut Tree,
   layout: Layout,
   renderer: &R,
+  translation: Vector,
 ) -> Option<overlay::Element<'a, M, T, R>> {
-  overlay::from_children(child_elements, tree, layout, renderer)
+  overlay::from_children(child_elements, tree, layout, renderer, translation)
 }

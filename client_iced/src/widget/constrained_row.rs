@@ -1,4 +1,4 @@
-use iced::{Alignment, Element, Event, Length, Point, Rectangle, Size};
+use iced::{Alignment, Element, Event, Length, Point, Rectangle, Size, Vector};
 use iced::advanced::{Clipboard, Layout, overlay, Renderer, renderer, Shell, Widget};
 use iced::advanced::layout::{Limits, Node};
 use iced::advanced::widget::{Operation, Tree};
@@ -163,7 +163,7 @@ impl<'a, M, T, R: Renderer> Widget<M, T, R> for ConstrainedRow<'a, M, T, R> {
     crate::widget::child::operate(&self.elements, tree, layout, renderer, operation)
   }
 
-  fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout, renderer: &R) -> Option<overlay::Element<'o, M, T, R>> {
-    crate::widget::child::overlay(&mut self.elements, tree, layout, renderer)
+  fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout, renderer: &R, translation: Vector) -> Option<overlay::Element<'o, M, T, R>> {
+    crate::widget::child::overlay(&mut self.elements, tree, layout, renderer, translation)
   }
 }
