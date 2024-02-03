@@ -795,10 +795,9 @@ impl<S: StateReduce> ColumnBuilder<S> {
   }
 
   pub fn add<'a>(self) -> S::ReduceOutput where
-  // For `Column::with_children`. Can't use `Elem<'a, S>` due to it crashing RustRover.
-    Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>,
+    Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>, // For `Column::with_children`
     Column<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `.into()`
-  {
+  { // Can't use `Elem<'a, S>` in above bounds due to it crashing RustRover.
     self.state.reduce(|vec| {
       Column::with_children(vec)
         .spacing(self.spacing)
@@ -883,10 +882,9 @@ impl<S: StateReduce> RowBuilder<S> {
   }
 
   pub fn add<'a>(self) -> S::ReduceOutput where
-  // For `Row::with_children`. Can't use `Elem<'a, S>` due to it crashing RustRover.
-    Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>,
+    Vec<S::Element>: IntoIterator<Item=Element<'a, S::Message, S::Theme, S::Renderer>>, // or `Row::with_children`
     Row<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `.into()`
-  {
+  { // Can't use `Elem<'a, S>` in above bounds due to it crashing RustRover.
     self.state.reduce(|vec| {
       Row::with_children(vec)
         .spacing(self.spacing)
