@@ -21,6 +21,7 @@ pub struct Modal<'a, M, T, R, S> {
   on_press_underlay_area: Option<Rc<dyn Fn() -> M>>,
   on_esc_pressed: Option<Rc<dyn Fn() -> M>>,
 
+  draw_over_underlay_only: bool,
   horizontal_alignment: Horizontal,
   vertical_alignment: Vertical,
 
@@ -43,6 +44,7 @@ impl<'a, M, T, R, S> Modal<'a, M, T, R, S> where
       on_press_underlay_area: None,
       on_esc_pressed: None,
 
+      draw_over_underlay_only: false,
       horizontal_alignment: Horizontal::Center,
       vertical_alignment: Vertical::Center,
 
@@ -71,6 +73,12 @@ impl<'a, M, T, R, S> Modal<'a, M, T, R, S> where
     self
   }
 
+  /// Sets whether the modal background should be drawn over the underlay only (`true`), or whether it should be drawn
+  /// over everything (`false`, the default).
+  pub fn draw_over_underlay_only(mut self, draw_over_underlay_only: bool) -> Self {
+    self.draw_over_underlay_only = draw_over_underlay_only;
+    self
+  }
   /// Sets the `horizontal_alignment` of this modal.
   pub fn horizontal_alignment(mut self, horizontal_alignment: Horizontal) -> Self {
     self.horizontal_alignment = horizontal_alignment;
@@ -208,7 +216,7 @@ impl<M, T, R, S> Widget<M, T, R> for Modal<'_, M, T, R, S> where
     translation: Vector,
   ) -> Option<overlay::Element<'o, M, T, R>> {
     let modal_overlay = ModalOverlay {
-      underlay_bounds: layout.bounds() + translation,
+      underlay_bounds: self.draw_over_underlay_only.then(|| layout.bounds() + translation),
       horizontal_alignment: self.horizontal_alignment,
       vertical_alignment: self.vertical_alignment,
       overlay: &mut self.overlay,
@@ -248,7 +256,7 @@ impl<M, T, R, S> Widget<M, T, R> for Modal<'_, M, T, R, S> where
 
 // Overlay implementation
 struct ModalOverlay<'a, 'o, M, T, R, S> {
-  underlay_bounds: Rectangle,
+  underlay_bounds: Option<Rectangle>,
   horizontal_alignment: Horizontal,
   vertical_alignment: Vertical,
   overlay: &'o mut Element<'a, M, T, R>,
@@ -266,9 +274,9 @@ impl<M, T, R, S> overlay::Overlay<M, T, R> for ModalOverlay<'_, '_, M, T, R, S> 
   fn layout(
     &mut self,
     renderer: &R,
-    _bounds: Size,
+    bounds: Size,
   ) -> Node {
-    let limits = Limits::new(Size::ZERO, self.underlay_bounds.size());
+    let limits = Limits::new(Size::ZERO, self.underlay_bounds.map_or(bounds, |b| b.size()));
     let max_size = limits.max();
     let overlay_node = self.overlay.as_widget()
       .layout(self.overlay_tree, renderer, &limits)
@@ -278,7 +286,11 @@ impl<M, T, R, S> overlay::Overlay<M, T, R> for ModalOverlay<'_, '_, M, T, R, S> 
         max_size,
       );
     let node = Node::with_children(max_size, vec![overlay_node]);
-    node.move_to(self.underlay_bounds.position())
+    if let Some(underlay_bounds) = self.underlay_bounds {
+      node.move_to(underlay_bounds.position())
+    } else {
+      node
+    }
   }
   fn overlay(
     &mut self,
@@ -290,7 +302,7 @@ impl<M, T, R, S> overlay::Overlay<M, T, R> for ModalOverlay<'_, '_, M, T, R, S> 
       self.overlay_tree,
       overlay_layout,
       renderer,
-      Vector::ZERO,
+      Vector::ZERO, // TODO: do we need to pass in a different translation here?
     )
   }
 
