@@ -4,7 +4,7 @@ use iced::widget::text_input::StyleSheet as TextInputStyleSheet;
 use iced::widget::TextInput;
 
 use crate::widget::builder::state::Elem;
-use crate::widget::builder::util::{IsSome, TNone, TOption, TOptionFn, TSome};
+use crate::widget::builder::util::{TNone, TOption, TOptionFn, TSome};
 
 use super::super::state::State;
 
@@ -104,9 +104,9 @@ impl<'a, S, FI, FP, FS> CreateTextInput<'a, S> for TextInputFunctions<FI, FP, FS
   S: State + 'a,
   S::Renderer: TextRenderer,
   S::Theme: TextInputStyleSheet,
-  FI: IsSome + TOptionFn<'a, String, S::Message> + 'a,
-  FP: IsSome + TOptionFn<'a, String, S::Message> + 'a,
-  FS: IsSome + TOptionFn<'a, (), S::Message> + 'a,
+  FI: TOptionFn<'a, String, S::Message> + 'a,
+  FP: TOptionFn<'a, String, S::Message> + 'a,
+  FS: TOptionFn<'a, (), S::Message> + 'a,
 {
   type Message = TextInputAction;
   #[inline]
@@ -128,9 +128,9 @@ impl<'a, S, FI, FP, FS> CreateTextInput<'a, S> for TextInputFunctions<FI, FP, FS
     }
     Element::new(text_input)
       .map(move |m| match m {
-        TextInputAction::Input(input) => self.on_input.call(input).into_option().unwrap(),
-        TextInputAction::Paste(input) => self.on_paste.call(input).into_option().unwrap(),
-        TextInputAction::Submit => self.on_submit.call(()).into_option().unwrap(),
+        TextInputAction::Input(input) => self.on_input.call(input).unwrap(),
+        TextInputAction::Paste(input) => self.on_paste.call(input).unwrap(),
+        TextInputAction::Submit => self.on_submit.call(()).unwrap(),
       })
   }
 }

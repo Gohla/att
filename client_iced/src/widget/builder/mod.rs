@@ -22,7 +22,7 @@ use state::stack::Nil;
 use widget::button::{ButtonActions, ButtonPassthrough, CreateButton};
 use widget::text_input::{CreateTextInput, TextInputActions, TextInputPassthrough};
 
-use crate::widget::builder::util::{IsSome, TNone, TOption, TSome};
+use crate::widget::builder::util::{TNone, TOption, TOptionFn, TSome};
 
 mod state;
 mod widget;
@@ -173,7 +173,7 @@ impl<S: StateMap> WidgetBuilder<S> {
   /// Build a [`Scrollable`] widget that will consume the last element in this builder.
   ///
   /// Can only be called when this builder has at least one element.
-  pub fn scrollable<F>(self) -> ScrollableBuilder<S> where
+  pub fn scrollable(self) -> ScrollableBuilder<S> where
     S::Theme: ScrollableStyleSheet,
   {
     ScrollableBuilder::new(self.0)
@@ -970,13 +970,11 @@ impl<'a, S: StateMap, FS> ScrollableBuilder<S, FS> where
     self
   }
 
-
-  pub fn add<FSS>(self) -> S::MapOutput where
+  pub fn add(self) -> S::MapOutput where
     S::Element: Into<Elem<'a, S>>, // For `Scrollable::new`
     Scrollable<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `scrollable.into()`
     S::Message: 'a, // For `scrollable.on_scroll`
-    FSS: Fn(Viewport) -> S::Message + 'a,
-    FS: IsSome + TOption<FSS> + 'a,
+    FS: TOptionFn<'a, Viewport, S::Message> + 'a
   {
     self.state.map_last(|content| {
       let mut scrollable = Scrollable::new(content)
@@ -988,7 +986,7 @@ impl<'a, S: StateMap, FS> ScrollableBuilder<S, FS> where
         scrollable = scrollable.id(id);
       }
       if FS::IS_SOME {
-        scrollable = scrollable.on_scroll(self.on_scroll.unwrap());
+        scrollable = scrollable.on_scroll(move |viewport| self.on_scroll.call(viewport).unwrap());
       }
       scrollable.into()
     })

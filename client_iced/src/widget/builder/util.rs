@@ -1,3 +1,6 @@
+pub trait IsSome {
+  const IS_SOME: bool;
+}
 pub trait TOption<T>: IsSome {
   fn map<O>(self, map_fn: impl FnOnce(T) -> O) -> impl TOption<O>;
   fn map_or<O>(self, some_fn: impl FnOnce(T) -> O, none_output: O) -> O;
@@ -11,14 +14,14 @@ pub trait TOption<T>: IsSome {
 
   fn into_option(self) -> Option<T>;
 }
-pub trait IsSome {
-  const IS_SOME: bool;
-}
-pub trait TOptionFn<'a, I, O> {
+pub trait TOptionFn<'a, I, O>: IsSome {
   fn call(&self, input: I) -> impl TOption<O>;
 }
 
 pub struct TNone;
+impl IsSome for TNone {
+  const IS_SOME: bool = false;
+}
 impl<T> TOption<T> for TNone {
   #[inline]
   fn map<O>(self, _map_fn: impl FnOnce(T) -> O) -> impl TOption<O> { Self }
@@ -40,16 +43,15 @@ impl<T> TOption<T> for TNone {
   #[inline]
   fn into_option(self) -> Option<T> { None }
 }
-impl IsSome for TNone {
-  const IS_SOME: bool = false;
-}
-
 impl<'a, I, O> TOptionFn<'a, I, O> for TNone {
   #[inline]
   fn call(&self, _input: I) -> impl TOption<O> { TNone }
 }
 
 pub struct TSome<T>(pub T);
+impl<T> IsSome for TSome<T> {
+  const IS_SOME: bool = true;
+}
 impl<T> TOption<T> for TSome<T> {
   #[inline]
   fn map<O>(self, map_fn: impl FnOnce(T) -> O) -> impl TOption<O> { TSome(map_fn(self.0)) }
@@ -74,7 +76,4 @@ impl<T> TOption<T> for TSome<T> {
 impl<'a, I, O, F: Fn(I) -> O + 'a> TOptionFn<'a, I, O> for TSome<F> {
   #[inline]
   fn call(&self, input: I) -> impl TOption<O> { TSome(self.0(input)) }
-}
-impl<T> IsSome for TSome<T> {
-  const IS_SOME: bool = true;
 }
