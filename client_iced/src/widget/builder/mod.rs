@@ -394,7 +394,7 @@ pub struct TextInputBuilder<'a, S: StateAppend, A = TextInputPassthrough> where
   id: Option<TextInputId>,
   placeholder: &'a str,
   value: &'a str,
-  password: bool,
+  secure: bool,
   font: Option<<S::Renderer as TextRenderer>::Font>,
   width: Length,
   padding: Padding,
@@ -414,7 +414,7 @@ impl<'a, S: StateAppend> TextInputBuilder<'a, S> where
       id: None,
       placeholder,
       value,
-      password: false,
+      secure: false,
       font: None,
       width: Length::Fill,
       padding: Padding::new(5.0),
@@ -436,8 +436,8 @@ impl<'a, S: StateAppend, A: TextInputActions> TextInputBuilder<'a, S, A> where
     self
   }
   /// Converts the [`TextInput`] into a secure password input.
-  pub fn password(mut self) -> Self {
-    self.password = true;
+  pub fn secure(mut self) -> Self {
+    self.secure = true;
     self
   }
   /// Sets the [`Font`] of the [`TextInput`].
@@ -506,7 +506,7 @@ impl<'a, S: StateAppend, A: TextInputActions> TextInputBuilder<'a, S, A> where
       id: self.id,
       placeholder: self.placeholder,
       value: self.value,
-      password: self.password,
+      secure: self.secure,
       font: self.font,
       width: self.width,
       padding: self.padding,
@@ -529,9 +529,6 @@ impl<'a, S: StateAppend, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> w
       if let Some(id) = self.id {
         text_input = text_input.id(id);
       }
-      if self.password {
-        text_input = text_input.password();
-      }
       if let Some(font) = self.font {
         text_input = text_input.font(font);
       }
@@ -542,6 +539,7 @@ impl<'a, S: StateAppend, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> w
         text_input = text_input.icon(icon);
       }
       text_input
+        .secure(self.secure)
         .width(self.width)
         .padding(self.padding)
         .line_height(self.line_height)

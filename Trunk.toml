@@ -1,0 +1,3 @@
+[build]
+target = "client_iced/index.html"
+filehash = false

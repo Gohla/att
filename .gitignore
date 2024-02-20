@@ -13,7 +13,6 @@
 
 # Trunk
 /client_iced/dist
-/target_wasm
 
 # NPM
 /node_modules
