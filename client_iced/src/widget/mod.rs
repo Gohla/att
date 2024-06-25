@@ -1,8 +1,6 @@
 use iced::advanced::Renderer;
 use iced::Element;
 
-pub mod builder;
-
 pub mod child;
 
 pub mod constrained_row;

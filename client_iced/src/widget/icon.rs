@@ -1,7 +1,7 @@
 use iced::{Element, Font};
 use iced::alignment::{Horizontal, Vertical};
 
-use crate::widget::builder::WidgetBuilder;
+use iced_builder::WidgetBuilder;
 
 /// [Bootstrap icon](https://icons.getbootstrap.com/) font bytes.
 pub const FONT_BYTES: &[u8] = include_bytes!("../../font/bootstrap-icons.ttf");

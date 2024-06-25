@@ -2,12 +2,14 @@
 members = [
   "core",
   "client",
+  "iced_builder",
   "client_iced",
   "server",
 ]
 default-members = [
   "core",
   "client",
+  "iced_builder",
   "client_iced",
   "server",
 ]

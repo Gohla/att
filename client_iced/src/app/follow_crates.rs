@@ -3,12 +3,12 @@ use tracing::instrument;
 
 use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesData, FollowCratesResponse};
 use att_client::http_client::AttHttpClient;
+use iced_builder::WidgetBuilder;
 
 use crate::app::search_crates;
 use crate::app::search_crates::SearchCratesComponent;
 use crate::perform::PerformExt;
 use crate::update::Update;
-use crate::widget::builder::WidgetBuilder;
 use crate::widget::icon::icon_text;
 use crate::widget::modal::Modal;
 use crate::widget::table::Table;

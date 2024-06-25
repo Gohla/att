@@ -335,6 +335,7 @@ dependencies = [
  "att_core",
  "dark-light",
  "iced",
+ "iced_builder",
  "iced_renderer",
  "iced_winit",
  "serde",
@@ -1868,6 +1869,13 @@ dependencies = [
  "iced_widget",
  "iced_winit",
  "thiserror",
+]
+
+[[package]]
+name = "iced_builder"
+version = "0.1.0"
+dependencies = [
+ "iced",
 ]
 
 [[package]]

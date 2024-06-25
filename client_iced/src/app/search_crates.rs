@@ -5,10 +5,10 @@ use tracing::instrument;
 use att_client::http_client::AttHttpClient;
 use att_client::search_crates::{SearchCrates, SearchCratesRequest, SearchCratesResponse};
 use att_core::crates::Crate;
+use iced_builder::WidgetBuilder;
 
 use crate::perform::OptionPerformExt;
 use crate::update::Update;
-use crate::widget::builder::WidgetBuilder;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
 

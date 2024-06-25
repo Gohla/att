@@ -5,8 +5,9 @@
 //! - Low compile-time overhead.
 //! - Every operation is type-preserving.
 
+use crate::WidgetBuilder;
+
 use super::{El, State, StateAppend, StateMap, StateReduce, StateTake, StateTakeAll};
-use super::super::WidgetBuilder;
 
 /// Heap-allocated list.
 pub enum HeapList<E> {
@@ -82,7 +83,7 @@ impl<E: El> StateAppend for HeapList<E> {
   }
 }
 
-impl<E: El> StateReduce for HeapList<E> where {
+impl<E: El> StateReduce for HeapList<E> {
   type ReduceOutput = WidgetBuilder<Self>;
   fn reduce(self, reduce_fn: impl FnOnce(Vec<E>) -> E) -> Self::ReduceOutput {
     let (vec, reserve_additional) = self.unwrap();
@@ -110,7 +111,7 @@ impl<E: El> StateMap for HeapList<E> {
   }
 }
 
-impl<E: El> StateTakeAll for HeapList<E> where {
+impl<E: El> StateTakeAll for HeapList<E> {
   #[inline]
   fn take_all(self) -> Vec<E> { self.unwrap().0 }
 }

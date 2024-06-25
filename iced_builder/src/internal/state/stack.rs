@@ -17,11 +17,13 @@
 
 use std::marker::PhantomData;
 
-use super::{El, State, StateAppend, StateMap, StateReduce, StateTake, StateTakeAll};
-use super::super::WidgetBuilder;
+use crate::WidgetBuilder;
 
-/// Algebraic stack list constructor.
+use super::{El, State, StateAppend, StateMap, StateReduce, StateTake, StateTakeAll};
+
+/// List constructor.
 pub struct Cons<E, Rest>(E, Rest);
+
 impl<E, Rest> Cons<E, Rest> {
   #[inline]
   fn map(mut self, map_fn: impl FnOnce(E) -> E) -> Self {
@@ -30,32 +32,39 @@ impl<E, Rest> Cons<E, Rest> {
   }
 }
 
+
 /// Empty list.
 #[repr(transparent)]
 pub struct Nil<E>(PhantomData<E>);
+
 impl<E> Default for Nil<E> {
   #[inline]
   fn default() -> Self { Self(PhantomData::default()) }
 }
 
-/// Stack-allocated list.
-trait StackList: Sized {
+
+/// List trait.
+trait List: Sized {
   /// Type of elements in the list.
   type E;
+
   /// The length of this list.
   const LEN: usize;
 
   /// Create a new list with `element`.
   #[inline]
   fn one(element: Self::E) -> Cons<Self::E, Nil<Self::E>> { Cons(element, Nil::default()) }
+
   /// Return a new list with `element` appended to it.
   #[inline]
   fn append(self, element: Self::E) -> Cons<Self::E, Self> { Cons(element, self) }
+
   /// Return a new list with the element reduced from `reduce_fn`.
   #[inline]
   fn reduce(self, reduce_fn: impl FnOnce(Vec<Self::E>) -> Self::E) -> Cons<Self::E, Nil<Self::E>> {
     Self::one(reduce_fn(self.to_vec()))
   }
+
   /// Collect the elements from this list into a [`Vec`].
   #[inline]
   fn to_vec(self) -> Vec<Self::E> {
@@ -68,8 +77,9 @@ trait StackList: Sized {
   fn add_to_vec(self, vec: &mut Vec<Self::E>);
 }
 
-impl<E, Rest: StackList<E=E>> StackList for Cons<E, Rest> {
+impl<E, Rest: List<E=E>> List for Cons<E, Rest> {
   type E = E;
+
   const LEN: usize = 1 + Rest::LEN;
 
   #[inline]
@@ -80,8 +90,9 @@ impl<E, Rest: StackList<E=E>> StackList for Cons<E, Rest> {
   }
 }
 
-impl<E> StackList for Nil<E> {
+impl<E> List for Nil<E> {
   type E = E;
+
   const LEN: usize = 0;
 
   #[inline]
@@ -91,32 +102,32 @@ impl<E> StackList for Nil<E> {
 
 // Implement state traits for all types implementing `StackList`.
 
-impl<E: El, L: StackList<E=E>> State for L {
+impl<E: El, L: List<E=E>> State for L {
   type Element = E;
   type Message = E::Message;
   type Theme = E::Theme;
   type Renderer = E::Renderer;
 }
 
-impl<E: El, L: StackList<E=E>> StateAppend for L {
+impl<E: El, L: List<E=E>> StateAppend for L {
   type AddOutput = WidgetBuilder<Cons<E, Self>>;
   #[inline]
   fn append(self, into_element: impl Into<E>) -> Self::AddOutput { WidgetBuilder(self.append(into_element.into())) }
 }
 
-impl<E: El, L: StackList<E=E>> StateReduce for L {
+impl<E: El, L: List<E=E>> StateReduce for L {
   type ReduceOutput = WidgetBuilder<Cons<E, Nil<E>>>;
   #[inline]
   fn reduce(self, reduce_fn: impl FnOnce(Vec<E>) -> E) -> Self::ReduceOutput { WidgetBuilder(self.reduce(reduce_fn)) }
 }
 
-impl<E: El, L: StackList<E=E>> StateMap for Cons<E, L> {
+impl<E: El, L: List<E=E>> StateMap for Cons<E, L> {
   type MapOutput = WidgetBuilder<Cons<E, L>>;
   #[inline]
   fn map_last(self, map_fn: impl FnOnce(E) -> E) -> Self::MapOutput { WidgetBuilder(self.map(map_fn)) }
 }
 
-impl<E: El, L: StackList<E=E>> StateTakeAll for L {
+impl<E: El, L: List<E=E>> StateTakeAll for L {
   #[inline]
   fn take_all(self) -> Vec<E> { self.to_vec() }
 }
