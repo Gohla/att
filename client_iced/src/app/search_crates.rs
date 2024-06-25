@@ -1,4 +1,4 @@
-use iced::{Command, Element};
+use iced::{Element, Task};
 use iced::widget::text_input;
 use tracing::instrument;
 
@@ -33,7 +33,7 @@ impl SearchCratesComponent {
     }
   }
 
-  pub fn focus_search_term_input<M: 'static>(&self) -> Command<M> {
+  pub fn focus_search_term_input<M: 'static>(&self) -> Task<M> {
     text_input::focus(self.search_term_id.clone())
   }
 
@@ -44,7 +44,7 @@ impl SearchCratesComponent {
 
 impl SearchCratesComponent {
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message) -> Update<Option<String>, Command<Message>> {
+  pub fn update(&mut self, message: Message) -> Update<Option<String>, Task<Message>> {
     use Message::*;
     match message {
       SendRequest(request) => return self.search_crates.send(request).opt_perform_into(ProcessResponse).into(),
@@ -65,7 +65,7 @@ impl SearchCratesComponent {
         1 => WidgetBuilder::once().add_text(&krate.max_version),
         2 => WidgetBuilder::once().add_text(krate.updated_at.format("%Y-%m-%d").to_string()),
         3 => WidgetBuilder::once().add_text(format!("{}", krate.downloads)),
-        4 => WidgetBuilder::once().button(self.choose_button_text.as_str()).padding([1.0, 5.0]).positive_style().on_press(|| Message::Choose(krate.id.clone())).add(),
+        4 => WidgetBuilder::once().button(self.choose_button_text.as_str()).padding([1.0, 5.0]).success_style().on_press(|| Message::Choose(krate.id.clone())).add(),
         _ => return None,
       };
       Some(element)

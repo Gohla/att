@@ -1,7 +1,7 @@
 use std::error::Error;
 
-use iced::{Command, Element, Event, event, executor, Subscription, Theme, window};
-use iced::window::Id;
+use iced::{Element, Event, event, executor, Subscription, Task, window};
+use iced_winit::Program;
 use tracing::error;
 
 use att_client::auth::{Auth, LoggedIn};
@@ -39,16 +39,17 @@ pub enum Message {
   ToFollowCrates(follow_crates::Message),
   Login(LoggedIn),
   ToggleLightDarkMode,
-  Exit(Id),
+  Exit(window::Id),
 }
 
-impl iced::Application for App {
-  type Executor = executor::Default;
+impl Program for App {
   type Message = Message;
-  type Theme = Theme;
+  type Theme = iced::Theme;
+  type Executor = executor::Default;
+  type Renderer = iced_renderer::Renderer;
   type Flags = Flags;
 
-  fn new(flags: Flags) -> (Self, Command<Message>) {
+  fn new(flags: Flags) -> (Self, Task<Message>) {
     let mut auth = Auth::new(flags.http_client.clone());
     let login_command = auth.login(UserCredentials::default()).perform(Message::Login);
 
@@ -59,15 +60,15 @@ impl iced::Application for App {
       data: flags.data,
       dark_mode: flags.dark_mode,
     };
-    let command = Command::batch([login_command]);
+    let command = Task::batch([login_command]);
     (app, command)
   }
 
-  fn update(&mut self, message: Message) -> Command<Self::Message> {
+  fn update(&mut self, message: Message) -> Task<Self::Message> {
     use Message::*;
     match message {
       ToFollowCrates(message) => {
-        return self.follow_crates.update(message, self.data.crates_mut()).into_command().map(ToFollowCrates);
+        return self.follow_crates.update(message, self.data.crates_mut()).into_task().map(ToFollowCrates);
       }
       Login(response) => if self.auth.process_logged_in(response).is_ok() {
         return self.follow_crates.request_followed_crates().map(ToFollowCrates);
@@ -80,13 +81,13 @@ impl iced::Application for App {
         return window::close(window_id);
       }
     }
-    Command::none()
+    Task::none()
   }
 
   fn subscription(&self) -> Subscription<Message> {
-    let exit_subscription = event::listen_with(|event, _| {
-      if let Event::Window(id, window::Event::CloseRequested) = event {
-        Some(Message::Exit(id))
+    let exit_subscription = event::listen_with::<Message>(|event, _, window_id| {
+      if let Event::Window(window::Event::CloseRequested) = event {
+        Some(Message::Exit(window_id))
       } else {
         None
       }
@@ -94,7 +95,7 @@ impl iced::Application for App {
     exit_subscription
   }
 
-  fn view(&self) -> Element<Message> {
+  fn view(&self, _window_id: window::Id) -> Element<Message> {
     WidgetBuilder::stack()
       .text("All The Things").size(20.0).add()
       .add_space_fill_width()
@@ -106,12 +107,14 @@ impl iced::Application for App {
       .take()
   }
 
-  fn title(&self) -> String { "All The Things".to_string() }
+  fn title(&self, _window_id: window::Id) -> String {
+    "All The Things".to_string()
+  }
 
-  fn theme(&self) -> Theme {
+  fn theme(&self, _window_id: window::Id) -> iced::Theme {
     match self.dark_mode {
-      false => Theme::Light,
-      true => Theme::Dark,
+      false => iced::Theme::Light,
+      true => iced::Theme::Dark,
     }
   }
 }

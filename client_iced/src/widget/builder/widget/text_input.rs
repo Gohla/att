@@ -1,6 +1,6 @@
 use iced::advanced::text::Renderer as TextRenderer;
 use iced::Element;
-use iced::widget::text_input::StyleSheet as TextInputStyleSheet;
+use iced::widget::text_input;
 use iced::widget::TextInput;
 
 use crate::widget::builder::state::Elem;
@@ -22,7 +22,7 @@ type TextIn<'a, S, M> = TextInput<'a, M, <S as State>::Theme, <S as State>::Rend
 pub trait CreateTextInput<'a, S> where
   S: State,
   S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet,
+  S::Theme: text_input::Catalog,
 {
   type Message: Clone;
   fn create(
@@ -52,7 +52,7 @@ impl<'a, S> CreateTextInput<'a, S> for TextInputPassthrough where
   S: State + 'a,
   S::Message: Clone,
   S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet,
+  S::Theme: text_input::Catalog,
 {
   type Message = S::Message;
   #[inline]
@@ -106,7 +106,7 @@ pub enum TextInputAction {
 impl<'a, S, FI, FP, FS> CreateTextInput<'a, S> for TextInputFunctions<FI, FP, FS> where
   S: State + 'a,
   S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet,
+  S::Theme: text_input::Catalog,
   FI: TOptionFn<'a, String, S::Message> + 'a,
   FP: TOptionFn<'a, String, S::Message> + 'a,
   FS: TOptionFn<'a, (), S::Message> + 'a,

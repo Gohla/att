@@ -1,8 +1,11 @@
 use std::borrow::Cow;
 use std::error::Error;
 
-use iced::{Application, Settings, window};
+use iced::advanced::graphics;
+use iced::window;
 use iced::window::settings::PlatformSpecific;
+use iced_winit::program::run;
+use iced_winit::Settings;
 
 use att_client::http_client::AttHttpClient;
 use att_core::app::env;
@@ -38,6 +41,20 @@ fn main() -> Result<(), Box<dyn Error>> {
     dark_light::Mode::Light | dark_light::Mode::Default => false,
   };
 
+  let fonts = vec![
+    Cow::Borrowed(icon::FONT_BYTES),
+    #[cfg(target_arch = "wasm32")] Cow::Borrowed(widget::font::FIRA_SANS_FONT_BYTES)
+  ];
+  let settings = Settings {
+    id: Some("att".to_string()),
+    fonts,
+    ..Default::default()
+  };
+
+  let graphics_settings = graphics::Settings {
+    ..Default::default()
+  };
+
   let platform_specific: PlatformSpecific;
   #[cfg(not(target_arch = "wasm32"))] {
     platform_specific = Default::default();
@@ -45,16 +62,11 @@ fn main() -> Result<(), Box<dyn Error>> {
   #[cfg(target_arch = "wasm32")]{
     platform_specific = PlatformSpecific { target: Some("canvas".to_string()), ..Default::default() };
   }
-  let window = window::Settings {
+  let window_settings = window::Settings {
     platform_specific,
     exit_on_close_request: false,
     ..Default::default()
   };
-
-  let fonts = vec![
-    Cow::Borrowed(icon::FONT_BYTES),
-    #[cfg(target_arch = "wasm32")] Cow::Borrowed(widget::font::FIRA_SANS_FONT_BYTES)
-  ];
 
   let flags = Flags {
     http_client,
@@ -62,13 +74,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     data,
     dark_mode,
   };
-  let settings = Settings {
-    id: Some("att".to_string()),
-    window,
-    fonts,
-    ..Settings::with_flags(flags)
-  };
-  App::run(settings)?;
+
+  run::<App, iced_renderer::Compositor>(settings, graphics_settings, Some(window_settings), flags)?;
 
   Ok(())
 }

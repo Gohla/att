@@ -4,17 +4,14 @@ use std::marker::PhantomData;
 use iced::{Alignment, Color, Element, Length, Padding, Pixels};
 use iced::advanced::text::Renderer as TextRenderer;
 use iced::alignment::{Horizontal, Vertical};
-pub use iced::theme::Button as ButtonStyle;
 pub use iced::theme::Theme as BuiltinTheme;
-use iced::widget::{Column, Container, Row, Rule, Scrollable, Space, Text};
-pub use iced::widget::button::StyleSheet as ButtonStyleSheet;
-pub use iced::widget::container::{Id as ContainerId, StyleSheet as ContainerStyleSheet};
-pub use iced::widget::rule::StyleSheet as RuleStyleSheet;
-pub use iced::widget::scrollable::{Id as ScrollableId, StyleSheet as ScrollableStyleSheet};
+use iced::widget::{button, Column, Container, container, Row, Rule, rule, Scrollable, scrollable, Space, Text, text, text_input};
+pub use iced::widget::container::Id as ContainerId;
 use iced::widget::scrollable::{Direction, Viewport};
+pub use iced::widget::scrollable::Id as ScrollableId;
 use iced::widget::text::{LineHeight, Shaping};
-pub use iced::widget::text::StyleSheet as TextStyleSheet;
-pub use iced::widget::text_input::{Icon as TextInputIcon, Id as TextInputId, StyleSheet as TextInputStyleSheet};
+pub use iced::widget::text_input::{Icon as TextInputIcon, Id as TextInputId};
+use iced::widget::text_input::Status;
 
 use state::{Elem, ElemM, State, StateAppend, StateMap, StateReduce, StateTake, StateTakeAll};
 use state::heap::HeapList;
@@ -98,21 +95,21 @@ impl<S: StateAppend> WidgetBuilder<S> {
 
   /// Build a [`Rule`] widget.
   pub fn rule(self) -> RuleBuilder<S> where
-    S::Theme: RuleStyleSheet,
+    S::Theme: rule::Catalog,
   {
     RuleBuilder::new(self.0)
   }
   /// Adds a horizontal [`Rule`] with `height` to this builder.
-  pub fn add_horizontal_rule(self, height: impl Into<Pixels>) -> S::AddOutput where
-    S::Theme: RuleStyleSheet,
-    Rule: Into<S::Element>,
+  pub fn add_horizontal_rule<'a>(self, height: impl Into<Pixels>) -> S::AddOutput where
+    S::Theme: rule::Catalog,
+    Rule<'a>: Into<S::Element>,
   {
     self.rule().horizontal(height).add()
   }
   /// Adds a vertical [`Rule`] with `width` to this builder.
-  pub fn add_vertical_rule(self, width: impl Into<Pixels>) -> S::AddOutput where
-    S::Theme: RuleStyleSheet,
-    Rule: Into<S::Element>,
+  pub fn add_vertical_rule<'a>(self, width: impl Into<Pixels>) -> S::AddOutput where
+    S::Theme: rule::Catalog,
+    Rule<'a>: Into<S::Element>,
   {
     self.rule().vertical(width).add()
   }
@@ -120,14 +117,14 @@ impl<S: StateAppend> WidgetBuilder<S> {
   /// Build a [`Text`] widget from `content`.
   pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<'a, S> where
     S::Renderer: TextRenderer,
-    S::Theme: TextStyleSheet
+    S::Theme: text::Catalog
   {
     TextBuilder::new(self.0, content.into())
   }
   /// Adds a [`Text`] widget with `content` to this builder.
   pub fn add_text<'a>(self, content: impl Into<Cow<'a, str>>) -> S::AddOutput where
     S::Renderer: TextRenderer,
-    S::Theme: TextStyleSheet,
+    S::Theme: text::Catalog,
     Text<'a, S::Theme, S::Renderer>: Into<S::Element>,
   {
     self.text(content).add()
@@ -135,13 +132,13 @@ impl<S: StateAppend> WidgetBuilder<S> {
   /// Build a [`TextInput`] widget from `content`.
   pub fn text_input<'a>(self, placeholder: &'a str, value: &'a str) -> TextInputBuilder<'a, S> where
     S::Renderer: TextRenderer,
-    S::Theme: TextInputStyleSheet
+    S::Theme: text_input::Catalog
   {
     TextInputBuilder::new(self.0, placeholder, value)
   }
   /// Build a [`Button`] widget from `content`.
-  pub fn button<C>(self, content: C) -> ButtonBuilder<S, C> where
-    S::Theme: ButtonStyleSheet
+  pub fn button<'a, C>(self, content: C) -> ButtonBuilder<'a, S, C> where
+    S::Theme: button::Catalog
   {
     ButtonBuilder::new(self.0, content)
   }
@@ -173,8 +170,8 @@ impl<S: StateMap> WidgetBuilder<S> {
   /// Build a [`Scrollable`] widget that will consume the last element in this builder.
   ///
   /// Can only be called when this builder has at least one element.
-  pub fn scrollable(self) -> ScrollableBuilder<S> where
-    S::Theme: ScrollableStyleSheet,
+  pub fn scrollable<'a>(self) -> ScrollableBuilder<'a, S> where
+    S::Theme: scrollable::Catalog,
   {
     ScrollableBuilder::new(self.0)
   }
@@ -182,8 +179,8 @@ impl<S: StateMap> WidgetBuilder<S> {
   /// Build a [`Container`] widget that will consume the last element in this builder.
   ///
   /// Can only be called when this builder has at least one element.
-  pub fn container(self) -> ContainerBuilder<S> where
-    S::Theme: ContainerStyleSheet,
+  pub fn container<'a>(self) -> ContainerBuilder<'a, S> where
+    S::Theme: container::Catalog,
   {
     ContainerBuilder::new(self.0)
   }
@@ -288,7 +285,7 @@ impl<'a, S: StateAppend> RuleBuilder<S> {
   }
 
   pub fn add(self) -> S::AddOutput where
-    Rule: Into<S::Element>,
+    Rule<'a>: Into<S::Element>,
   {
     let rule = if self.is_vertical {
       Rule::vertical(self.width_or_height)
@@ -303,14 +300,14 @@ impl<'a, S: StateAppend> RuleBuilder<S> {
 #[must_use]
 pub struct TextBuilder<'a, S: StateAppend> where
   S::Renderer: TextRenderer,
-  S::Theme: TextStyleSheet,
+  S::Theme: text::Catalog,
 {
   state: S,
   text: Text<'a, S::Theme, S::Renderer>
 }
 impl<'a, S: StateAppend> TextBuilder<'a, S> where
   S::Renderer: TextRenderer,
-  S::Theme: TextStyleSheet,
+  S::Theme: text::Catalog,
 {
   fn new(state: S, content: Cow<'a, str>) -> Self {
     Self {
@@ -336,20 +333,28 @@ impl<'a, S: StateAppend> TextBuilder<'a, S> where
     self.text = self.text.font(font);
     self
   }
-  /// Sets the [`Style`] of the [`Text`].
+  /// Sets the styler function of the [`Text`].
+  pub fn style(mut self, styler: impl Fn(&S::Theme) -> text::Style + 'a) -> Self where
+    <S::Theme as text::Catalog>::Class<'a>: From<text::StyleFn<'a, S::Theme>>
+  {
+    self.text = self.text.style(styler);
+    self
+  }
+  /// Sets the [style class] of the [`Text`].
   ///
-  /// [`Style`]: S::Theme::Style
-  pub fn style(mut self, style: impl Into<<S::Theme as TextStyleSheet>::Style>) -> Self {
-    self.text = self.text.style(style);
+  /// [style class]: S::Theme::Class
+  pub fn class(mut self, class: impl Into<<S::Theme as text::Catalog>::Class<'a>>) -> Self {
+    self.text = self.text.class(class); // TODO: only with iced feature advanced
     self
   }
   /// Sets a [`Color`] as the style of the [`Text`].
   ///
   /// Only available when the [`BuiltinTheme`] is used.
-  pub fn style_color(self, color: impl Into<Color>) -> Self where
+  pub fn style_color(mut self, color: impl Into<Color>) -> Self where
     S: StateAppend<Theme=BuiltinTheme>
   {
-    self.style(color.into())
+    self.text = self.text.color(color);
+    self
   }
   /// Sets the width of the [`Text`] boundaries.
   pub fn width(mut self, width: impl Into<Length>) -> Self {
@@ -388,7 +393,7 @@ impl<'a, S: StateAppend> TextBuilder<'a, S> where
 #[must_use]
 pub struct TextInputBuilder<'a, S: StateAppend, A = TextInputPassthrough> where
   S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet
+  S::Theme: text_input::Catalog,
 {
   state: S,
   id: Option<TextInputId>,
@@ -402,11 +407,11 @@ pub struct TextInputBuilder<'a, S: StateAppend, A = TextInputPassthrough> where
   line_height: LineHeight,
   actions: A,
   icon: Option<TextInputIcon<<S::Renderer as TextRenderer>::Font>>,
-  style: <S::Theme as TextInputStyleSheet>::Style,
+  class: <S::Theme as text_input::Catalog>::Class<'a>,
 }
 impl<'a, S: StateAppend> TextInputBuilder<'a, S> where
   S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet
+  S::Theme: text_input::Catalog
 {
   fn new(state: S, placeholder: &'a str, value: &'a str) -> Self {
     Self {
@@ -422,13 +427,13 @@ impl<'a, S: StateAppend> TextInputBuilder<'a, S> where
       line_height: LineHeight::default(),
       actions: TextInputPassthrough,
       icon: None,
-      style: Default::default(),
+      class: <S::Theme as text_input::Catalog>::default(),
     }
   }
 }
 impl<'a, S: StateAppend, A: TextInputActions> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet
+  S::Theme: text_input::Catalog
 {
   /// Sets the [`TextInputId`] of the [`TextInput`].
   pub fn id(mut self, id: TextInputId) -> Self {
@@ -475,12 +480,16 @@ impl<'a, S: StateAppend, A: TextInputActions> TextInputBuilder<'a, S, A> where
     self.line_height = line_height.into();
     self
   }
+  /// Sets the styler function of the [`TextInput`].
+  pub fn style(mut self, styler: impl Fn(&S::Theme, Status) -> text_input::Style + 'a, ) -> Self where
+    <S::Theme as text_input::Catalog>::Class<'a>: From<text_input::StyleFn<'a, S::Theme>>
+  {
+    self.class = (Box::new(styler) as text_input::StyleFn<'a, S::Theme>).into();
+    self
+  }
   /// Sets the style of the [`TextInput`].
-  pub fn style(
-    mut self,
-    style: impl Into<<S::Theme as TextInputStyleSheet>::Style>,
-  ) -> Self {
-    self.style = style.into();
+  pub fn class(mut self, class: impl Into<<S::Theme as text_input::Catalog>::Class<'a>>, ) -> Self {
+    self.class = class.into();
     self
   }
 
@@ -514,13 +523,13 @@ impl<'a, S: StateAppend, A: TextInputActions> TextInputBuilder<'a, S, A> where
       line_height: self.line_height,
       actions: change(self.actions),
       icon: self.icon,
-      style: self.style
+      class: self.class
     }
   }
 }
 impl<'a, S: StateAppend, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> where
   S::Renderer: TextRenderer,
-  S::Theme: TextInputStyleSheet,
+  S::Theme: text_input::Catalog,
   Elem<'a, S>: Into<S::Element>,
 {
   /// Adds the [`TextInput`](iced::widget::TextInput) to the builder and returns the builder.
@@ -543,7 +552,7 @@ impl<'a, S: StateAppend, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> w
         .width(self.width)
         .padding(self.padding)
         .line_height(self.line_height)
-        .style(self.style)
+        .class(self.class)
     });
     self.state.append(element)
   }
@@ -551,8 +560,8 @@ impl<'a, S: StateAppend, A: CreateTextInput<'a, S>> TextInputBuilder<'a, S, A> w
 
 /// Builder for a [`Button`] widget.
 #[must_use]
-pub struct ButtonBuilder<S: State, C, A = ButtonPassthrough> where
-  S::Theme: ButtonStyleSheet
+pub struct ButtonBuilder<'a, S: State, C, A = ButtonPassthrough> where
+  S::Theme: button::Catalog
 {
   state: S,
   content: C,
@@ -561,10 +570,10 @@ pub struct ButtonBuilder<S: State, C, A = ButtonPassthrough> where
   width: Length,
   height: Length,
   padding: Padding,
-  style: <S::Theme as ButtonStyleSheet>::Style,
+  class: <S::Theme as button::Catalog>::Class<'a>,
 }
-impl<S: State, C> ButtonBuilder<S, C> where
-  S::Theme: ButtonStyleSheet
+impl<'a, S: State, C> ButtonBuilder<'a, S, C> where
+  S::Theme: button::Catalog,
 {
   fn new(state: S, content: C) -> Self {
     Self {
@@ -575,12 +584,12 @@ impl<S: State, C> ButtonBuilder<S, C> where
       width: Length::Shrink,
       height: Length::Shrink,
       padding: 5.0.into(),
-      style: Default::default(),
+      class: <S::Theme as button::Catalog>::default(),
     }
   }
 }
-impl<'a, S: State, C, A: ButtonActions> ButtonBuilder<S, C, A> where
-  S::Theme: ButtonStyleSheet
+impl<'a, S: State, C, A: ButtonActions> ButtonBuilder<'a, S, C, A> where
+  S::Theme: button::Catalog
 {
   /// Sets the width of the [`Button`].
   pub fn width(mut self, width: impl Into<Length>) -> Self {
@@ -598,7 +607,7 @@ impl<'a, S: State, C, A: ButtonActions> ButtonBuilder<S, C, A> where
     self
   }
   /// Sets the function that will be called when the [`Button`] is pressed to `on_paste`.
-  pub fn on_press<F: Fn() -> S::Message + 'a>(self, on_press: F) -> ButtonBuilder<S, C, A::Change<F>> {
+  pub fn on_press<F: Fn() -> S::Message + 'a>(self, on_press: F) -> ButtonBuilder<'a, S, C, A::Change<F>> {
     self.replace_actions(|actions| actions.on_press(on_press))
   }
   /// Sets whether the [`Button`] is `disabled`.
@@ -606,53 +615,60 @@ impl<'a, S: State, C, A: ButtonActions> ButtonBuilder<S, C, A> where
     self.disabled = disabled;
     self
   }
-  /// Sets the [`Style`] of the [`Button`].
-  ///
-  /// [`Style`]: S::Theme::Style
-  pub fn style(mut self, style: impl Into<<S::Theme as ButtonStyleSheet>::Style>) -> Self {
-    self.style = style.into();
+  /// Sets the styler function of the [`Button`].
+  pub fn style(mut self, styler: impl Fn(&S::Theme, button::Status) -> button::Style + 'a) -> Self where
+    <S::Theme as button::Catalog>::Class<'a>: From<button::StyleFn<'a, S::Theme>>,
+  {
+    self.class = (Box::new(styler) as button::StyleFn<'a, S::Theme>).into();
     self
   }
-  /// Sets the style of the [`Button`] to [`ButtonStyle::Primary`].
-  ///
-  /// Only available when the [`BuiltinTheme`] is used.
-  pub fn primary_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
-    self.style(ButtonStyle::Secondary)
+  /// Sets the class of the [`Button`].
+  pub fn class(mut self, class: impl Into<<S::Theme as button::Catalog>::Class<'a>>) -> Self {
+    self.class = class.into();
+    self
   }
-  /// Sets the style of the [`Button`] to [`ButtonStyle::Secondary`].
+  /// Sets the style of the [`Button`] to [`button::primary`].
   ///
-  /// Only available when the [`BuiltinTheme`] is used.
-  pub fn secondary_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
-    self.style(ButtonStyle::Secondary)
-  }
-  /// Sets the style of the [`Button`] to [`ButtonStyle::Positive`].
-  ///
-  /// Only available when the [`BuiltinTheme`] is used.
-  pub fn positive_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
-    self.style(ButtonStyle::Positive)
-  }
-  /// Sets the style of the [`Button`] to [`ButtonStyle::Destructive`].
-  ///
-  /// Only available when the [`BuiltinTheme`] is used.
-  pub fn destructive_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
-    self.style(ButtonStyle::Destructive)
-  }
-  /// Sets the style of the [`Button`] to [`ButtonStyle::Text`].
-  ///
-  /// Only available when the [`BuiltinTheme`] is used.
-  pub fn text_style(self) -> Self where S: StateAppend<Theme=BuiltinTheme> {
-    self.style(ButtonStyle::Text)
-  }
-  /// Sets the style of the [`Button`] to a custom [`ButtonStyleSheet`] implementation.
-  ///
-  /// Only available when the [`BuiltinTheme`] is used.
-  pub fn custom_style(self, style_sheet: impl ButtonStyleSheet<Style=BuiltinTheme> + 'static) -> Self where
-    S: StateAppend<Theme=BuiltinTheme>
+  /// Only available when the theme is [`BuiltinTheme`].
+  pub fn primary_style(self) -> Self where
+    S: State<Theme=BuiltinTheme>
   {
-    self.style(ButtonStyle::custom(style_sheet))
+    self.style(button::primary)
+  }
+  /// Sets the style of the [`Button`] to [`button::secondary`].
+  ///
+  /// Only available when the theme is [`BuiltinTheme`].
+  pub fn secondary_style(self) -> Self where
+    S: State<Theme=BuiltinTheme>
+  {
+    self.style(button::secondary)
+  }
+  /// Sets the style of the [`Button`] to [`button::success`].
+  ///
+  /// Only available when the theme is [`BuiltinTheme`].
+  pub fn success_style(self) -> Self where
+    S: State<Theme=BuiltinTheme>
+  {
+    self.style(button::success)
+  }
+  /// Sets the style of the [`Button`] to [`button::danger`].
+  ///
+  /// Only available when the theme is [`BuiltinTheme`].
+  pub fn danger_style(self) -> Self where
+    S: State<Theme=BuiltinTheme>
+  {
+    self.style(button::danger)
+  }
+  /// Sets the style of the [`Button`] to [`button::text`].
+  ///
+  /// Only available when the theme is [`BuiltinTheme`].
+  pub fn text_style(self) -> Self where
+    S: State<Theme=BuiltinTheme>
+  {
+    self.style(button::text)
   }
 
-  fn replace_actions<AA>(self, change: impl FnOnce(A) -> AA) -> ButtonBuilder<S, C, AA> {
+  fn replace_actions<AA>(self, change: impl FnOnce(A) -> AA) -> ButtonBuilder<'a, S, C, AA> {
     ButtonBuilder {
       state: self.state,
       content: self.content,
@@ -661,12 +677,12 @@ impl<'a, S: State, C, A: ButtonActions> ButtonBuilder<S, C, A> where
       width: self.width,
       height: self.height,
       padding: self.padding,
-      style: self.style,
+      class: self.class,
     }
   }
 }
-impl<'a, S: StateAppend, C, A: CreateButton<'a, S>> ButtonBuilder<S, C, A> where
-  S::Theme: ButtonStyleSheet,
+impl<'a, S: StateAppend, C, A: CreateButton<'a, S>> ButtonBuilder<'a, S, C, A> where
+  S::Theme: button::Catalog,
   Elem<'a, S>: Into<S::Element>,
   C: Into<ElemM<'a, S, A::Message>>,
 {
@@ -677,7 +693,7 @@ impl<'a, S: StateAppend, C, A: CreateButton<'a, S>> ButtonBuilder<S, C, A> where
         .width(self.width)
         .height(self.height)
         .padding(self.padding)
-        .style(self.style);
+        .class(self.class);
       if self.disabled {
         button = button.on_press_maybe(None);
       }
@@ -797,6 +813,7 @@ impl<S: StateReduce> ColumnBuilder<S> {
     Column<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `.into()`
   { // Can't use `Elem<'a, S>` in above bounds due to it crashing RustRover.
     self.state.reduce(|vec| {
+      // TODO: use `from_vec`, but need to figure out how add a bound that `vec` is a `Vec<Element<...>>`.
       Column::with_children(vec)
         .spacing(self.spacing)
         .padding(self.padding)
@@ -884,6 +901,7 @@ impl<S: StateReduce> RowBuilder<S> {
     Row<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `.into()`
   { // Can't use `Elem<'a, S>` in above bounds due to it crashing RustRover.
     self.state.reduce(|vec| {
+      // TODO: use `from_vec`, but need to figure out how add a bound that `vec` is a `Vec<Element<...>>`.
       Row::with_children(vec)
         .spacing(self.spacing)
         .padding(self.padding)
@@ -897,8 +915,8 @@ impl<S: StateReduce> RowBuilder<S> {
 
 /// Builder for a [`Scrollable`] widget.
 #[must_use]
-pub struct ScrollableBuilder<S: StateMap, FS = TNone> where
-  S::Theme: ScrollableStyleSheet
+pub struct ScrollableBuilder<'a, S: StateMap, FS = TNone> where
+  S::Theme: scrollable::Catalog
 {
   state: S,
   id: Option<ScrollableId>,
@@ -906,10 +924,10 @@ pub struct ScrollableBuilder<S: StateMap, FS = TNone> where
   height: Length,
   direction: Direction,
   on_scroll: FS,
-  style: <S::Theme as ScrollableStyleSheet>::Style,
+  class: <S::Theme as scrollable::Catalog>::Class<'a>,
 }
-impl<'a, S: StateMap> ScrollableBuilder<S> where
-  S::Theme: ScrollableStyleSheet
+impl<'a, S: StateMap> ScrollableBuilder<'a, S> where
+  S::Theme: scrollable::Catalog
 {
   fn new(state: S) -> Self {
     Self {
@@ -919,12 +937,12 @@ impl<'a, S: StateMap> ScrollableBuilder<S> where
       height: Length::Shrink,
       direction: Default::default(),
       on_scroll: TNone,
-      style: Default::default(),
+      class: <S::Theme as scrollable::Catalog>::default(),
     }
   }
 }
-impl<'a, S: StateMap, FS> ScrollableBuilder<S, FS> where
-  S::Theme: ScrollableStyleSheet
+impl<'a, S: StateMap, FS> ScrollableBuilder<'a, S, FS> where
+  S::Theme: scrollable::Catalog
 {
   /// Sets the [`Id`] of the [`Scrollable`].
   pub fn id(mut self, id: ScrollableId) -> Self {
@@ -949,7 +967,7 @@ impl<'a, S: StateMap, FS> ScrollableBuilder<S, FS> where
   /// Sets a function to call when the [`Scrollable`] is scrolled.
   ///
   /// The function takes the [`Viewport`] of the [`Scrollable`].
-  pub fn on_scroll<F: Fn(Viewport) -> S::Message + 'a>(self, on_scroll: F) -> ScrollableBuilder<S, TSome<F>> {
+  pub fn on_scroll<F: Fn(Viewport) -> S::Message + 'a>(self, on_scroll: F) -> ScrollableBuilder<'a, S, TSome<F>> {
     ScrollableBuilder {
       state: self.state,
       id: self.id,
@@ -957,12 +975,19 @@ impl<'a, S: StateMap, FS> ScrollableBuilder<S, FS> where
       height: self.height,
       direction: self.direction,
       on_scroll: TSome(on_scroll),
-      style: self.style,
+      class: self.class,
     }
   }
-  /// Sets the style of the [`Scrollable`] .
-  pub fn style(mut self, style: impl Into<<S::Theme as ScrollableStyleSheet>::Style>) -> Self {
-    self.style = style.into();
+  /// Sets the styler function of the [`Scrollable`] .
+  pub fn style(mut self, styler: impl Fn(&S::Theme, scrollable::Status) -> scrollable::Style + 'a) -> Self where
+    <S::Theme as scrollable::Catalog>::Class<'a>: From<scrollable::StyleFn<'a, S::Theme>>,
+  {
+    self.class = (Box::new(styler) as scrollable::StyleFn<'a, S::Theme>).into();
+    self
+  }
+
+  pub fn class(mut self, class: impl Into<<S::Theme as scrollable::Catalog>::Class<'a>>) -> Self {
+    self.class = class.into();
     self
   }
 
@@ -973,11 +998,10 @@ impl<'a, S: StateMap, FS> ScrollableBuilder<S, FS> where
     FS: TOptionFn<'a, Viewport, S::Message> + 'a
   {
     self.state.map_last(|content| {
-      let mut scrollable = Scrollable::new(content)
+      let mut scrollable = Scrollable::with_direction(content, self.direction)
         .width(self.width)
         .height(self.height)
-        .direction(self.direction)
-        .style(self.style);
+        .class(self.class);
       if let Some(id) = self.id {
         scrollable = scrollable.id(id);
       }
@@ -991,8 +1015,8 @@ impl<'a, S: StateMap, FS> ScrollableBuilder<S, FS> where
 
 /// Builder for a [`Container`] widget.
 #[must_use]
-pub struct ContainerBuilder<S: StateMap> where
-  S::Theme: ContainerStyleSheet
+pub struct ContainerBuilder<'a, S: StateMap> where
+  S::Theme: container::Catalog
 {
   state: S,
   id: Option<ContainerId>,
@@ -1003,10 +1027,10 @@ pub struct ContainerBuilder<S: StateMap> where
   max_height: f32,
   horizontal_alignment: Horizontal,
   vertical_alignment: Vertical,
-  style: <S::Theme as ContainerStyleSheet>::Style,
+  class: <S::Theme as container::Catalog>::Class<'a>,
 }
-impl<S: StateMap> ContainerBuilder<S> where
-  S::Theme: ContainerStyleSheet
+impl<'a, S: StateMap> ContainerBuilder<'a, S> where
+  S::Theme: container::Catalog
 {
   fn new(state: S) -> Self {
     Self {
@@ -1019,7 +1043,7 @@ impl<S: StateMap> ContainerBuilder<S> where
       max_height: f32::INFINITY,
       horizontal_alignment: Horizontal::Left,
       vertical_alignment: Vertical::Top,
-      style: Default::default(),
+      class: <S::Theme as container::Catalog>::default(),
     }
   }
 
@@ -1074,13 +1098,19 @@ impl<S: StateMap> ContainerBuilder<S> where
     self.vertical_alignment = Vertical::Center;
     self
   }
-  /// Sets the style of the [`Container`].
-  pub fn style(mut self, style: impl Into<<S::Theme as ContainerStyleSheet>::Style>) -> Self {
-    self.style = style.into();
+  /// Sets the styler function of the [`Container`].
+  pub fn style(mut self, styler: impl Fn(&S::Theme) -> container::Style + 'a) -> Self where
+    <S::Theme as container::Catalog>::Class<'a>: From<container::StyleFn<'a, S::Theme>>,
+  {
+    self.class = (Box::new(styler) as container::StyleFn<'a, S::Theme>).into();
+    self
+  }
+  pub fn class(mut self, class: impl Into<<S::Theme as container::Catalog>::Class<'a>>) -> Self {
+    self.class = class.into();
     self
   }
 
-  pub fn add<'a>(self) -> S::MapOutput where
+  pub fn add(self) -> S::MapOutput where
     S::Element: Into<Elem<'a, S>>, // For `Container::new`
     Container<'a, S::Message, S::Theme, S::Renderer>: Into<S::Element>, // For `container.into()`
   {
@@ -1093,7 +1123,7 @@ impl<S: StateMap> ContainerBuilder<S> where
         .max_height(self.max_width)
         .align_x(self.horizontal_alignment)
         .align_y(self.vertical_alignment)
-        .style(self.style)
+        .class(self.class)
         ;
       if let Some(id) = self.id {
         container = container.id(id);

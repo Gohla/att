@@ -81,7 +81,7 @@ pub fn operate<'a, M, T, R: Renderer>(
   tree: &mut Tree,
   layout: Layout,
   renderer: &R,
-  operation: &mut dyn Operation<M>
+  operation: &mut dyn Operation<()>
 ) {
   operation.container(None, layout.bounds(), &mut |operation| {
     child_elements.iter()

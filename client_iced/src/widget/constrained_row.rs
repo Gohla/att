@@ -159,7 +159,7 @@ impl<'a, M, T, R: Renderer> Widget<M, T, R> for ConstrainedRow<'a, M, T, R> {
   fn mouse_interaction(&self, tree: &Tree, layout: Layout, cursor: Cursor, viewport: &Rectangle, renderer: &R) -> Interaction {
     crate::widget::child::mouse_interaction(&self.elements, tree, layout, cursor, viewport, renderer)
   }
-  fn operate(&self, tree: &mut Tree, layout: Layout, renderer: &R, operation: &mut dyn Operation<M>) {
+  fn operate(&self, tree: &mut Tree, layout: Layout, renderer: &R, operation: &mut dyn Operation<()>) {
     crate::widget::child::operate(&self.elements, tree, layout, renderer, operation)
   }
 

@@ -1,18 +1,14 @@
-cargo-features = ["named-profiles", "profile-overrides"]
-
 [workspace]
 members = [
   "core",
   "client",
   "client_iced",
-  "client_dioxus",
   "server",
 ]
 default-members = [
   "core",
   "client",
   "client_iced",
-  "client_dioxus",
   "server",
 ]
 resolver = "2"
@@ -27,9 +23,9 @@ att_core = { path = "core" }
 att_client = { path = "client" }
 tokio = "1"
 futures = "0.3"
-reqwest = "0.11"
+reqwest = "0.12"
 url = "2"
-crates_io_api = "0.9"
+crates_io_api = "0.11"
 chrono = "0.4"
 serde = "1"
 serde_json = "1"
@@ -41,5 +37,7 @@ tracing = "0.1"
 tracing-subscriber = "0.3"
 tracing-appender = "0.2"
 hashbrown = "0.14"
-iced = { git = "https://github.com/iced-rs/iced.git", rev = "e24b1b65002d716f8bf5fccb49871bd4f46791ca", default-features = false }
+iced = { git = "https://github.com/iced-rs/iced.git", rev = "b9eb861", default-features = false }
+iced_winit = { git = "https://github.com/iced-rs/iced.git", rev = "b9eb861", default-features = false }
+iced_renderer= { git = "https://github.com/iced-rs/iced.git", rev = "b9eb861", default-features = false }
 http = "1"

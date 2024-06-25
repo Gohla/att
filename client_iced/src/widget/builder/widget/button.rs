@@ -1,6 +1,6 @@
 use iced::Element;
 use iced::widget::Button;
-use iced::widget::button::StyleSheet as ButtonStyleSheet;
+use iced::widget::button;
 
 use crate::widget::builder::state::{Elem, ElemM};
 
@@ -15,7 +15,7 @@ type Btn<'a, S, M> = Button<'a, M, <S as State>::Theme, <S as State>::Renderer>;
 
 pub trait CreateButton<'a, S> where
   S: State,
-  S::Theme: ButtonStyleSheet
+  S::Theme: button::Catalog
 {
   type Message: Clone;
   fn create(
@@ -37,7 +37,7 @@ impl ButtonActions for ButtonPassthrough {
 impl<'a, S> CreateButton<'a, S> for ButtonPassthrough where
   S: State + 'a,
   S::Message: Clone,
-  S::Theme: ButtonStyleSheet,
+  S::Theme: button::Catalog,
 {
   type Message = S::Message;
   #[inline]
@@ -63,7 +63,7 @@ impl<FP> ButtonActions for ButtonFunctions<FP> {
 
 impl<'a, S, FP> CreateButton<'a, S> for ButtonFunctions<FP> where
   S: State + 'a,
-  S::Theme: ButtonStyleSheet,
+  S::Theme: button::Catalog,
   FP: Fn() -> S::Message + 'a,
 {
   type Message = ();

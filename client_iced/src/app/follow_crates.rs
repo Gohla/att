@@ -1,4 +1,4 @@
-use iced::{Command, Element};
+use iced::{Element, Task};
 use tracing::instrument;
 
 use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesData, FollowCratesResponse};
@@ -37,22 +37,22 @@ impl FollowCratesComponent {
     }
   }
 
-  pub fn request_followed_crates(&mut self) -> Command<Message> {
+  pub fn request_followed_crates(&mut self) -> Task<Message> {
     self.follow_crates.get_followed().perform_into(Message::ProcessResponse)
   }
 
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message, data: &mut FollowCratesData) -> Update<(), Command<Message>> {
+  pub fn update(&mut self, message: Message, data: &mut FollowCratesData) -> Update<(), Task<Message>> {
     use Message::*;
     match message {
       ToSearchCrates(message) => {
-        let (action, command) = self.search_crates.update(message).into_action_command();
+        let (action, command) = self.search_crates.update(message).into_action_task();
         let search_command = command.map(ToSearchCrates);
         if let Some(crate_id) = action {
           self.search_crates.clear();
           self.search_crates_modal_open = false;
           let follow_command = self.follow_crates.follow(crate_id).perform_into(ProcessResponse);
-          return Command::batch([search_command, follow_command]).into();
+          return Task::batch([search_command, follow_command]).into();
         }
         return search_command.into();
       }
@@ -90,7 +90,7 @@ impl FollowCratesComponent {
           .add(),
         5 => WidgetBuilder::once()
           .button(icon_text("\u{F5DE}"))
-          .destructive_style()
+          .danger_style()
           .padding(4.0)
           .on_press(|| Message::SendRequest(FollowCrateRequest::Unfollow(crate_id.clone())))
           .disabled(self.follow_crates.is_crate_being_modified(crate_id))
@@ -114,7 +114,7 @@ impl FollowCratesComponent {
     let disable_refresh = self.follow_crates.is_any_crate_being_modified();
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
-      .button("Add").positive_style().on_press(|| Message::OpenSearchCratesModal).add()
+      .button("Add").success_style().on_press(|| Message::OpenSearchCratesModal).add()
       .button("Refresh Outdated").on_press(|| Message::SendRequest(FollowCrateRequest::RefreshOutdated)).disabled(disable_refresh).add()
       .button("Refresh All").on_press(|| Message::SendRequest(FollowCrateRequest::RefreshAll)).disabled(disable_refresh).add()
       .add_space_fill_width()

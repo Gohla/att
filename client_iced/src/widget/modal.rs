@@ -110,7 +110,7 @@ impl<'a, M, R> Modal<'a, M, Theme, R, ModalStyleForTheme> where
       .style(|theme: &Theme| {
         let palette = theme.extended_palette();
         let background = palette.background.base;
-        container::Appearance {
+        container::Style {
           text_color: Some(background.text),
           background: Some(background.color.into()),
           border: Border {
@@ -118,7 +118,7 @@ impl<'a, M, R> Modal<'a, M, Theme, R, ModalStyleForTheme> where
             width: 2.0,
             color: palette.primary.weak.color,
           },
-          ..container::Appearance::default()
+          ..Default::default()
         }
       });
     Self::new(overlay, underlay)
@@ -368,7 +368,7 @@ impl<M, T, R, S> overlay::Overlay<M, T, R> for ModalOverlay<'_, '_, M, T, R, S> 
     &mut self,
     layout: Layout<'_>,
     renderer: &R,
-    operation: &mut dyn Operation<M>,
+    operation: &mut dyn Operation<()>,
   ) {
     let overlay_layout = layout.children().next().unwrap();
     self.overlay.as_widget().operate(

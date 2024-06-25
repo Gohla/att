@@ -1,6 +1,6 @@
 use iced::{Element, Length};
 use iced::advanced::Renderer;
-use iced::widget::{Column, scrollable, Scrollable, Space};
+use iced::widget::{Column, Scrollable, scrollable, Space};
 
 use constrained_row::Constraint;
 
@@ -106,7 +106,7 @@ impl<'a, M, T, R, F> Table<'a, M, T, R, F> where
 
 impl<'a, F, M, T, R> Into<Element<'a, M, T, R>> for Table<'a, M, T, R, F> where
   M: 'a,
-  T: scrollable::StyleSheet + 'a,
+  T: scrollable::Catalog + 'a,
   R: Renderer + 'a,
   F: Fn(usize, usize) -> Option<Element<'a, M, T, R>> + 'a
 {

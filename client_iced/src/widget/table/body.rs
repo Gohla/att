@@ -20,6 +20,7 @@ pub struct Body<'a, M, T, R, F> {
   phantom_row: Element<'a, M, T, R>,
   element_state: RefCell<ElementState<'a, M, T, R>>,
 }
+
 impl<'a, M, T, R, F> Body<'a, M, T, R, F> {
   pub fn new(
     spacing: f32,
@@ -43,14 +44,17 @@ impl<'a, M, T, R, F> Body<'a, M, T, R, F> {
   }
 }
 
+
 struct ElementState<'a, M, T, R> {
   elements: HashMap<(usize, usize), Element<'a, M, T, R>>,
 }
+
 impl<'a, M, T, R> Default for ElementState<'a, M, T, R> {
   fn default() -> Self {
     Self { elements: Default::default(), }
   }
 }
+
 impl<'a, M, T, R> ElementState<'a, M, T, R> {
   pub fn get_or_insert<F>(&mut self, row: usize, col: usize, cell_to_element: &F) -> &mut Element<'a, M, T, R> where
     F: Fn(usize, usize) -> Element<'a, M, T, R> + 'a
@@ -58,12 +62,14 @@ impl<'a, M, T, R> ElementState<'a, M, T, R> {
     self.elements.entry((row, col))
       .or_insert_with(|| cell_to_element(row, col))
   }
+
   pub fn remove_row(&mut self, row: usize, num_columns: usize) {
     for col in 0..num_columns {
       self.elements.remove(&(row, col));
     }
   }
 }
+
 
 #[derive(Default)]
 struct TreeState {
@@ -75,12 +81,14 @@ impl TreeState {
     self.trees.entry((row, col))
       .or_insert_with(|| Tree::new(element))
   }
+
   pub fn remove_row(&mut self, row: usize, num_columns: usize) {
     for col in 0..num_columns {
       self.trees.remove(&(row, col));
     }
   }
 }
+
 
 impl<'a, F, M, T, R> Widget<M, T, R> for Body<'a, M, T, R, F> where
   R: Renderer,
@@ -89,17 +97,24 @@ impl<'a, F, M, T, R> Widget<M, T, R> for Body<'a, M, T, R, F> where
   fn tag(&self) -> tree::Tag {
     tree::Tag::of::<RefCell<TreeState>>()
   }
+
   fn state(&self) -> tree::State {
     tree::State::Some(Box::new(RefCell::new(TreeState::default())))
   }
+
   fn children(&self) -> Vec<Tree> {
     vec![Tree::new(&self.phantom_row)]
   }
+
   fn diff(&self, tree: &mut Tree) {
     tree.diff_children(std::slice::from_ref(&self.phantom_row))
   }
 
-  fn size(&self) -> Size<Length> { Size::new(Length::Fill, Length::Fill) }
+
+  fn size(&self) -> Size<Length> {
+    Size::new(Length::Shrink, Length::Shrink)
+  }
+
   fn layout(&self, tree: &mut Tree, renderer: &R, limits: &Limits) -> Node {
     let max_height = self.row_count as f32 * self.row_height + self.row_count.saturating_sub(1) as f32 * self.spacing;
     let limits = limits.max_height(max_height);
@@ -108,6 +123,7 @@ impl<'a, F, M, T, R> Widget<M, T, R> for Body<'a, M, T, R, F> where
     let node = self.phantom_row.as_widget().layout(&mut tree.children[0], renderer, &limits.height(self.row_height));
     Node::with_children(limits.max(), vec![node])
   }
+
 
   fn draw(
     &self,
@@ -191,6 +207,7 @@ impl<'a, F, M, T, R> Widget<M, T, R> for Body<'a, M, T, R, F> where
     tree_state.previous_rows = rows;
   }
 
+
   fn on_event(
     &mut self,
     tree: &mut Tree,
@@ -246,6 +263,7 @@ impl<'a, F, M, T, R> Widget<M, T, R> for Body<'a, M, T, R, F> where
 
     Status::Ignored
   }
+
   fn mouse_interaction(&self, tree: &Tree, layout: Layout, cursor: Cursor, viewport: &Rectangle, renderer: &R) -> Interaction {
     if let Some(cursor_position) = cursor.position() {
       let absolute_position = layout.position();
@@ -271,7 +289,8 @@ impl<'a, F, M, T, R> Widget<M, T, R> for Body<'a, M, T, R, F> where
     }
     Interaction::default()
   }
-  fn operate(&self, _tree: &mut Tree, _layout: Layout, _renderer: &R, _operation: &mut dyn Operation<M>) {
+
+  fn operate(&self, _tree: &mut Tree, _layout: Layout, _renderer: &R, _operation: &mut dyn Operation<()>) {
     // TODO: implement?
   }
 }
@@ -308,6 +327,7 @@ impl<'a, F, M, T, R: Renderer> Body<'a, M, T, R, F> where
       .move_to(Point::new(cell_bounds.x, y));
     Cell { element, tree, node }
   }
+
   /// Gets the cell at `position` relative to this table, or `None` if there is no cell at `position`.
   fn cell_at_position<'c>(
     &'c self,
@@ -325,6 +345,7 @@ impl<'a, F, M, T, R: Renderer> Body<'a, M, T, R, F> where
     }
     None
   }
+
   /// Gets the row for `y` position relative to this table, or `None` if there is now row at `y`.
   fn row_at(&self, y: f32) -> Option<usize> {
     if y < 0.0 { return None; } // Out of bounds
@@ -340,6 +361,7 @@ impl<'a, F, M, T, R: Renderer> Body<'a, M, T, R, F> where
       }
     }
   }
+
   /// Gets the column and bounds (retrieved from the layout of the phantom row) for `x` position relative to this table, or
   /// `None` if there is no column at `x`.
   fn col_and_bounds_at(&self, x: f32, layout: Layout) -> Option<(usize, Rectangle)> {
@@ -354,6 +376,7 @@ impl<'a, F, M, T, R: Renderer> Body<'a, M, T, R, F> where
     }
     None
   }
+
   /// Gets cell bounds (retrieved from the layout of the phantom row) from the `layout` of this table.
   #[inline]
   fn get_cell_bounds(layout: Layout) -> impl Iterator<Item=Rectangle> + '_ {
