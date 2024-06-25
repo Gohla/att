@@ -17,6 +17,7 @@ use crate::app::{App, Flags};
 use crate::widget::icon;
 
 pub mod widget;
+pub mod perform;
 pub mod update;
 pub mod app;
 

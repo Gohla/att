@@ -10,7 +10,7 @@ use att_client::http_client::AttHttpClient;
 use att_core::users::UserCredentials;
 
 use crate::app::follow_crates::FollowCratesComponent;
-use crate::update::Perform;
+use crate::perform::PerformExt;
 use crate::widget::builder::WidgetBuilder;
 use crate::widget::dark_light_toggle::light_dark_toggle;
 

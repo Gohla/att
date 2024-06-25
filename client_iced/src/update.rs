@@ -4,6 +4,8 @@ use iced::Task;
 
 use att_core::util::maybe_send::MaybeSend;
 
+use crate::perform::PerformExt;
+
 /// Update received from components.
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
 pub struct Update<A = (), C = ()> {
@@ -46,7 +48,7 @@ impl<A: Default, M: 'static> Update<A, Task<M>> {
     future: impl Future<Output=T> + MaybeSend + 'static,
     f: impl FnOnce(T) -> M + MaybeSend + 'static,
   ) -> Self {
-    Self::from_task(perform(future, f))
+    Self::from_task(future.perform(f))
   }
 }
 
@@ -88,67 +90,4 @@ impl<A, M> Update<A, Task<M>> {
   {
     Update::new(self.action, self.task.map(f))
   }
-}
-
-
-pub trait Perform<T, M> {
-  fn perform(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M>;
-}
-impl<T, M, F> Perform<T, M> for F where
-  T: 'static,
-  M: 'static,
-  F: Future<Output=T> + MaybeSend + 'static,
-{
-  fn perform(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M> {
-    perform(self, f)
-  }
-}
-
-pub trait PerformResult<T, M> {
-  fn perform_or_default(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M>;
-}
-impl<T, E, M, F> PerformResult<T, M> for F where
-  Result<T, E>: MaybeSend + 'static,
-  M: Default + 'static,
-  F: Future<Output=Result<T, E>> + MaybeSend + 'static,
-{
-  fn perform_or_default(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M> {
-    perform(self, |r| r.map(f).unwrap_or_default())
-  }
-}
-
-pub trait PerformInto<T, M> {
-  fn perform_into(self, into_message: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M>;
-}
-impl<T, M, F> PerformInto<T, M> for F where
-  T: From<F::Output> + MaybeSend + 'static,
-  M: 'static,
-  F: Future + MaybeSend + 'static,
-{
-  fn perform_into(self, into_message: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M> {
-    perform(self, |future| into_message(future.into()))
-  }
-}
-pub trait OptPerformInto<T, M> {
-  fn opt_perform_into(self, into_message: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M>;
-}
-impl<T, M, F> OptPerformInto<T, M> for Option<F> where
-  T: From<F::Output>,
-  M: 'static,
-  F: Future + MaybeSend + 'static,
-{
-  fn opt_perform_into(self, into_message: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M> {
-    match self {
-      None => Task::none(),
-      Some(future) => perform(future, |output| into_message(output.into())),
-    }
-  }
-}
-
-fn perform<O: 'static, T: 'static>(
-  future: impl Future<Output=O> + MaybeSend + 'static,
-  f: impl FnOnce(O) -> T + MaybeSend + 'static,
-) -> Task<T> {
-  use iced::futures::FutureExt;
-  Task::future(future.map(f))
 }

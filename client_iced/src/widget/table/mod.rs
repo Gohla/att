@@ -126,7 +126,7 @@ impl<'a, F, M, T, R> Into<Element<'a, M, T, R>> for Table<'a, M, T, R, F> where
     let body = Body::new(self.spacing, column_count, self.body_row_height, self.body_row_count, cell_to_element, phantom_row.into());
     let body = Scrollable::new(body);
 
-    Column::with_children(vec![header.into(), body.into()])
+    Column::from_vec(vec![header.into(), body.into()])
       .spacing(self.spacing)
       .width(self.width)
       .height(self.height)
