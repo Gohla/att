@@ -7,8 +7,8 @@ publish.workspace = true
 [dependencies]
 att_core = { workspace = true, features = ["app_env", "app_tracing_all", "app_storage", "app_storage_json", "serde", "crates_io_api", "http_status_code"] }
 axum = "0.7"
-axum-login = "0.12"
-tower-sessions = "0.9"
+axum-login = "0.15"
+tower-sessions = "0.12"
 tower-http = { version = "0.5", features = ["trace"] }
 tokio = { workspace = true, features = ["rt-multi-thread", "time", "macros", "signal"] }
 futures.workspace = true
