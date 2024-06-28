@@ -1,11 +1,12 @@
 use std::iter;
+
 use iced::{Element, Task};
 use iced::widget::Row;
 use tracing::instrument;
 
 use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesData, FollowCratesResponse};
 use att_client::http_client::AttHttpClient;
-use att_core::collection::{Action, ActionStyle, Collection};
+use att_core::collection::Collection;
 use att_core::crates::Crate;
 use att_core::table::AsTableRow;
 use iced_builder::WidgetBuilder;
@@ -15,7 +16,6 @@ use crate::app::search_crates::SearchCratesComponent;
 use crate::perform::PerformExt;
 use crate::update::Update;
 use crate::widget::constrained_row::Constraint;
-use crate::widget::icon::icon_text;
 use crate::widget::modal::Modal;
 use crate::widget::table::Table;
 use crate::widget::WidgetExt;
@@ -85,20 +85,8 @@ impl FollowCratesComponent {
       }
 
       let action_index = col - Crate::COLUMNS.len();
-      let element = if let Some((action_def, action)) = self.follow_crates.item_action_with_definition(action_index, krate) {
-        let button = WidgetBuilder::once()
-          .button(icon_text(action_def.text))
-          .padding(4.0)
-          .disabled(action.is_disabled())
-          .on_press(move || Message::SendRequest(action.request()))
-          ;
-        let button = match action_def.style {
-          ActionStyle::Primary => button.primary_style(),
-          ActionStyle::Secondary => button.secondary_style(),
-          ActionStyle::Success => button.success_style(),
-          ActionStyle::Danger => button.danger_style(),
-        };
-        button.add()
+      let element = if let Some(action) = self.follow_crates.item_action_with_definition(action_index, krate) {
+        action.into_element().map(Message::SendRequest)
       } else {
         return None
       };
@@ -117,12 +105,8 @@ impl FollowCratesComponent {
     let table = table.into_element();
 
     let custom_button = WidgetBuilder::once().button("Add").success_style().on_press(|| Message::OpenSearchCratesModal).add();
-    let action_buttons = self.follow_crates.actions_with_definitions().map(|(action_def, action)| WidgetBuilder::once()
-      .button(action_def.text)
-      .disabled(action.is_disabled())
-      .on_press(move || Message::SendRequest(action.request()))
-      .add()
-    );
+    let action_buttons = self.follow_crates.actions_with_definitions()
+      .map(|action| action.into_element().map(Message::SendRequest));
     let buttons: Vec<_> = iter::once(custom_button).chain(action_buttons).collect();
 
     let content = WidgetBuilder::stack()

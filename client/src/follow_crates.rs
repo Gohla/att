@@ -224,7 +224,9 @@ struct CollectionAction {
   disabled: bool,
 }
 
-impl Action<FollowCrateRequest> for CollectionAction {
+impl Action for CollectionAction {
+  type Request = FollowCrateRequest;
+
   #[inline]
   fn is_disabled(&self) -> bool { self.disabled }
 
@@ -249,7 +251,9 @@ struct ItemAction<'i> {
   crate_id: &'i str,
 }
 
-impl Action<FollowCrateRequest> for ItemAction<'_> {
+impl Action for ItemAction<'_> {
+  type Request = FollowCrateRequest;
+
   #[inline]
   fn is_disabled(&self) -> bool { self.disabled }
 
@@ -272,7 +276,7 @@ impl Collection for FollowCrates {
     ACTION_DEFS
   }
 
-  fn actions(&self) -> impl IntoIterator<Item=impl Action<Self::Request>> {
+  fn actions(&self) -> impl IntoIterator<Item=impl Action<Request=Self::Request>> {
     let disabled = self.are_all_crates_being_modified();
     [
       CollectionAction { kind: CollectionActionKind::RefreshOutdated, disabled },
@@ -285,15 +289,16 @@ impl Collection for FollowCrates {
 
   #[inline]
   fn item_action_definitions(&self) -> &[ActionDef] {
+    const ICON_FONT: &'static str = "bootstrap-icons";
     const ACTION_DEFS: &'static [ActionDef] = &[
-      ActionDef::from_text("\u{F116}"),
-      ActionDef::from_text("\u{F5DE}").with_danger_style(),
+      ActionDef::from_icon_font("\u{F116}", ICON_FONT),
+      ActionDef::from_icon_font("\u{F5DE}", ICON_FONT).with_danger_style(),
     ];
     ACTION_DEFS
   }
 
   #[inline]
-  fn item_action<'i>(&self, index: usize, data: &'i Self::Item) -> Option<impl Action<Self::Request> + 'i> {
+  fn item_action<'i>(&self, index: usize, data: &'i Self::Item) -> Option<impl Action<Request=Self::Request> + 'i> {
     let crate_id = &data.id;
     let disabled = self.is_crate_being_modified(crate_id);
     let action = match index {

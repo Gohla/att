@@ -77,7 +77,7 @@ impl<E> WidgetBuilder<HeapList<E>> {
 impl<E> WidgetBuilder<PhantomData<E>> {
   /// Create a new widget builder that can only be used once to build a single widget.
   pub fn once() -> Self {
-    Self(PhantomData::default())
+    Self(PhantomData)
   }
 }
 
