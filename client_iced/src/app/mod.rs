@@ -5,7 +5,7 @@ use iced_winit::Program;
 use tracing::error;
 
 use att_client::auth::{Auth, LoggedIn};
-use att_client::Data;
+use att_client::{Data, DataRef};
 use att_client::http_client::AttHttpClient;
 use att_core::users::UserCredentials;
 use iced_builder::WidgetBuilder;
@@ -17,7 +17,7 @@ use crate::widget::dark_light_toggle::light_dark_toggle;
 pub mod search_crates;
 pub mod follow_crates;
 
-pub type SaveFn = Box<dyn FnMut(&Data) -> Result<(), Box<dyn Error>> + 'static>;
+pub type SaveFn = Box<dyn for<'a> FnMut(DataRef<'a>) -> Result<(), Box<dyn Error>> + 'static>;
 
 pub struct Flags {
   pub http_client: AttHttpClient,
@@ -30,7 +30,6 @@ pub struct App {
   save_fn: SaveFn,
   follow_crates: FollowCratesComponent,
   auth: Auth,
-  data: Data,
   dark_mode: bool,
 }
 
@@ -55,9 +54,8 @@ impl Program for App {
 
     let app = App {
       save_fn: flags.save_fn,
-      follow_crates: FollowCratesComponent::new(flags.http_client),
+      follow_crates: FollowCratesComponent::new(flags.http_client, flags.data.follow_crates),
       auth,
-      data: flags.data,
       dark_mode: flags.dark_mode,
     };
     let command = Task::batch([login_command]);
@@ -68,14 +66,17 @@ impl Program for App {
     use Message::*;
     match message {
       ToFollowCrates(message) => {
-        return self.follow_crates.update(message, self.data.crates_mut()).into_task().map(ToFollowCrates);
+        return self.follow_crates.update(message).into_task().map(ToFollowCrates);
       }
       Login(response) => if self.auth.process_logged_in(response).is_ok() {
         return self.follow_crates.request_followed_crates().map(ToFollowCrates);
       }
       ToggleLightDarkMode => { self.dark_mode = !self.dark_mode; }
       Exit(window_id) => {
-        if let Err(cause) = (self.save_fn)(&self.data) {
+        let data = DataRef {
+          follow_crates: self.follow_crates.state(),
+        };
+        if let Err(cause) = (self.save_fn)(data) {
           error!(%cause, "failed to save data: {cause:?}");
         }
         return window::close(window_id);
@@ -102,7 +103,7 @@ impl Program for App {
       .add_element(light_dark_toggle(self.dark_mode, || Message::ToggleLightDarkMode))
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)
-      .add_element(self.follow_crates.view(self.data.crates()).map(Message::ToFollowCrates))
+      .add_element(self.follow_crates.view().map(Message::ToFollowCrates))
       .column().spacing(10.0).padding(10).fill().add()
       .take()
   }

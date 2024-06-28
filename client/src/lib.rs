@@ -1,19 +1,18 @@
 use serde::{Deserialize, Serialize};
 
-use follow_crates::FollowCratesData;
+use follow_crates::FollowCratesState;
 
 pub mod http_client;
 pub mod auth;
 pub mod follow_crates;
 pub mod search_crates;
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Debug, Deserialize)]
 pub struct Data {
-  crates: FollowCratesData,
+  pub follow_crates: FollowCratesState,
 }
-impl Data {
-  #[inline]
-  pub fn crates(&self) -> &FollowCratesData { &self.crates }
-  #[inline]
-  pub fn crates_mut(&mut self) -> &mut FollowCratesData { &mut self.crates }
+
+#[derive(Debug, Serialize)]
+pub struct DataRef<'a> {
+  pub follow_crates: &'a FollowCratesState,
 }

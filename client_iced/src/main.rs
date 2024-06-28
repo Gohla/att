@@ -6,6 +6,7 @@ use iced::window;
 use iced::window::settings::PlatformSpecific;
 use iced_winit::program::run;
 use iced_winit::Settings;
+use att_client::DataRef;
 
 use att_client::http_client::AttHttpClient;
 use att_core::app::env;
@@ -29,8 +30,8 @@ fn main() -> Result<(), Box<dyn Error>> {
     .build();
 
   let data = storage.deserialize_json_file(DirectoryKind::Data, "data.json")?.unwrap_or_default();
-  let save_fn = Box::new(move |data: &_| {
-    storage.serialize_json_file(DirectoryKind::Data, "data.json", data)?;
+  let save_fn = Box::new(move |data: DataRef| {
+    storage.serialize_json_file(DirectoryKind::Data, "data.json", &data)?;
     Ok(())
   });
 

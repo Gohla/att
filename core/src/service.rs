@@ -47,8 +47,9 @@ impl ActionDef {
 }
 
 pub trait Action {
-  type Request;
   fn is_disabled(&self) -> bool;
+
+  type Request;
   fn request(&self) -> Self::Request;
 }
 
@@ -56,17 +57,19 @@ pub struct ActionWithDef<'a, A> {
   pub definition: &'a ActionDef,
   pub action: A,
 }
-
-impl<'a, A: Action + 'a> From<(&'a ActionDef, A)> for ActionWithDef<'a, A> {
+impl<'a, A: Action> From<(&'a ActionDef, A)> for ActionWithDef<'a, A> {
   #[inline]
   fn from((definition, action): (&'a ActionDef, A)) -> Self {
     ActionWithDef { definition, action }
   }
 }
 
-
-
-pub trait Collection {
+/// Service that sends requests and processes responses for a collection of data.
+///
+/// A service has [service-wide actions](Self::actions) and [data-specific actions](Self::data_actions) that produce a
+/// [`Request`](Self::Request). Requests are [sent](Self::send), creating a future that returns a
+/// [`Response`](Self::Response) on completion. Responses must be [processed](Self::process).
+pub trait Service {
   fn action_definitions(&self) -> &[ActionDef];
 
   fn actions(&self) -> impl IntoIterator<Item=impl Action<Request=Self::Request>>;
@@ -77,15 +80,15 @@ pub trait Collection {
   }
 
 
-  type Item;
+  type Data;
 
-  fn item_action_definitions(&self) -> &[ActionDef];
+  fn data_action_definitions(&self) -> &[ActionDef];
 
-  fn item_action<'i>(&self, index: usize, item: &'i Self::Item) -> Option<impl Action<Request=Self::Request> + 'i>;
+  fn data_action<'d>(&self, index: usize, data: &'d Self::Data) -> Option<impl Action<Request=Self::Request> + 'd>;
 
   #[inline]
-  fn item_action_with_definition<'i>(&self, index: usize, item: &'i Self::Item) -> Option<ActionWithDef<impl Action<Request=Self::Request> + 'i>> {
-    match (self.item_action_definitions().get(index), self.item_action(index, item)) {
+  fn data_action_with_definition<'d>(&self, index: usize, data: &'d Self::Data) -> Option<ActionWithDef<impl Action<Request=Self::Request> + 'd>> {
+    match (self.data_action_definitions().get(index), self.data_action(index, data)) {
       (Some(definition), Some(action)) => Some(ActionWithDef { definition, action }),
       _ => None
     }
@@ -97,10 +100,8 @@ pub trait Collection {
 
   /// Send `request`, creating a future that produces a response when completed. The response must be
   /// [processed](Self::process).
-  fn send(&mut self, request: Self::Request) -> impl MaybeSendFuture<'static, Output=Self::Response>;
+  fn send(&mut self, request: Self::Request) -> impl MaybeSendFuture<'static, Output=Self::Response> + 'static;
 
-  type Data;
-
-  /// Process `response` that a future, created by [send](Self::send), returned on completion.
-  fn process(&mut self, data: &mut Self::Data, response: Self::Response);
+  /// Process `response` (that a future, created by [send](Self::send), returned on completion) into `self`.
+  fn process(&mut self, response: Self::Response);
 }

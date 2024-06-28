@@ -4,9 +4,9 @@ use iced::{Element, Task};
 use iced::widget::Row;
 use tracing::instrument;
 
-use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesData, FollowCratesResponse};
+use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesState, FollowCratesResponse};
 use att_client::http_client::AttHttpClient;
-use att_core::collection::Collection;
+use att_core::service::Service;
 use att_core::crates::Crate;
 use att_core::table::AsTableRow;
 use iced_builder::WidgetBuilder;
@@ -36,12 +36,16 @@ pub enum Message {
 }
 
 impl FollowCratesComponent {
-  pub fn new(http_client: AttHttpClient) -> Self {
+  pub fn new(http_client: AttHttpClient, state: FollowCratesState) -> Self {
     Self {
-      follow_crates: FollowCrates::new(http_client.clone()),
+      follow_crates: FollowCrates::new(http_client.clone(), state),
       search_crates: SearchCratesComponent::new(http_client, "Follow"),
       search_crates_modal_open: false,
     }
+  }
+
+  pub fn state(&self) -> &FollowCratesState {
+    self.follow_crates.state()
   }
 
   pub fn request_followed_crates(&mut self) -> Task<Message> {
@@ -49,7 +53,7 @@ impl FollowCratesComponent {
   }
 
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message, data: &mut FollowCratesData) -> Update<(), Task<Message>> {
+  pub fn update(&mut self, message: Message) -> Update<(), Task<Message>> {
     use Message::*;
     match message {
       ToSearchCrates(message) => {
@@ -72,20 +76,20 @@ impl FollowCratesComponent {
         self.search_crates_modal_open = false;
       }
       SendRequest(request) => return self.follow_crates.send(request).perform(ProcessResponse).into(),
-      ProcessResponse(response) => self.follow_crates.process(response, data),
+      ProcessResponse(response) => self.follow_crates.process(response),
     }
     Update::default()
   }
 
-  pub fn view<'a>(&'a self, data: &'a FollowCratesData) -> Element<'a, Message> {
+  pub fn view(&self) -> Element<Message> {
     let cell_to_element = |row, col| -> Option<Element<Message>> {
-      let Some(krate) = data.followed_crates().nth(row) else { return None; };
+      let Some(krate) = self.follow_crates.followed_crates().nth(row) else { return None; };
       if let Some(text) = krate.cell(col as u8) {
         return Some(WidgetBuilder::once().add_text(text))
       }
 
       let action_index = col - Crate::COLUMNS.len();
-      let element = if let Some(action) = self.follow_crates.item_action_with_definition(action_index, krate) {
+      let element = if let Some(action) = self.follow_crates.data_action_with_definition(action_index, krate) {
         action.into_element().map(Message::SendRequest)
       } else {
         return None
@@ -95,11 +99,11 @@ impl FollowCratesComponent {
     let mut table = Table::with_capacity(5, cell_to_element)
       .spacing(1.0)
       .body_row_height(24.0)
-      .body_row_count(data.num_followed_crates());
+      .body_row_count(self.follow_crates.num_followed_crates());
     for column in Crate::COLUMNS {
       table = table.push(Constraint::new(column.width_fill_portion, column.horizontal_alignment.into(), column.vertical_alignment.into()), column.header)
     }
-    for _ in self.follow_crates.item_action_definitions() {
+    for _ in self.follow_crates.data_action_definitions() {
       table = table.push(0.2, "");
     }
     let table = table.into_element();

@@ -3,7 +3,7 @@ use iced::alignment::{Alignment, Horizontal, Vertical};
 
 use iced_builder::WidgetBuilder;
 
-use crate::collection::{Action, ActionStyle, ActionWithDef};
+use crate::service::{Action, ActionStyle, ActionWithDef};
 
 impl From<crate::table::Alignment> for Alignment {
   fn from(alignment: crate::table::Alignment) -> Self {
