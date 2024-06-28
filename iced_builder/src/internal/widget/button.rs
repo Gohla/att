@@ -89,8 +89,8 @@ impl<'a, S, FP> CreateButton<'a, S> for ButtonFunctions<FP> where
     modify: impl FnOnce(Btn<'a, S, Self::Message>) -> Btn<'a, S, Self::Message>,
   ) -> Elem<'a, S> {
     let button = Button::new(content);
-    let button = modify(button);
     let button = button.on_press(());
+    let button = modify(button);
     Element::new(button).map(move |_| (self.on_press)())
   }
 }

@@ -5,6 +5,7 @@ use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
+use att_core::collection::{Action, ActionDef, Collection};
 use att_core::crates::{Crate, CrateSearchQuery};
 use att_core::util::maybe_send::MaybeSendFuture;
 
@@ -44,8 +45,8 @@ impl FollowCrates {
     self.all_crates_being_modified || self.crates_being_modified.contains(crate_id)
   }
   #[inline]
-  pub fn is_any_crate_being_modified(&self) -> bool {
-    self.all_crates_being_modified || !self.crates_being_modified.is_empty()
+  pub fn are_all_crates_being_modified(&self) -> bool {
+    self.all_crates_being_modified
   }
 
   pub fn get_followed(&mut self) -> impl Future<Output=UpdateAll<true>> {
@@ -153,7 +154,7 @@ pub struct Unfollow {
 
 
 /// Follow crate requests in message form.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum FollowCrateRequest {
   GetFollowed,
   Follow(String),
@@ -209,5 +210,114 @@ impl FollowCrates {
       FollowCratesResponse::SetAll(r) => { let _ = self.process_update_all(r, data); }
       FollowCratesResponse::Unfollow(r) => { let _ = self.process_unfollow(r, data); }
     }
+  }
+}
+
+
+enum CollectionActionKind {
+  RefreshOutdated,
+  RefreshAll,
+}
+
+struct CollectionAction {
+  kind: CollectionActionKind,
+  disabled: bool,
+}
+
+impl Action<FollowCrateRequest> for CollectionAction {
+  #[inline]
+  fn is_disabled(&self) -> bool { self.disabled }
+
+  #[inline]
+  fn request(&self) -> FollowCrateRequest {
+    match self.kind {
+      CollectionActionKind::RefreshOutdated => FollowCrateRequest::RefreshOutdated,
+      CollectionActionKind::RefreshAll => FollowCrateRequest::RefreshAll,
+    }
+  }
+}
+
+
+enum ItemActionKind {
+  Refresh,
+  Unfollow,
+}
+
+struct ItemAction<'i> {
+  kind: ItemActionKind,
+  disabled: bool,
+  crate_id: &'i str,
+}
+
+impl Action<FollowCrateRequest> for ItemAction<'_> {
+  #[inline]
+  fn is_disabled(&self) -> bool { self.disabled }
+
+  #[inline]
+  fn request(&self) -> FollowCrateRequest {
+    match self.kind {
+      ItemActionKind::Refresh => FollowCrateRequest::Refresh(self.crate_id.to_string()),
+      ItemActionKind::Unfollow => FollowCrateRequest::Unfollow(self.crate_id.to_string()),
+    }
+  }
+}
+
+
+impl Collection for FollowCrates {
+  fn action_definitions(&self) -> &[ActionDef] {
+    const ACTION_DEFS: &'static [ActionDef] = &[
+      ActionDef::from_text("Refresh Outdated"),
+      ActionDef::from_text("Refresh All"),
+    ];
+    ACTION_DEFS
+  }
+
+  fn actions(&self) -> impl IntoIterator<Item=impl Action<Self::Request>> {
+    let disabled = self.are_all_crates_being_modified();
+    [
+      CollectionAction { kind: CollectionActionKind::RefreshOutdated, disabled },
+      CollectionAction { kind: CollectionActionKind::RefreshAll, disabled },
+    ]
+  }
+
+
+  type Item = Crate;
+
+  #[inline]
+  fn item_action_definitions(&self) -> &[ActionDef] {
+    const ACTION_DEFS: &'static [ActionDef] = &[
+      ActionDef::from_text("\u{F116}"),
+      ActionDef::from_text("\u{F5DE}").with_danger_style(),
+    ];
+    ACTION_DEFS
+  }
+
+  #[inline]
+  fn item_action<'i>(&self, index: usize, data: &'i Self::Item) -> Option<impl Action<Self::Request> + 'i> {
+    let crate_id = &data.id;
+    let disabled = self.is_crate_being_modified(crate_id);
+    let action = match index {
+      0 => ItemAction { kind: ItemActionKind::Refresh, disabled, crate_id },
+      1 => ItemAction { kind: ItemActionKind::Unfollow, disabled, crate_id },
+      _ => return None,
+    };
+    Some(action)
+  }
+
+
+  type Request = FollowCrateRequest;
+
+  type Response = FollowCratesResponse;
+
+  #[inline]
+  fn send(&mut self, request: Self::Request) -> impl MaybeSendFuture<'static, Output=Self::Response> {
+    self.send(request)
+  }
+
+  type Data = FollowCratesData;
+
+  #[inline]
+  fn process(&mut self, data: &mut Self::Data, response: Self::Response) {
+    self.process(response, data)
   }
 }

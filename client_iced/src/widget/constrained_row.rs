@@ -5,14 +5,6 @@ use iced::advanced::widget::{Operation, Tree};
 use iced::event::Status;
 use iced::mouse::{Cursor, Interaction};
 
-/// A row where [constraints](Constraint) are applied to each element in the row.
-pub struct ConstrainedRow<'a, M, T, R> {
-  spacing: f32,
-  height: f32,
-  constraints: Vec<Constraint>,
-  elements: Vec<Element<'a, M, T, R>>,
-}
-
 /// A constraint to apply to an element in a [constrained row](ConstrainedRow).
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Constraint {
@@ -20,6 +12,13 @@ pub struct Constraint {
   horizontal_alignment: Alignment,
   vertical_alignment: Alignment,
 }
+
+impl Constraint {
+  pub fn new(width_fill_portion: f32, horizontal_alignment: Alignment, vertical_alignment: Alignment) -> Self {
+    Self { width_fill_portion, horizontal_alignment, vertical_alignment }
+  }
+}
+
 impl Default for Constraint {
   fn default() -> Self {
     Self {
@@ -29,15 +28,26 @@ impl Default for Constraint {
     }
   }
 }
+
 impl From<f32> for Constraint {
   fn from(width_fill_portion: f32) -> Self {
     Self { width_fill_portion, ..Self::default() }
   }
 }
+
 impl From<u32> for Constraint {
   fn from(width_fill_portion: u32) -> Self {
     Self::from(width_fill_portion as f32)
   }
+}
+
+
+/// A row where [constraints](Constraint) are applied to each element in the row.
+pub struct ConstrainedRow<'a, M, T, R> {
+  spacing: f32,
+  height: f32,
+  constraints: Vec<Constraint>,
+  elements: Vec<Element<'a, M, T, R>>,
 }
 
 impl<'a, M, T, R> ConstrainedRow<'a, M, T, R> {
@@ -47,6 +57,7 @@ impl<'a, M, T, R> ConstrainedRow<'a, M, T, R> {
   pub fn new() -> Self {
     Self::with_constraints_and_elements(Vec::new(), Vec::new())
   }
+
   /// Creates a new constrained row with `constraints` for widths and alignments of `elements`.
   ///
   /// If `constraints` is not the same size as `elements`, `constraints` will be resized to be the same size as
@@ -63,22 +74,26 @@ impl<'a, M, T, R> ConstrainedRow<'a, M, T, R> {
       elements,
     }
   }
+
   /// Creates a new constrained row without any constraints and elements, but reserves `capacity` in the constraints and
   /// elements [`Vec`]s.
   pub fn with_capacity(capacity: usize) -> Self {
     Self::with_constraints_and_elements(Vec::with_capacity(capacity), Vec::with_capacity(capacity))
   }
 
+
   /// Sets the horizontal `spacing` _between_ elements of the row.
   pub fn spacing(mut self, spacing: f32) -> Self {
     self.spacing = spacing;
     self
   }
+
   /// Sets the `height` of the row.
   pub fn height(mut self, height: f32) -> Self {
     self.height = height;
     self
   }
+
 
   /// Appends `constraint` and `element` to the constraints and elements of the row.
   pub fn push(mut self, constraint: impl Into<Constraint>, element: impl Into<Element<'a, M, T, R>>) -> Self {

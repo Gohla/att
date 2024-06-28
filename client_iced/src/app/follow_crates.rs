@@ -1,14 +1,20 @@
+use std::iter;
 use iced::{Element, Task};
+use iced::widget::Row;
 use tracing::instrument;
 
 use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesData, FollowCratesResponse};
 use att_client::http_client::AttHttpClient;
+use att_core::collection::{Action, ActionStyle, Collection};
+use att_core::crates::Crate;
+use att_core::table::AsTableRow;
 use iced_builder::WidgetBuilder;
 
 use crate::app::search_crates;
 use crate::app::search_crates::SearchCratesComponent;
 use crate::perform::PerformExt;
 use crate::update::Update;
+use crate::widget::constrained_row::Constraint;
 use crate::widget::icon::icon_text;
 use crate::widget::modal::Modal;
 use crate::widget::table::Table;
@@ -74,50 +80,54 @@ impl FollowCratesComponent {
   pub fn view<'a>(&'a self, data: &'a FollowCratesData) -> Element<'a, Message> {
     let cell_to_element = |row, col| -> Option<Element<Message>> {
       let Some(krate) = data.followed_crates().nth(row) else { return None; };
-      match col {
-        1 => return Some(WidgetBuilder::once().add_text(&krate.max_version)),
-        2 => return Some(WidgetBuilder::once().add_text(krate.updated_at.format("%Y-%m-%d").to_string())),
-        3 => return Some(WidgetBuilder::once().add_text(format!("{}", krate.downloads))),
-        _ => {}
+      if let Some(text) = krate.cell(col as u8) {
+        return Some(WidgetBuilder::once().add_text(text))
       }
-      let crate_id = &krate.id;
-      let element = match col {
-        0 => WidgetBuilder::once().add_text(crate_id),
-        4 => WidgetBuilder::once()
-          .button(icon_text("\u{F116}"))
+
+      let action_index = col - Crate::COLUMNS.len();
+      let element = if let Some((action_def, action)) = self.follow_crates.item_action_with_definition(action_index, krate) {
+        let button = WidgetBuilder::once()
+          .button(icon_text(action_def.text))
           .padding(4.0)
-          .on_press(|| Message::SendRequest(FollowCrateRequest::Refresh(crate_id.clone())))
-          .disabled(self.follow_crates.is_crate_being_modified(crate_id))
-          .add(),
-        5 => WidgetBuilder::once()
-          .button(icon_text("\u{F5DE}"))
-          .danger_style()
-          .padding(4.0)
-          .on_press(|| Message::SendRequest(FollowCrateRequest::Unfollow(crate_id.clone())))
-          .disabled(self.follow_crates.is_crate_being_modified(crate_id))
-          .add(),
-        _ => return None,
+          .disabled(action.is_disabled())
+          .on_press(move || Message::SendRequest(action.request()))
+          ;
+        let button = match action_def.style {
+          ActionStyle::Primary => button.primary_style(),
+          ActionStyle::Secondary => button.secondary_style(),
+          ActionStyle::Success => button.success_style(),
+          ActionStyle::Danger => button.danger_style(),
+        };
+        button.add()
+      } else {
+        return None
       };
       Some(element)
     };
-    let table = Table::with_capacity(5, cell_to_element)
+    let mut table = Table::with_capacity(5, cell_to_element)
       .spacing(1.0)
       .body_row_height(24.0)
-      .body_row_count(data.num_followed_crates())
-      .push(2, "Name")
-      .push(1, "Latest Version")
-      .push(1, "Updated at")
-      .push(1, "Downloads")
-      .push(0.2, "")
-      .push(0.2, "")
-      .into_element();
+      .body_row_count(data.num_followed_crates());
+    for column in Crate::COLUMNS {
+      table = table.push(Constraint::new(column.width_fill_portion, column.horizontal_alignment.into(), column.vertical_alignment.into()), column.header)
+    }
+    for _ in self.follow_crates.item_action_definitions() {
+      table = table.push(0.2, "");
+    }
+    let table = table.into_element();
 
-    let disable_refresh = self.follow_crates.is_any_crate_being_modified();
+    let custom_button = WidgetBuilder::once().button("Add").success_style().on_press(|| Message::OpenSearchCratesModal).add();
+    let action_buttons = self.follow_crates.actions_with_definitions().map(|(action_def, action)| WidgetBuilder::once()
+      .button(action_def.text)
+      .disabled(action.is_disabled())
+      .on_press(move || Message::SendRequest(action.request()))
+      .add()
+    );
+    let buttons: Vec<_> = iter::once(custom_button).chain(action_buttons).collect();
+
     let content = WidgetBuilder::stack()
       .text("Followed Crates").size(20.0).add()
-      .button("Add").success_style().on_press(|| Message::OpenSearchCratesModal).add()
-      .button("Refresh Outdated").on_press(|| Message::SendRequest(FollowCrateRequest::RefreshOutdated)).disabled(disable_refresh).add()
-      .button("Refresh All").on_press(|| Message::SendRequest(FollowCrateRequest::RefreshAll)).disabled(disable_refresh).add()
+      .add_element(Row::from_vec(buttons).spacing(5.0))
       .add_space_fill_width()
       .row().spacing(10.0).align_center().fill_width().add()
       .add_horizontal_rule(1.0)

@@ -11,6 +11,9 @@
 # Cargo
 /target
 
+# Rust
+rust-ice-*.txt
+
 # Trunk
 /client_iced/dist
 

@@ -1,12 +1,17 @@
+use std::borrow::Cow;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::table::{AsTableRow, Column};
 
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct CrateSearchQuery {
   pub search_term: Option<String>,
   pub followed: bool,
 }
+
 impl CrateSearchQuery {
   #[inline]
   pub fn from_term(search_term: String) -> Self { Self { search_term: Some(search_term), ..Self::default() } }
@@ -27,6 +32,7 @@ impl CrateSearchQuery {
     !self.followed
   }
 }
+
 impl From<String> for CrateSearchQuery {
   fn from(search_term: String) -> Self {
     Self::from_term(search_term)
@@ -41,9 +47,30 @@ pub struct Crate {
   pub updated_at: DateTime<Utc>,
   pub max_version: String,
 }
+
 impl Crate {
   pub fn from_id(id: String) -> Self {
     Self { id, ..Self::default() }
+  }
+}
+
+impl AsTableRow for Crate {
+  const COLUMNS: &'static [Column] = &[
+    Column::with_default_alignment("Name", 2.0),
+    Column::with_default_alignment("Last Version", 1.0),
+    Column::with_default_alignment("Updated At", 1.0),
+    Column::with_default_alignment("Downloads", 1.0),
+  ];
+
+  fn cell(&self, column_index: u8) -> Option<Cow<str>> {
+    let str = match column_index {
+      0 => Cow::from(&self.id),
+      1 => Cow::from(&self.max_version),
+      2 => Cow::from(self.updated_at.format("%Y-%m-%d").to_string()),
+      3 => Cow::from(format!("{}", self.downloads)),
+      _ => return None,
+    };
+    Some(str)
   }
 }
 
@@ -61,6 +88,7 @@ pub mod crates_io {
       }
     }
   }
+
   impl From<&crates_io_api::Crate> for Crate {
     fn from(c: &crates_io_api::Crate) -> Self {
       Self {
