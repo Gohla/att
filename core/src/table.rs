@@ -11,18 +11,6 @@ pub enum Alignment {
   End,
 }
 
-#[cfg(feature = "iced")]
-impl From<Alignment> for iced::Alignment {
-  fn from(alignment: Alignment) -> Self {
-    match alignment {
-      Alignment::Start => iced::Alignment::Start,
-      Alignment::Center => iced::Alignment::Center,
-      Alignment::End => iced::Alignment::End,
-    }
-  }
-}
-
-
 #[derive(Default, Clone, Copy, PartialEq, PartialOrd, Debug)]
 pub struct Column {
   pub header: &'static str,

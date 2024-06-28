@@ -24,5 +24,3 @@ impl<'a, M, T, R, W> WidgetExt<'a, M, T, R> for W where
     self.into()
   }
 }
-
-
