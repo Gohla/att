@@ -4,15 +4,15 @@ use iced::{Element, Event, event, executor, Subscription, Task, window};
 use iced_winit::Program;
 use tracing::error;
 
-use att_client::auth::{Auth, LoggedIn};
 use att_client::{Data, DataRef};
+use att_client::auth::{Auth, LoggedIn};
 use att_client::http_client::AttHttpClient;
 use att_core::users::UserCredentials;
 use iced_builder::WidgetBuilder;
 
 use crate::app::follow_crates::FollowCratesComponent;
 use crate::perform::PerformExt;
-use crate::widget::dark_light_toggle::light_dark_toggle;
+use crate::widget::icon::icon_button;
 
 pub mod search_crates;
 pub mod follow_crates;
@@ -118,4 +118,9 @@ impl Program for App {
       true => iced::Theme::Dark,
     }
   }
+}
+
+fn light_dark_toggle<'a, M: 'a>(dark_mode_enabled: bool, on_press: impl Fn() -> M + 'a) -> Element<'a, M> {
+  let icon = if dark_mode_enabled { "\u{f5a2}" } else { "\u{f496}" };
+  icon_button(icon, on_press)
 }

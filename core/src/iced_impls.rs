@@ -14,7 +14,11 @@ use crate::table::AsTableRow;
 trait IntoElement<'a, M, T, R> {
   fn into_element(self) -> Element<'a, M, T, R>;
 }
-impl<'a, M: 'a, T, R: Renderer + 'a, I: Into<Element<'a, M, T, R>>> IntoElement<'a, M, T, R> for I {
+impl<'a, M, T, R, I> IntoElement<'a, M, T, R> for I where
+  M: 'a,
+  R: Renderer + 'a,
+  I: Into<Element<'a, M, T, R>>
+{
   #[inline]
   fn into_element(self) -> Element<'a, M, T, R> { self.into() }
 }
@@ -29,9 +33,7 @@ impl From<crate::table::Alignment> for Alignment {
   }
 }
 
-impl<'a, A> From<ActionWithDef<'a, A>> for Element<'a, A::Request> where
-  A: Action + 'a,
-{
+impl<'a, A: Action + 'a> From<ActionWithDef<'a, A>> for Element<'a, A::Request> {
   fn from(ActionWithDef { definition, action }: ActionWithDef<A>) -> Self {
     let mut content = WidgetBuilder::once().text(definition.text);
     if let Some(font_name) = definition.font_name {
