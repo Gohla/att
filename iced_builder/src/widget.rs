@@ -3,6 +3,7 @@ pub mod rule;
 pub mod text;
 pub mod text_input;
 pub mod button;
+pub mod toggler;
 pub mod element;
 pub mod column;
 pub mod row;

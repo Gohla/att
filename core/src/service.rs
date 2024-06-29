@@ -1,3 +1,4 @@
+use crate::query::{Query, QueryDef};
 use crate::util::maybe_send::MaybeSendFuture;
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -87,6 +88,13 @@ pub trait Service {
   fn get_data(&self, index: usize) -> Option<&Self::Data>;
 
   fn iter_data(&self) -> impl Iterator<Item=&Self::Data>;
+
+
+  fn query_definition(&self) -> &QueryDef;
+
+  fn query(&self) -> &Query;
+
+  fn query_mut(&mut self) -> &mut Query;
 
 
 

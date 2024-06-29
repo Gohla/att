@@ -8,6 +8,7 @@ use iced_virtual::constrained_row::Constraint;
 use iced_virtual::table::Table;
 
 use crate::crates::Crate;
+use crate::query::{Facet, FacetType, Query, QueryDef};
 use crate::service::{Action, ActionStyle, ActionWithDef, Service};
 use crate::table::AsTableRow;
 
@@ -73,6 +74,7 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
   service: &'a S,
   header: &'a str,
   map_request: impl (Fn(S::Request) -> M) + 'a + Copy,
+  map_query_message: impl (Fn(QueryMessage) -> M) + 'a + Copy,
   custom_buttons: impl IntoIterator<Item=Element<'a, M>>
 ) -> Element<'a, M> {
   let cell_to_element = move |row, col| -> Option<Element<M>> {
@@ -111,7 +113,65 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
     .add_space_fill_width()
     .row().spacing(10.0).align_center().fill_width().add()
     .add_horizontal_rule(1.0)
+    .element(view_query(service.query_definition(), service.query())).map(map_query_message).add()
+    .add_horizontal_rule(1.0)
     .add_element(table)
     .column().spacing(10.0).padding(10).fill().add()
     .take()
+}
+
+#[derive(Debug)]
+pub enum QueryMessage {
+  FacetChange {
+    facet_id: &'static str,
+    new_facet: Facet,
+  }
+}
+
+pub fn view_query<'a>(query_def: &'a QueryDef, query: &'a Query) -> Element<'a, QueryMessage> {
+  // Label text element + actual element + space element between elements.
+  let capacity = query_def.facet_defs_len() * 2 + query_def.facet_defs_len().saturating_sub(1);
+  let mut builder = WidgetBuilder::heap_with_capacity(capacity);
+
+  let mut first = true;
+  for (facet_id, facet_def, facet) in query.facets_with_defs(query_def) {
+    if !first {
+      // Spacing does not work with nested rows for some reason. Hack around it by adding space between elements.
+      builder = builder.space().width(5.0).add();
+    }
+    first = false;
+
+    builder = builder.text(format!("{}:", facet_def.label)).add();
+
+    match &facet_def.facet_type { // TODO: create combined facet type + facet value for type safety
+      FacetType::Boolean { default_value } => {
+        let toggle_fn = |toggled| QueryMessage::FacetChange { facet_id, new_facet: Facet::new_boolean(toggled) };
+        builder = builder.toggler(None::<String>, facet.as_bool().or(*default_value).unwrap_or_default(), toggle_fn)
+          .spacing(0)
+          .width_shrink()
+          .add();
+      }
+      FacetType::String { default_value, placeholder } => {
+        builder = builder.text_input(placeholder.unwrap_or_default(), facet.as_str().or(default_value.as_deref()).unwrap_or_default())
+          .on_input(|text| QueryMessage::FacetChange { facet_id, new_facet: Facet::new_string(text) })
+          .add();
+      }
+    }
+  }
+
+  builder
+    .row().spacing(5.0).align_center().fill_width().add()
+    .take()
+}
+
+pub fn update_query(query: &mut Query, message: QueryMessage) {
+  match message {
+    QueryMessage::FacetChange { facet_id, new_facet } => {
+      if let Some(facet) = query.facet_mut(facet_id) {
+        facet.set_from(new_facet);
+      } else {
+        panic!("facet '{}' not found in query {:?}", facet_id, query);
+      }
+    }
+  }
 }

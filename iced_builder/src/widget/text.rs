@@ -21,7 +21,7 @@ impl<'a, S: StateAppend> TextBuilder<'a, S> where
   S::Renderer: TextRenderer,
   S::Theme: text::Catalog,
 {
-  pub(crate) fn new(state: S, content: Cow<'a, str>) -> Self {
+  pub(crate) fn new(state: S, content: Cow<'a, str>) -> Self { // TODO: change to impl IntoFragment<'a>
     Self {
       state,
       text: Text::new(content),

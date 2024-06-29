@@ -18,6 +18,7 @@ tracing-appender = { workspace = true, optional = true }
 iced = { workspace = true, optional = true }
 iced_builder = { path = "../iced_builder", optional = true }
 iced_virtual = { path = "../iced_virtual", optional = true }
+hashlink = "0.9"
 thiserror.workspace = true
 http = { workspace = true, optional = true }
 

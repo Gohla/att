@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
 use att_core::crates::{Crate, CrateSearchQuery};
+use att_core::query::{FacetDef, FacetType, Query, QueryDef};
 use att_core::service::{Action, ActionDef, Service};
 use att_core::util::maybe_send::MaybeSendFuture;
 
@@ -25,16 +26,23 @@ pub struct FollowCrates {
   state: FollowCratesState,
   crates_being_modified: BTreeSet<String>,
   all_crates_being_modified: bool,
+  query_def: QueryDef,
+  query: Query,
 }
 
 impl FollowCrates {
   #[inline]
   pub fn new(http_client: AttHttpClient, state: FollowCratesState) -> Self {
+    let query_def = QueryDef::default()
+      .with_facet_def("follow", FacetDef::new("Following", FacetType::Boolean { default_value: Some(true) }))
+      .with_facet_def("name", FacetDef::new("Name", FacetType::String { default_value: Some(String::new()), placeholder: Some("Crate name contains...") }));
     Self {
       http_client,
       state,
       crates_being_modified: Default::default(),
       all_crates_being_modified: false,
+      query: query_def.create_query(),
+      query_def,
     }
   }
 
@@ -52,18 +60,25 @@ impl FollowCrates {
 
 
   #[inline]
+  fn queried_crates(&self) -> impl Iterator<Item=&Crate> {
+    let name = self.query.facet("name").unwrap().as_str().unwrap_or_default();
+    let follow = self.query.facet("follow").unwrap().as_bool().unwrap_or(true);
+    self.state.id_to_crate.values().filter(move |c| follow && c.id.contains(name))
+  }
+
+  #[inline]
   fn crates_len(&self) -> usize {
-    self.state.id_to_crate.len()
+    self.queried_crates().count()
   }
 
   #[inline]
   fn get_crates(&self, index: usize) -> Option<&Crate> {
-    self.state.id_to_crate.get_index(index).map(|(_, krate)| krate)
+    self.queried_crates().nth(index)
   }
 
   #[inline]
   fn iter_crates(&self) -> impl Iterator<Item=&Crate> {
-    self.state.id_to_crate.values()
+    self.queried_crates()
   }
 
 
@@ -266,6 +281,22 @@ impl Service for FollowCrates {
   #[inline]
   fn iter_data(&self) -> impl Iterator<Item=&Self::Data> {
     self.iter_crates()
+  }
+
+
+  #[inline]
+  fn query_definition(&self) -> &QueryDef {
+    &self.query_def
+  }
+
+  #[inline]
+  fn query(&self) -> &Query {
+    &self.query
+  }
+
+  #[inline]
+  fn query_mut(&mut self) -> &mut Query {
+    &mut self.query
   }
 
 

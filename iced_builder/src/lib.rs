@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 
 use iced::advanced::text::Renderer as TextRenderer;
 use iced::Pixels;
-use iced::widget::{button, container, Rule, rule, scrollable, Space, Text, text, text_input};
+use iced::widget::{button, container, Rule, rule, scrollable, Space, Text, text, text_input, toggler};
 
 use internal::state::{Elem, ElemM, StateAppend, StateMap, StateReduce, StateTake, StateTakeAll};
 use internal::state::heap::HeapList;
@@ -18,6 +18,8 @@ use widget::scrollable::ScrollableBuilder;
 use widget::space::SpaceBuilder;
 use widget::text::TextBuilder;
 use widget::text_input::TextInputBuilder;
+
+use crate::widget::toggler::TogglerBuilder;
 
 pub mod widget;
 mod internal;
@@ -127,7 +129,7 @@ impl<S: StateAppend> WidgetBuilder<S> {
 
 
   /// Build a [`Text`] widget from `content`.
-  pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<'a, S> where
+  pub fn text<'a>(self, content: impl Into<Cow<'a, str>>) -> TextBuilder<'a, S> where // TODO: change to impl IntoFragment<'a>
     S::Renderer: TextRenderer,
     S::Theme: text::Catalog
   {
@@ -156,6 +158,20 @@ impl<S: StateAppend> WidgetBuilder<S> {
     S::Theme: button::Catalog
   {
     ButtonBuilder::new(self.0, content)
+  }
+
+  /// Build a [`Toggler`](iced::widget::Toggler) widget from a `label`, whether it `is_toggled`, and a `toggle_fn` that
+  /// produces a message when the toggler is toggled.
+  pub fn toggler<'a>(
+    self,
+    label: Option<impl Into<String>>, // TODO: make this part of the builder
+    is_toggled: bool,
+    toggle_fn: impl 'a + Fn(bool) -> S::Message, // TODO: make this part of the builder
+  ) -> TogglerBuilder<'a, S> where
+    S::Renderer: TextRenderer,
+    S::Theme: toggler::Catalog,
+  {
+    TogglerBuilder::new(self.0, label, is_toggled, toggle_fn)
   }
 
 
