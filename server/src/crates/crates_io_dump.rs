@@ -71,54 +71,55 @@ impl CratesIoDump {
     Ok(())
   }
 
-  #[inline]
-  fn update_db_dump_file(&self) -> impl Future<Output=Result<bool, Box<dyn Error + Send + Sync + 'static>>> {
-    Self::update_db_dump_file_async(self.db_dump_file.clone())
-  }
-
   #[instrument(skip_all, err)]
-  async fn update_db_dump_file_async(db_dump_file: PathBuf) -> Result<bool, Box<dyn Error + Send + Sync + 'static>> {
-    /// Gets the metadata for given `path`, returning:
-    ///
-    /// - `Ok(Some(metadata))` if a file or directory exists at given path,
-    /// - `Ok(None)` if no file or directory exists at given path,
-    /// - `Err(e)` if there was an error getting the metadata for given path.
-    #[inline]
-    async fn metadata(path: impl AsRef<Path>) -> Result<Option<Metadata>, io::Error> {
-      match fs::metadata(path).await {
-        Ok(m) => Ok(Some(m)),
-        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e),
+  fn update_db_dump_file(&self) -> impl Future<Output=Result<bool, Box<dyn Error + Send + Sync + 'static>>> {
+    let db_dump_file = self.db_dump_file.clone();
+
+    async move {
+      let is_up_to_date = match metadata(&db_dump_file).await? {
+        None => false,
+        Some(metadata) => metadata.modified()?.elapsed()? < UPDATE_DURATION,
+      };
+      if is_up_to_date {
+        return Ok(false)
       }
+
+      info!("Downloading crates.io database dump '{}' into '{}'", DB_DUMP_URL, db_dump_file.display());
+
+      if let Some(parent) = db_dump_file.parent() {
+        fs::create_dir_all(parent).await?;
+      }
+      let mut file = File::create(&db_dump_file).await?;
+
+      let response = reqwest::get(DB_DUMP_URL).await?;
+      let mut bytes_stream = response.bytes_stream();
+
+      while let Some(bytes) = bytes_stream.next().await {
+        let bytes = bytes?;
+        tokio::io::copy(&mut bytes.as_ref(), &mut file).await?;
+      }
+      Ok(true)
     }
-
-    let is_up_to_date = match metadata(&db_dump_file).await? {
-      None => false,
-      Some(metadata) => metadata.modified()?.elapsed()? < UPDATE_DURATION,
-    };
-    if is_up_to_date {
-      return Ok(false)
-    }
-
-
-    info!("Downloading crates.io database dump '{}' into '{}'", DB_DUMP_URL, db_dump_file.display());
-
-    if let Some(parent) = db_dump_file.parent() {
-      fs::create_dir_all(parent).await?;
-    }
-    let mut file = File::create(&db_dump_file).await?;
-
-    let response = reqwest::get(DB_DUMP_URL).await?;
-    let mut bytes_stream = response.bytes_stream();
-
-    while let Some(bytes) = bytes_stream.next().await {
-      let bytes = bytes?;
-      tokio::io::copy(&mut bytes.as_ref(), &mut file).await?;
-    }
-    Ok(true)
   }
 }
 
+
+/// Gets the metadata for given `path`, returning:
+///
+/// - `Ok(Some(metadata))` if a file or directory exists at given path,
+/// - `Ok(None)` if no file or directory exists at given path,
+/// - `Err(e)` if there was an error getting the metadata for given path.
+#[inline]
+async fn metadata(path: impl AsRef<Path>) -> Result<Option<Metadata>, io::Error> {
+  match fs::metadata(path).await {
+    Ok(m) => Ok(Some(m)),
+    Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+    Err(e) => Err(e),
+  }
+}
+
+
+// Scheduled job
 
 pub struct UpdateCratesIoDumpJob {
   crates_io_dump: Arc<RwLock<CratesIoDump>>
