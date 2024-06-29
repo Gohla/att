@@ -155,7 +155,7 @@ impl<'a, M, T, R: Renderer> Widget<M, T, R> for ConstrainedRow<'a, M, T, R> {
     cursor: Cursor,
     viewport: &Rectangle,
   ) {
-    crate::widget::child::draw(&self.elements, tree, renderer, theme, style, layout, cursor, viewport)
+    crate::child::draw(&self.elements, tree, renderer, theme, style, layout, cursor, viewport)
   }
 
   fn on_event(
@@ -169,16 +169,16 @@ impl<'a, M, T, R: Renderer> Widget<M, T, R> for ConstrainedRow<'a, M, T, R> {
     shell: &mut Shell<'_, M>,
     viewport: &Rectangle,
   ) -> Status {
-    crate::widget::child::on_event(&mut self.elements, tree, event, layout, cursor, renderer, clipboard, shell, viewport)
+    crate::child::on_event(&mut self.elements, tree, event, layout, cursor, renderer, clipboard, shell, viewport)
   }
   fn mouse_interaction(&self, tree: &Tree, layout: Layout, cursor: Cursor, viewport: &Rectangle, renderer: &R) -> Interaction {
-    crate::widget::child::mouse_interaction(&self.elements, tree, layout, cursor, viewport, renderer)
+    crate::child::mouse_interaction(&self.elements, tree, layout, cursor, viewport, renderer)
   }
   fn operate(&self, tree: &mut Tree, layout: Layout, renderer: &R, operation: &mut dyn Operation<()>) {
-    crate::widget::child::operate(&self.elements, tree, layout, renderer, operation)
+    crate::child::operate(&self.elements, tree, layout, renderer, operation)
   }
 
   fn overlay<'o>(&'o mut self, tree: &'o mut Tree, layout: Layout, renderer: &R, translation: Vector) -> Option<overlay::Element<'o, M, T, R>> {
-    crate::widget::child::overlay(&mut self.elements, tree, layout, renderer, translation)
+    crate::child::overlay(&mut self.elements, tree, layout, renderer, translation)
   }
 }

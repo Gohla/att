@@ -7,6 +7,7 @@ publish.workspace = true
 [dependencies]
 att_core = { workspace = true, features = ["app_panic_handler", "app_env", "app_tracing_all", "app_storage", "app_storage_json", "serde", "time", "iced"] }
 iced_builder = { path = "../iced_builder" }
+iced_virtual = { path = "../iced_virtual" }
 iced_winit = { workspace = true, default-features = true, features = [] }
 iced_renderer = { workspace = true, default-features = true, features = [] }
 att_client.workspace = true

@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+/// Horizontal and vertical alignment.
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum Alignment {
   /// Align at the start of the axis.
@@ -11,6 +12,7 @@ pub enum Alignment {
   End,
 }
 
+/// Table column layout.
 #[derive(Default, Clone, Copy, PartialEq, PartialOrd, Debug)]
 pub struct Column {
   pub header: &'static str,
@@ -30,7 +32,7 @@ impl Column {
   }
 }
 
-
+/// Turn a value into a table row.
 pub trait AsTableRow {
   const COLUMNS: &'static [Column];
 

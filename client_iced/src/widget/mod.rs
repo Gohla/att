@@ -1,26 +1,16 @@
 use iced::advanced::Renderer;
 use iced::Element;
 
-pub mod child;
-
-pub mod constrained_row;
 pub mod modal;
-pub mod table;
 pub mod dark_light_toggle;
 pub mod font;
 pub mod icon;
 
-/// Widget extensions
-pub trait WidgetExt<'a, M, T, R> {
+/// Into element conversion.
+pub trait IntoElement<'a, M, T, R> {
   fn into_element(self) -> Element<'a, M, T, R>;
 }
-impl<'a, M, T, R, W> WidgetExt<'a, M, T, R> for W where
-  M: 'a,
-  R: Renderer + 'a,
-  W: Into<Element<'a, M, T, R>>
-{
+impl<'a, M: 'a, T, R: Renderer + 'a, I: Into<Element<'a, M, T, R>>> IntoElement<'a, M, T, R> for I {
   #[inline]
-  fn into_element(self) -> Element<'a, M, T, R> {
-    self.into()
-  }
+  fn into_element(self) -> Element<'a, M, T, R> { self.into() }
 }

@@ -3,6 +3,7 @@ members = [
   "core",
   "client",
   "iced_builder",
+  "iced_virtual",
   "client_iced",
   "server",
 ]
@@ -10,6 +11,7 @@ default-members = [
   "core",
   "client",
   "iced_builder",
+  "iced_virtual",
   "client_iced",
   "server",
 ]

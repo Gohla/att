@@ -2,11 +2,9 @@ use iced::{Element, Length};
 use iced::advanced::Renderer;
 use iced::widget::{Column, Scrollable, scrollable, Space};
 
-use constrained_row::Constraint;
-
-use crate::widget::constrained_row;
-use crate::widget::constrained_row::ConstrainedRow;
-use crate::widget::table::body::Body;
+use crate::constrained_row::ConstrainedRow;
+use crate::constrained_row::Constraint;
+use crate::table::body::Body;
 
 mod body;
 
@@ -27,7 +25,7 @@ pub struct Table<'a, M, T, R, F> {
 }
 
 impl<'a, M, T, R, F> Table<'a, M, T, R, F> where
-  F: Fn(usize, usize) -> Option<Element<'a, M, T, R>> + 'a
+  F: Fn(usize, usize) -> Option<Element<'a, M, T, R>> + 'a,
 {
   /// Creates a new table with a `cell_to_element` function to lazily create widget elements for cells.
   pub fn new(cell_to_element: F) -> Self {
@@ -59,7 +57,7 @@ impl<'a, M, T, R, F> Table<'a, M, T, R, F> where
       header_row_height: row_height,
       body_row_height: row_height,
       body_row_count: 0,
-      cell_to_element
+      cell_to_element,
     }
   }
   pub fn with_capacity(capacity: usize, cell_to_element: F) -> Self {
@@ -108,7 +106,7 @@ impl<'a, F, M, T, R> Into<Element<'a, M, T, R>> for Table<'a, M, T, R, F> where
   M: 'a,
   T: scrollable::Catalog + 'a,
   R: Renderer + 'a,
-  F: Fn(usize, usize) -> Option<Element<'a, M, T, R>> + 'a
+  F: Fn(usize, usize) -> Option<Element<'a, M, T, R>> + 'a,
 {
   fn into(self) -> Element<'a, M, T, R> {
     let header = ConstrainedRow::with_constraints_and_elements(self.column_constraints.clone(), self.header_elements)

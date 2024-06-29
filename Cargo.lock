@@ -338,6 +338,7 @@ dependencies = [
  "iced",
  "iced_builder",
  "iced_renderer",
+ "iced_virtual",
  "iced_winit",
  "serde",
  "tracing",
@@ -357,6 +358,7 @@ dependencies = [
  "http",
  "iced",
  "iced_builder",
+ "iced_virtual",
  "serde",
  "serde_json",
  "thiserror",
@@ -1970,6 +1972,13 @@ dependencies = [
  "rustc-hash",
  "softbuffer",
  "tiny-skia",
+]
+
+[[package]]
+name = "iced_virtual"
+version = "0.1.0"
+dependencies = [
+ "iced",
 ]
 
 [[package]]
