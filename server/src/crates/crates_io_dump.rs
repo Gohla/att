@@ -11,7 +11,7 @@ use futures::StreamExt;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::task::block_in_place;
-use tracing::info;
+use tracing::{info, instrument};
 use trie_rs::map::{Trie, TrieBuilder};
 
 use att_core::crates::Crate;
@@ -44,6 +44,7 @@ pub const DB_DUMP_URL: &str = "https://static.crates.io/db-dump.tar.gz";
 // Internals
 
 impl CratesIoDump {
+  #[instrument(skip_all, err)]
   fn update_crates(&mut self) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     info!("Updating crates trie from database dump");
 
@@ -65,7 +66,7 @@ impl CratesIoDump {
     self.crates = builder.build();
     self.is_loaded = true;
 
-    info!("Done updating crates trie: {} entries", len);
+    info!("Updated crates trie: {} entries", len);
 
     Ok(())
   }
@@ -75,6 +76,7 @@ impl CratesIoDump {
     Self::update_db_dump_file_async(self.db_dump_file.clone())
   }
 
+  #[instrument(skip_all, err)]
   async fn update_db_dump_file_async(db_dump_file: PathBuf) -> Result<bool, Box<dyn Error + Send + Sync + 'static>> {
     /// Gets the metadata for given `path`, returning:
     ///

@@ -80,7 +80,7 @@ impl SearchCrates {
   pub fn process_found_crates(&mut self, response: FoundCrates) -> Result<(), AttHttpClientError> {
     let crates = response.result
       .inspect_err(|cause| error!(%cause, "failed to search for crates: {cause:?}"))?;
-    debug!(?crates, "found crates");
+    debug!("found {} crates", crates.len());
     self.found_crates = crates;
 
     Ok(())

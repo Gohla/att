@@ -56,9 +56,10 @@ impl Crates {
 impl Crates {
   #[instrument(skip(self), err)]
   pub async fn search(&self, search_term: String) -> Result<Option<Vec<Crate>>, CratesIoClientError> {
-    let response = self.crates_io_client.search(search_term).await?;
-    let crates = response.map(|crates_page| crates_page.crates.into_iter().map(|c| c.into()).collect());
-    Ok(crates)
+    let crates = self.crates_io_dump.read().unwrap().crates().postfix_search::<String, _>(&search_term) // TODO: don't block!
+      .map(|(_, krate)|krate.clone())
+      .collect();
+    Ok(Some(crates))
   }
   #[instrument(skip(self, data))]
   pub async fn get_followed_crates(&self, data: &CratesData, user_id: u64) -> Vec<Crate> {
