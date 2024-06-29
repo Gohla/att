@@ -61,17 +61,17 @@ impl Data {
 }
 
 pub struct StoreDatabaseJob {
-  start: Storage,
+  storage: Storage,
   database: Database,
 }
 impl StoreDatabaseJob {
   pub fn new(start: Storage, database: Database) -> Self {
-    Self { start, database }
+    Self { storage: start, database }
   }
 }
 impl BlockingJob for StoreDatabaseJob {
   fn run(&self) -> JobResult {
-    self.database.blocking_serialize(&self.start)?;
+    self.database.blocking_serialize(&self.storage)?;
     Ok(JobAction::Continue)
   }
 }

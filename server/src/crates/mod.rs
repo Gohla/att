@@ -1,6 +1,8 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::error::Error;
 use std::future::Future;
+use std::path::PathBuf;
+use std::sync::{Arc, RwLock};
 
 use axum::extract::{Path, Query, State};
 use axum::Router;
@@ -13,12 +15,14 @@ use att_core::crates::{Crate, CrateError, CrateSearchQuery};
 use crates_io_client::CratesIoClient;
 
 use crate::crates::crates_io_client::CratesIoClientError;
+use crate::crates::crates_io_dump::{CratesIoDump, UpdateCratesIoDumpJob};
 use crate::data::Database;
 use crate::job_scheduler::{Job, JobAction, JobResult};
 use crate::users::AuthSession;
 use crate::util::JsonResult;
 
 pub mod crates_io_client;
+pub mod crates_io_dump;
 
 // Data
 
@@ -35,11 +39,17 @@ pub struct CratesData {
 #[derive(Clone)]
 pub struct Crates {
   crates_io_client: CratesIoClient,
+  crates_io_dump: Arc<RwLock<CratesIoDump>>,
 }
 impl Crates {
-  pub fn new(user_agent: &str) -> Result<(Self, impl Future<Output=()>), Box<dyn Error>> {
-    let (crates_io_client, task) = CratesIoClient::new(user_agent)?;
-    Ok((Self { crates_io_client }, task))
+  pub fn new(
+    crates_io_user_agent: &str,
+    crates_io_db_dump_file: PathBuf
+  ) -> Result<(Self, impl Future<Output=()>), Box<dyn Error>> {
+    let (crates_io_client, task) = CratesIoClient::new(crates_io_user_agent)?;
+    let crates_io_dump = Arc::new(RwLock::new(CratesIoDump::new(crates_io_db_dump_file)));
+    let crates = Self { crates_io_client, crates_io_dump };
+    Ok((crates, task))
   }
 }
 
@@ -275,6 +285,12 @@ async fn refresh_all_crates(auth_session: AuthSession, State(state): State<Crate
 
 
 // Scheduled Jobs
+
+impl Crates {
+  pub fn create_update_crates_io_dump_job(&self) -> UpdateCratesIoDumpJob {
+    UpdateCratesIoDumpJob::new(self.crates_io_dump.clone())
+  }
+}
 
 pub struct RefreshJob {
   crates: Crates,

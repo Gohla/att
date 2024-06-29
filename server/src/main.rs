@@ -9,7 +9,7 @@ use att_core::app::env;
 use att_core::app::storage::Storage;
 use att_core::app::tracing::AppTracingBuilder;
 
-use crate::crates::{Crates, RefreshJob};
+use crate::crates::{Crates, crates_io_dump, RefreshJob};
 use crate::data::{Database, StoreDatabaseJob};
 use crate::job_scheduler::JobScheduler;
 use crate::server::Server;
@@ -50,13 +50,17 @@ fn run(storage: Storage, runtime: &Runtime) -> Result<(), Box<dyn Error>> {
   let users = Users::default();
   users.ensure_default_user_exists(&mut database.blocking_write().users)?;
 
-  let (crates, crates_io_client_task) = Crates::new("Gohla (https://github.com/Gohla)")?;
+  let (crates, crates_io_client_task) = Crates::new(
+    "Gohla (https://github.com/Gohla)",
+    storage.cache_file("db-dump.tar.gz").unwrap(),
+  )?;
   runtime.spawn(crates_io_client_task);
 
   let (job_scheduler, job_scheduler_task) = JobScheduler::new();
   runtime.spawn(job_scheduler_task);
   job_scheduler.blocking_schedule_job(RefreshJob::new(crates.clone(), database.clone()), interval(Duration::from_secs(60 * 60)), "refresh outdated crate data");
   job_scheduler.blocking_schedule_blocking_job(StoreDatabaseJob::new(storage.clone(), database.clone()), interval(Duration::from_secs(60 * 5)), "store database");
+  job_scheduler.blocking_schedule_job(crates.create_update_crates_io_dump_job(), interval(crates_io_dump::UPDATE_DURATION), "update crates.io database dump");
 
   let server = Server::new(database.clone(), users, crates);
   let result = runtime.block_on(server.run(shutdown_signal()));

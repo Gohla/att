@@ -10,11 +10,14 @@ axum = "0.7"
 axum-login = "0.15"
 tower-sessions = "0.12"
 tower-http = { version = "0.5", features = ["trace"] }
-tokio = { workspace = true, features = ["rt-multi-thread", "time", "macros", "signal"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "time", "macros", "signal", "fs"] }
 futures.workspace = true
 argon2 = { version = "0.5", features = ["std"] }
 rand_core = { version = "0.6", features = ["getrandom"] }
 crates_io_api.workspace = true
+db-dump = "0.7"
+trie-rs = "0.4"
+reqwest = { workspace = true, features = ["stream"] }
 chrono = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
