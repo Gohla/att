@@ -82,6 +82,14 @@ pub trait Service {
 
   type Data;
 
+  fn data_len(&self) -> usize;
+
+  fn get_data(&self, index: usize) -> Option<&Self::Data>;
+
+  fn iter_data(&self) -> impl Iterator<Item=&Self::Data>;
+
+
+
   fn data_action_definitions(&self) -> &[ActionDef];
 
   fn data_action<'d>(&self, index: usize, data: &'d Self::Data) -> Option<impl Action<Request=Self::Request> + 'd>;

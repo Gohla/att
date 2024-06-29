@@ -83,7 +83,7 @@ impl FollowCratesComponent {
 
   pub fn view(&self) -> Element<Message> {
     let cell_to_element = |row, col| -> Option<Element<Message>> {
-      let Some(krate) = self.follow_crates.followed_crates().nth(row) else { return None; };
+      let Some(krate) = self.follow_crates.get_data(row) else { return None; };
       if let Some(text) = krate.cell(col as u8) {
         return Some(WidgetBuilder::once().add_text(text))
       }
@@ -99,7 +99,7 @@ impl FollowCratesComponent {
     let mut table = Table::with_capacity(5, cell_to_element)
       .spacing(1.0)
       .body_row_height(24.0)
-      .body_row_count(self.follow_crates.num_followed_crates());
+      .body_row_count(self.follow_crates.data_len());
     for column in Crate::COLUMNS {
       table = table.push(Constraint::new(column.width_fill_portion, column.horizontal_alignment.into(), column.vertical_alignment.into()), column.header)
     }

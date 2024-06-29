@@ -1,7 +1,8 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::future::Future;
 
 use futures::FutureExt;
+use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
@@ -14,7 +15,7 @@ use crate::http_client::{AttHttpClient, AttHttpClientError};
 /// Follow crates state that can be (de)serialized.
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct FollowCratesState {
-  id_to_crate: BTreeMap<String, Crate>,
+  id_to_crate: IndexMap<String, Crate>,
 }
 
 /// Keep track of followed crates.
@@ -51,14 +52,20 @@ impl FollowCrates {
 
 
   #[inline]
-  pub fn num_followed_crates(&self) -> usize {
+  fn crates_len(&self) -> usize {
     self.state.id_to_crate.len()
   }
 
   #[inline]
-  pub fn followed_crates(&self) -> impl Iterator<Item=&Crate> {
+  fn get_crates(&self, index: usize) -> Option<&Crate> {
+    self.state.id_to_crate.get_index(index).map(|(_, krate)| krate)
+  }
+
+  #[inline]
+  fn iter_crates(&self) -> impl Iterator<Item=&Crate> {
     self.state.id_to_crate.values()
   }
+
 
   #[inline]
   pub fn is_crate_being_modified(&self, crate_id: &str) -> bool {
@@ -181,7 +188,7 @@ impl FollowCrates {
     response.result
       .inspect_err(|cause| error!(crate_id, %cause, "failed to unfollow crate: {cause:?}"))?;
     debug!(crate_id, "unfollow crate");
-    self.state.id_to_crate.remove(&crate_id);
+    self.state.id_to_crate.swap_remove(&crate_id);
 
     Ok(())
   }
@@ -238,13 +245,29 @@ impl Service for FollowCrates {
   fn actions(&self) -> impl IntoIterator<Item=impl Action<Request=Self::Request>> {
     let disabled = self.are_all_crates_being_modified();
     [
-      CollectionAction { kind: CollectionActionKind::RefreshOutdated, disabled },
-      CollectionAction { kind: CollectionActionKind::RefreshAll, disabled },
+      ServiceAction { kind: ServiceActionKind::RefreshOutdated, disabled },
+      ServiceAction { kind: ServiceActionKind::RefreshAll, disabled },
     ]
   }
 
 
   type Data = Crate;
+
+  #[inline]
+  fn data_len(&self) -> usize {
+    self.crates_len()
+  }
+
+  #[inline]
+  fn get_data(&self, index: usize) -> Option<&Self::Data> {
+    self.get_crates(index)
+  }
+
+  #[inline]
+  fn iter_data(&self) -> impl Iterator<Item=&Self::Data> {
+    self.iter_crates()
+  }
+
 
   #[inline]
   fn data_action_definitions(&self) -> &[ActionDef] {
@@ -261,8 +284,8 @@ impl Service for FollowCrates {
     let crate_id = &data.id;
     let disabled = self.is_crate_being_modified(crate_id);
     let action = match index {
-      0 => ItemAction { kind: ItemActionKind::Refresh, disabled, crate_id },
-      1 => ItemAction { kind: ItemActionKind::Unfollow, disabled, crate_id },
+      0 => DataAction { kind: DataActionKind::Refresh, disabled, crate_id },
+      1 => DataAction { kind: DataActionKind::Unfollow, disabled, crate_id },
       _ => return None,
     };
     Some(action)
@@ -299,19 +322,19 @@ impl Service for FollowCrates {
   }
 }
 
-// Collection actions
+// Service actions
 
-enum CollectionActionKind {
+enum ServiceActionKind {
   RefreshOutdated,
   RefreshAll,
 }
 
-struct CollectionAction {
-  kind: CollectionActionKind,
+struct ServiceAction {
+  kind: ServiceActionKind,
   disabled: bool,
 }
 
-impl Action for CollectionAction {
+impl Action for ServiceAction {
   type Request = FollowCrateRequest;
 
   #[inline]
@@ -320,26 +343,26 @@ impl Action for CollectionAction {
   #[inline]
   fn request(&self) -> FollowCrateRequest {
     match self.kind {
-      CollectionActionKind::RefreshOutdated => FollowCrateRequest::RefreshOutdated,
-      CollectionActionKind::RefreshAll => FollowCrateRequest::RefreshAll,
+      ServiceActionKind::RefreshOutdated => FollowCrateRequest::RefreshOutdated,
+      ServiceActionKind::RefreshAll => FollowCrateRequest::RefreshAll,
     }
   }
 }
 
-// Item actions
+// Data actions
 
-enum ItemActionKind {
+enum DataActionKind {
   Refresh,
   Unfollow,
 }
 
-struct ItemAction<'i> {
-  kind: ItemActionKind,
+struct DataAction<'i> {
+  kind: DataActionKind,
   disabled: bool,
   crate_id: &'i str,
 }
 
-impl Action for ItemAction<'_> {
+impl Action for DataAction<'_> {
   type Request = FollowCrateRequest;
 
   #[inline]
@@ -348,8 +371,8 @@ impl Action for ItemAction<'_> {
   #[inline]
   fn request(&self) -> FollowCrateRequest {
     match self.kind {
-      ItemActionKind::Refresh => FollowCrateRequest::Refresh(self.crate_id.to_string()),
-      ItemActionKind::Unfollow => FollowCrateRequest::Unfollow(self.crate_id.to_string()),
+      DataActionKind::Refresh => FollowCrateRequest::Refresh(self.crate_id.to_string()),
+      DataActionKind::Unfollow => FollowCrateRequest::Unfollow(self.crate_id.to_string()),
     }
   }
 }
