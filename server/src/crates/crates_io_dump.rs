@@ -5,6 +5,7 @@ use std::time::{Duration, SystemTimeError};
 
 use chrono::Utc;
 use db_dump::Loader;
+use diesel::copy_from;
 use diesel::prelude::*;
 use futures::StreamExt;
 use thiserror::Error;
@@ -105,41 +106,54 @@ impl CratesIoDump {
     // Excluded trick from: https://stackoverflow.com/questions/47626047/execute-an-insert-or-update-using-diesel#comment82217514_47626103
 
     let conn = self.db_pool.get().await?;
-    use diesel::{insert_into, upsert::excluded};
+    // use diesel::{insert_into, upsert::excluded};
+    use diesel::{insert_into};
     let crates = {
       conn.interact(move |conn| {
         use att_core::schema::crates::dsl::*;
-        insert_into(crates)
-          .values(&all_crates)
-          .on_conflict(id).do_update().set(id.eq(excluded(id)))
+        copy_from(crates)
+          .from_insertable(&all_crates)
           .execute(conn)
+        // insert_into(crates)
+        //   .values(&all_crates)
+        //   .on_conflict(id).do_update().set(id.eq(excluded(id)))
+        //   .execute(conn)
       }).await??
     };
     let crate_downloads = {
       conn.interact(move |conn| {
         use att_core::schema::crate_downloads::dsl::*;
-        insert_into(crate_downloads)
-          .values(&all_crate_downloads)
-          .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
+        copy_from(crate_downloads)
+          .from_insertable(&all_crate_downloads)
           .execute(conn)
+        // insert_into(crate_downloads)
+        //   .values(&all_crate_downloads)
+        //   .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
+        //   .execute(conn)
       }).await??
     };
     let crate_versions = {
       conn.interact(move|conn| {
         use att_core::schema::crate_versions::dsl::*;
-        insert_into(crate_versions)
-          .values(&all_crate_versions)
-          .on_conflict(id).do_update().set(id.eq(excluded(id)))
+        copy_from(crate_versions)
+          .from_insertable(&all_crate_versions)
           .execute(conn)
+        // insert_into(crate_versions)
+        //   .values(&all_crate_versions)
+        //   .on_conflict(id).do_update().set(id.eq(excluded(id)))
+        //   .execute(conn)
       }).await??
     };
     let crate_default_versions = {
       conn.interact(move|conn| {
         use att_core::schema::crate_default_versions::dsl::*;
-        insert_into(crate_default_versions)
-          .values(&all_crate_default_versions)
-          .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
+        copy_from(crate_default_versions)
+          .from_insertable(&all_crate_default_versions)
           .execute(conn)
+        // insert_into(crate_default_versions)
+        //   .values(&all_crate_default_versions)
+        //   .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
+        //   .execute(conn)
       }).await??
     };
     let metadata = {

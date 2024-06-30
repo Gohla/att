@@ -11,7 +11,7 @@ use crate::table::{AsTableRow, Column};
 
 #[cfg_attr(feature = "diesel",
   derive(Queryable, Selectable, Identifiable, AsChangeset, Insertable),
-  diesel(table_name = schema::crates, treat_none_as_default_value = false, primary_key(id), check_for_backend(Pg)),
+  diesel(table_name = schema::crates, treat_none_as_default_value = false, check_for_backend(Pg)),
 )]
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct Crate {
@@ -27,7 +27,7 @@ pub struct Crate {
 
 #[cfg_attr(feature = "diesel",
   derive(Queryable, Selectable, Identifiable, Associations, AsChangeset, Insertable),
-  diesel(table_name = schema::crate_downloads, primary_key(crate_id), belongs_to(Crate), check_for_backend(Pg)),
+  diesel(table_name = schema::crate_downloads, treat_none_as_default_value = false, primary_key(crate_id), belongs_to(Crate), check_for_backend(Pg)),
 )]
 #[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct CrateDownloads {
@@ -37,7 +37,7 @@ pub struct CrateDownloads {
 
 #[cfg_attr(feature = "diesel",
   derive(Queryable, Selectable, Identifiable, Associations, AsChangeset, Insertable),
-  diesel(table_name = schema::crate_versions, belongs_to(Crate), check_for_backend(Pg)),
+  diesel(table_name = schema::crate_versions, treat_none_as_default_value = false, belongs_to(Crate), check_for_backend(Pg)),
 )]
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct CrateVersion {
@@ -50,7 +50,7 @@ pub struct CrateVersion {
   derive(Queryable, Selectable, Identifiable, Associations, Insertable),
   diesel(
     table_name = schema::crate_default_versions, check_for_backend(Pg),
-    primary_key(crate_id), belongs_to(Crate), belongs_to(CrateVersion, foreign_key = version_id)
+    primary_key(crate_id), belongs_to(Crate), treat_none_as_default_value = false, belongs_to(CrateVersion, foreign_key = version_id)
   ),
 )]
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
