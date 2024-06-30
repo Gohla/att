@@ -9,3 +9,6 @@ pub mod table;
 
 #[cfg(feature = "iced")]
 pub mod iced_impls;
+
+#[cfg(feature = "diesel")]
+pub mod schema;

@@ -34,7 +34,7 @@ impl Debug for UserCredentials {
 
 
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize, Error)]
-pub enum UsersError {
+pub enum AuthError {
   #[error("Incorrect user name or password")]
   IncorrectUserNameOrPassword,
   #[error("Internal server error")]
@@ -45,9 +45,9 @@ pub enum UsersError {
 pub mod http_status_code {
   use crate::util::http_status_code::{AsStatusCode, StatusCode};
 
-  use super::UsersError;
+  use super::AuthError;
 
-  impl AsStatusCode for UsersError {
+  impl AsStatusCode for AuthError {
     #[inline]
     fn as_status_code(&self) -> StatusCode {
       match self {

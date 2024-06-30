@@ -24,3 +24,8 @@ ij_rust_keep_blank_lines_in_declarations = 2
 ij_rust_keep_line_breaks = true
 ij_rust_preserve_punctuation = true
 ij_rust_allow_one_line_match = true
+
+[*.sql]
+# https://youtrack.jetbrains.com/issue/IJPL-40154/Expose-SQL-formatting-settings-to-the-EditorConfig
+ij_sql_table_elements_place = 1
+ij_sql_table_elements_wrap = 2

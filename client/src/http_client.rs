@@ -7,7 +7,7 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use att_core::crates::{Crate, CrateError, CrateSearchQuery};
-use att_core::users::{UserCredentials, UsersError};
+use att_core::users::{UserCredentials, AuthError};
 
 #[derive(Clone, Debug)]
 pub struct AttHttpClient {
@@ -39,7 +39,7 @@ pub enum AttHttpClientError {
   #[error("HTTP request failed")]
   Request(#[from] reqwest::Error),
   #[error("Users request failed")]
-  Login(#[from] UsersError),
+  Login(#[from] AuthError),
   #[error("Crate request failed")]
   Crate(#[from] CrateError),
 }
@@ -49,12 +49,12 @@ impl AttHttpClient {
   pub fn login(&self, user_credentials: UserCredentials) -> impl Future<Output=Result<(), AttHttpClientError>> {
     let rb = self.request_builder(Method::POST, "users/login")
       .json(&user_credentials);
-    async move { Self::send::<_, UsersError>(rb).await }
+    async move { Self::send::<_, AuthError>(rb).await }
   }
   #[instrument(skip_all, err)]
   pub fn logout(&self) -> impl Future<Output=Result<(), AttHttpClientError>> {
     let rb = self.request_builder(Method::DELETE, "users/login");
-    async move { Self::send::<_, UsersError>(rb).await }
+    async move { Self::send::<_, AuthError>(rb).await }
   }
 
   #[instrument(skip(self), err)]

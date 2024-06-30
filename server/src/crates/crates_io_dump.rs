@@ -1,110 +1,136 @@
 use std::error::Error;
-use std::fs::Metadata;
 use std::future::Future;
 use std::io;
-use std::path::{Path, PathBuf};
-use std::sync::{Arc, RwLock};
+use std::path::PathBuf;
 use std::time::Duration;
 
-use db_dump::{crate_downloads, crates, default_versions, Loader, versions};
+use chrono::Utc;
+use db_dump::Loader;
+use diesel::prelude::*;
+use diesel_async::RunQueryDsl;
 use futures::StreamExt;
-use nohash::IntMap;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::task::block_in_place;
 use tracing::{info, instrument};
-use trie_rs::map::{Trie, TrieBuilder};
-use att_core::crates::Crate;
 
+use att_core::crates::{Crate, CrateDefaultVersion, CrateDownloads, CrateVersion};
+
+use crate::data::DbPool;
 use crate::job_scheduler::{Job, JobAction, JobResult};
 
+#[derive(Clone)]
 pub struct CratesIoDump {
   db_dump_file: PathBuf,
-  is_loaded: bool,
-
-  crate_id_to_crate: IntMap<u32, crates::Row>,
-  crate_id_to_downloads: IntMap<u32, crate_downloads::Row>,
-  crate_id_to_default_version: IntMap<u32, default_versions::Row>,
-  version_id_to_version: IntMap<u32, versions::Row>,
-
-  crate_name_trie: Trie<u8, u32>,
+  db_pool: DbPool,
 }
 
 impl CratesIoDump {
-  #[inline]
-  pub fn new(db_dump_file: PathBuf) -> Self {
-    Self {
-      db_dump_file,
-      is_loaded: false,
-
-      crate_id_to_crate: Default::default(),
-      crate_id_to_downloads: Default::default(),
-      crate_id_to_default_version: Default::default(),
-      version_id_to_version: Default::default(),
-
-      crate_name_trie: TrieBuilder::new().build()
-    }
-  }
-
-  pub fn search(&self, search_term: String) -> impl Iterator<Item=Crate> + '_ {
-    self.crate_name_trie.postfix_search::<String, _>(&search_term)
-      .flat_map(|(_, crate_id)| self.crate_id_to_crate.get(crate_id).map(|row|{
-        let downloads = self.crate_id_to_downloads.get(crate_id).map(|row|row.downloads).unwrap_or_default();
-        let max_version = self.crate_id_to_default_version.get(crate_id)
-          .and_then(|row|self.version_id_to_version.get(&row.version_id.0))
-          .map(|row|row.num.to_string())
-          .unwrap_or_default();
-        Crate {
-          id: row.name.clone(),
-          downloads,
-          updated_at: row.updated_at,
-          max_version,
-        }
-      }))
+  pub fn new(db_dump_file: PathBuf, db_pool: DbPool) -> Self {
+    Self { db_dump_file, db_pool }
   }
 }
-
-pub const UPDATE_DURATION: Duration = Duration::from_secs(60 * 60 * 24);
-
-pub const DB_DUMP_URL: &str = "https://static.crates.io/db-dump.tar.gz";
 
 
 // Internals
 
+pub const UPDATE_DURATION: Duration = Duration::from_secs(60 * 60 * 24);
+
 impl CratesIoDump {
   #[instrument(skip_all, err)]
-  fn update_crates(&mut self) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-    info!("Updating crates trie from database dump");
+  async fn import_db_dump(&self) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+    info!("Reading database dump");
 
-    self.crate_id_to_crate.clear();
-    self.crate_id_to_downloads.clear();
-    self.crate_id_to_default_version.clear();
-    self.version_id_to_version.clear();
+    let mut all_crates = Vec::new();
+    let mut all_crate_downloads = Vec::new();
+    let mut all_crate_versions = Vec::new();
+    let mut all_crate_default_versions = Vec::new();
 
-    let mut trie_builder = TrieBuilder::new();
-    Loader::new()
+    block_in_place(|| Loader::new()
       .crates(|row| {
-        let id = row.id.0;
-        trie_builder.insert(row.name.bytes(), id);
-        self.crate_id_to_crate.insert(id, row);
+        all_crates.push(Crate {
+          id: row.id.0 as i32,
+          name: row.name,
+          updated_at: row.updated_at,
+          created_at: row.created_at,
+          description: row.description,
+          homepage: row.homepage,
+          readme: row.readme,
+          repository: row.repository,
+        });
       })
       .crate_downloads(|row| {
-        self.crate_id_to_downloads.insert(row.crate_id.0, row);
-      })
-      .default_versions(|row| {
-        self.crate_id_to_default_version.insert(row.crate_id.0, row);
+        all_crate_downloads.push(CrateDownloads {
+          crate_id: row.crate_id.0 as i32,
+          downloads: row.downloads as i64,
+        });
       })
       .versions(|row| {
-        self.version_id_to_version.insert(row.id.0, row);
+        all_crate_versions.push(CrateVersion {
+          id: row.id.0 as i32,
+          crate_id: row.crate_id.0 as i32,
+          version: row.num.to_string(),
+        });
       })
-      .load(&self.db_dump_file)?;
+      .default_versions(|row| {
+        all_crate_default_versions.push(CrateDefaultVersion {
+          crate_id: row.crate_id.0 as i32,
+          version_id: row.version_id.0 as i32,
+        });
+      })
+      .load(&self.db_dump_file)
+    )?;
 
-    self.crate_name_trie = trie_builder.build();
-    self.is_loaded = true;
+    info!("Importing database dump");
 
-    info!("Updated crates trie: {} entries", self.crate_id_to_crate.len());
+    // TODO: transaction
+    let mut conn = self.db_pool.get().await?;
+    use diesel::{insert_into, upsert::excluded};
+    let crates = {
+      use att_core::schema::crates::dsl::*;
+      insert_into(crates)
+        .values(&all_crates)
+        .on_conflict(id).do_update().set(id.eq(excluded(id))) // From: https://stackoverflow.com/questions/47626047/execute-an-insert-or-update-using-diesel#comment82217514_47626103
+        .execute(&mut conn).await?
+    };
+    let crate_downloads = {
+      use att_core::schema::crate_downloads::dsl::*;
+      insert_into(crate_downloads)
+        .values(&all_crate_downloads)
+        .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
+        .execute(&mut conn).await?
+    };
+    let crate_versions = {
+      use att_core::schema::crate_versions::dsl::*;
+      insert_into(crate_versions)
+        .values(&all_crate_versions)
+        .on_conflict(id).do_update().set(id.eq(excluded(id)))
+        .execute(&mut conn).await?
+    };
+    let crate_default_versions = {
+      use att_core::schema::crate_default_versions::dsl::*;
+      insert_into(crate_default_versions)
+        .values(&all_crate_default_versions)
+        .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
+        .execute(&mut conn).await?
+    };
+    let metadata = {
+      use att_core::schema::import_crates_metadata::dsl::*;
+      insert_into(import_crates_metadata)
+        .values(imported_at.eq(Utc::now()))
+        .execute(&mut conn).await?
+    };
 
+    info!(crates, crate_downloads, crate_versions, crate_default_versions, metadata, "Imported database dump");
     Ok(())
+  }
+
+  #[instrument(skip_all, err)]
+  async fn is_import_required(&self) -> Result<bool, Box<dyn Error + Send + Sync + 'static>> {
+    use att_core::schema::import_crates_metadata::dsl::*;
+    let mut conn = self.db_pool.get().await?;
+    let import_count: i64 = import_crates_metadata.count().get_result(&mut conn).await?;
+    Ok(import_count == 0)
   }
 
   #[instrument(skip_all, err)]
@@ -112,22 +138,24 @@ impl CratesIoDump {
     let db_dump_file = self.db_dump_file.clone();
 
     async move {
-      let is_up_to_date = match metadata(&db_dump_file).await? {
-        None => false,
-        Some(metadata) => metadata.modified()?.elapsed()? < UPDATE_DURATION,
+      let is_up_to_date = match fs::metadata(&db_dump_file).await {
+        Ok(metadata) => metadata.modified()?.elapsed()? < UPDATE_DURATION,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => false,
+        Err(e) => Err(e)?,
       };
       if is_up_to_date {
         return Ok(false)
       }
 
-      info!("Downloading crates.io database dump '{}' into '{}'", DB_DUMP_URL, db_dump_file.display());
+      const URL: &str = "https://static.crates.io/db-dump.tar.gz";
+      info!("Downloading crates.io database dump '{}' into '{}'", URL, db_dump_file.display());
 
       if let Some(parent) = db_dump_file.parent() {
         fs::create_dir_all(parent).await?;
       }
       let mut file = File::create(&db_dump_file).await?;
 
-      let response = reqwest::get(DB_DUMP_URL).await?;
+      let response = reqwest::get(URL).await?;
       let mut bytes_stream = response.bytes_stream();
 
       while let Some(bytes) = bytes_stream.next().await {
@@ -140,49 +168,25 @@ impl CratesIoDump {
 }
 
 
-/// Gets the metadata for given `path`, returning:
-///
-/// - `Ok(Some(metadata))` if a file or directory exists at given path,
-/// - `Ok(None)` if no file or directory exists at given path,
-/// - `Err(e)` if there was an error getting the metadata for given path.
-#[inline]
-async fn metadata(path: impl AsRef<Path>) -> Result<Option<Metadata>, io::Error> {
-  match fs::metadata(path).await {
-    Ok(m) => Ok(Some(m)),
-    Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
-    Err(e) => Err(e),
-  }
-}
-
-
 // Scheduled job
 
 pub struct UpdateCratesIoDumpJob {
-  crates_io_dump: Arc<RwLock<CratesIoDump>>
+  crates_io_dump: CratesIoDump,
 }
 
 impl UpdateCratesIoDumpJob {
-  pub fn new(crates_io_dump: Arc<RwLock<CratesIoDump>>) -> Self {
+  pub fn new(crates_io_dump: CratesIoDump) -> Self {
     Self { crates_io_dump }
   }
 }
 
 impl Job for UpdateCratesIoDumpJob {
   async fn run(&self) -> JobResult {
-    let (update_future, is_loaded) = {
-      let read = self.crates_io_dump.read().unwrap();
-      let future = read.update_db_dump_file();
-      (future, read.is_loaded)
-    };
-    let file_updated = update_future.await?;
-
-    block_in_place(|| {
-      if file_updated || !is_loaded {
-        self.crates_io_dump.write().unwrap().update_crates()?;
-      }
-      Ok::<(), Box<dyn Error + Send + Sync + 'static>>(())
-    })?;
-
+    let db_dump_file_updated = self.crates_io_dump.update_db_dump_file().await?;
+    let import_required = self.crates_io_dump.is_import_required().await?;
+    if db_dump_file_updated || import_required {
+      self.crates_io_dump.import_db_dump().await?;
+    }
     Ok(JobAction::Continue)
   }
 }

@@ -63,7 +63,7 @@ impl FollowCrates {
   fn queried_crates(&self) -> impl Iterator<Item=&Crate> {
     let name = self.query.facet("name").unwrap().as_str().unwrap_or_default();
     let follow = self.query.facet("follow").unwrap().as_bool().unwrap_or(true);
-    self.state.id_to_crate.values().filter(move |c| follow && c.id.contains(name))
+    self.state.id_to_crate.values().filter(move |c| follow && c.name.contains(name))
   }
 
   #[inline]
@@ -172,8 +172,8 @@ impl FollowCrates {
       self.state.id_to_crate.clear();
     }
     for krate in crates {
-      debug!(crate_id = krate.id, "update crate");
-      self.state.id_to_crate.insert(krate.id.clone(), krate);
+      debug!(crate_id = krate.name, "update crate");
+      self.state.id_to_crate.insert(krate.name.clone(), krate);
     }
 
     Ok(())
@@ -312,7 +312,7 @@ impl Service for FollowCrates {
 
   #[inline]
   fn data_action<'i>(&self, index: usize, data: &'i Self::Data) -> Option<impl Action<Request=Self::Request> + 'i> {
-    let crate_id = &data.id;
+    let crate_id = &data.name;
     let disabled = self.is_crate_being_modified(crate_id);
     let action = match index {
       0 => DataAction { kind: DataActionKind::Refresh, disabled, crate_id },

@@ -62,11 +62,11 @@ impl SearchCratesComponent {
     let cell_to_element = |row, col| -> Option<Element<Message>> {
       let Some(krate): Option<&Crate> = crates.get(row) else { return None; };
       let element = match col {
-        0 => WidgetBuilder::once().add_text(&krate.id),
+        0 => WidgetBuilder::once().add_text(&krate.name),
         1 => WidgetBuilder::once().add_text(&krate.max_version),
         2 => WidgetBuilder::once().add_text(krate.updated_at.format("%Y-%m-%d").to_string()),
         3 => WidgetBuilder::once().add_text(format!("{}", krate.downloads)),
-        4 => WidgetBuilder::once().button(self.choose_button_text.as_str()).padding([1.0, 5.0]).success_style().on_press(|| Message::Choose(krate.id.clone())).add(),
+        4 => WidgetBuilder::once().button(self.choose_button_text.as_str()).padding([1.0, 5.0]).success_style().on_press(|| Message::Choose(krate.name.clone())).add(),
         _ => return None,
       };
       Some(element)

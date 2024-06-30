@@ -1,17 +1,7 @@
-#![allow(dead_code)]
+use diesel_async::pooled_connection::deadpool::Pool;
 
-use std::io;
-use std::sync::Arc;
-
-use serde::{Deserialize, Serialize};
-use tokio::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
-
-use att_core::app::storage::{DirectoryKind, Storage};
-
-use crate::crates::CratesData;
-use crate::job_scheduler::{BlockingJob, JobAction, JobResult};
-use crate::users::UsersData;
-
+pub type DbPool = Pool<diesel_async::AsyncPgConnection>;
+/*
 #[derive(Default, Clone, Debug)]
 pub struct Database(Arc<RwLock<Data>>);
 
@@ -75,3 +65,4 @@ impl BlockingJob for StoreDatabaseJob {
     Ok(JobAction::Continue)
   }
 }
+*/
