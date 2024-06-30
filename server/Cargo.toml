@@ -23,5 +23,5 @@ chrono = { workspace = true, features = ["serde"] }
 serde = { workspace = true, features = ["derive"] }
 thiserror.workspace = true
 tracing.workspace = true
-diesel = { workspace = true, features = ["chrono"] }
-diesel-async = { version = "0.4", features = ["postgres", "deadpool"] }
+diesel = { workspace = true, features = ["chrono", "postgres"] }
+deadpool-diesel = { version = "0.6", features = ["rt_tokio_1", "postgres"] }

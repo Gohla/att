@@ -1,7 +1,7 @@
 use std::error::Error;
 
-use diesel_async::pooled_connection::AsyncDieselConnectionManager;
-use diesel_async::pooled_connection::deadpool::Pool;
+use deadpool_diesel::postgres::{Runtime as DeadpoolRuntime, Manager, Pool};
+
 use tokio::runtime::Runtime;
 use tokio::signal;
 use tokio::time::{Duration, interval};
@@ -37,8 +37,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     .build()?;
   let runtime_guard = runtime.enter();
 
-  let config = AsyncDieselConnectionManager::<diesel_async::AsyncPgConnection>::new(run_or_compile_time_env!("DATABASE_URL"));
-  let pool = Pool::builder(config).build()?;
+  let manager = Manager::new(run_or_compile_time_env!("DATABASE_URL"), DeadpoolRuntime::Tokio1);
+  let pool = Pool::builder(manager)
+    .max_size(8)
+    .build()?;
 
   let result = run(storage, &runtime, pool);
 

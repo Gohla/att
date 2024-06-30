@@ -1,14 +1,13 @@
-use std::error::Error;
 use std::future::Future;
 use std::io;
 use std::path::PathBuf;
-use std::time::Duration;
+use std::time::{Duration, SystemTimeError};
 
 use chrono::Utc;
 use db_dump::Loader;
 use diesel::prelude::*;
-use diesel_async::RunQueryDsl;
 use futures::StreamExt;
+use thiserror::Error;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::task::block_in_place;
@@ -16,7 +15,7 @@ use tracing::{info, instrument};
 
 use att_core::crates::{Crate, CrateDefaultVersion, CrateDownloads, CrateVersion};
 
-use crate::data::DbPool;
+use crate::data::{DatabaseError, DbPool};
 use crate::job_scheduler::{Job, JobAction, JobResult};
 
 #[derive(Clone)]
@@ -31,14 +30,33 @@ impl CratesIoDump {
   }
 }
 
+pub const UPDATE_DURATION: Duration = Duration::from_secs(60 * 60 * 24);
 
 // Internals
 
-pub const UPDATE_DURATION: Duration = Duration::from_secs(60 * 60 * 24);
+#[derive(Debug, Error)]
+pub enum InternalError {
+  #[error(transparent)]
+  DbDump(#[from] db_dump::Error),
+  #[error(transparent)]
+  Io(#[from] io::Error),
+  #[error(transparent)]
+  Time(#[from] SystemTimeError),
+  #[error(transparent)]
+  Reqwest(#[from] reqwest::Error),
+  #[error(transparent)]
+  Database(DatabaseError),
+}
+impl<E: Into<DatabaseError>> From<E> for InternalError {
+  fn from(value: E) -> Self {
+    Self::Database(value.into())
+  }
+}
+
 
 impl CratesIoDump {
   #[instrument(skip_all, err)]
-  async fn import_db_dump(&self) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
+  async fn import_db_dump(&self) -> Result<(), InternalError> {
     info!("Reading database dump");
 
     let mut all_crates = Vec::new();
@@ -84,41 +102,53 @@ impl CratesIoDump {
     info!("Importing database dump");
 
     // TODO: transaction
-    let mut conn = self.db_pool.get().await?;
+    // Excluded trick from: https://stackoverflow.com/questions/47626047/execute-an-insert-or-update-using-diesel#comment82217514_47626103
+
+    let conn = self.db_pool.get().await?;
     use diesel::{insert_into, upsert::excluded};
     let crates = {
-      use att_core::schema::crates::dsl::*;
-      insert_into(crates)
-        .values(&all_crates)
-        .on_conflict(id).do_update().set(id.eq(excluded(id))) // From: https://stackoverflow.com/questions/47626047/execute-an-insert-or-update-using-diesel#comment82217514_47626103
-        .execute(&mut conn).await?
+      conn.interact(move |conn| {
+        use att_core::schema::crates::dsl::*;
+        insert_into(crates)
+          .values(&all_crates)
+          .on_conflict(id).do_update().set(id.eq(excluded(id)))
+          .execute(conn)
+      }).await??
     };
     let crate_downloads = {
-      use att_core::schema::crate_downloads::dsl::*;
-      insert_into(crate_downloads)
-        .values(&all_crate_downloads)
-        .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
-        .execute(&mut conn).await?
+      conn.interact(move |conn| {
+        use att_core::schema::crate_downloads::dsl::*;
+        insert_into(crate_downloads)
+          .values(&all_crate_downloads)
+          .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
+          .execute(conn)
+      }).await??
     };
     let crate_versions = {
-      use att_core::schema::crate_versions::dsl::*;
-      insert_into(crate_versions)
-        .values(&all_crate_versions)
-        .on_conflict(id).do_update().set(id.eq(excluded(id)))
-        .execute(&mut conn).await?
+      conn.interact(move|conn| {
+        use att_core::schema::crate_versions::dsl::*;
+        insert_into(crate_versions)
+          .values(&all_crate_versions)
+          .on_conflict(id).do_update().set(id.eq(excluded(id)))
+          .execute(conn)
+      }).await??
     };
     let crate_default_versions = {
-      use att_core::schema::crate_default_versions::dsl::*;
-      insert_into(crate_default_versions)
-        .values(&all_crate_default_versions)
-        .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
-        .execute(&mut conn).await?
+      conn.interact(move|conn| {
+        use att_core::schema::crate_default_versions::dsl::*;
+        insert_into(crate_default_versions)
+          .values(&all_crate_default_versions)
+          .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
+          .execute(conn)
+      }).await??
     };
     let metadata = {
-      use att_core::schema::import_crates_metadata::dsl::*;
-      insert_into(import_crates_metadata)
-        .values(imported_at.eq(Utc::now()))
-        .execute(&mut conn).await?
+      conn.interact(|conn| {
+        use att_core::schema::import_crates_metadata::dsl::*;
+        insert_into(import_crates_metadata)
+          .values(imported_at.eq(Utc::now()))
+          .execute(conn)
+      }).await??
     };
 
     info!(crates, crate_downloads, crate_versions, crate_default_versions, metadata, "Imported database dump");
@@ -126,15 +156,17 @@ impl CratesIoDump {
   }
 
   #[instrument(skip_all, err)]
-  async fn is_import_required(&self) -> Result<bool, Box<dyn Error + Send + Sync + 'static>> {
-    use att_core::schema::import_crates_metadata::dsl::*;
-    let mut conn = self.db_pool.get().await?;
-    let import_count: i64 = import_crates_metadata.count().get_result(&mut conn).await?;
+  async fn is_import_required(&self) -> Result<bool, InternalError> {
+    let conn = self.db_pool.get().await?;
+    let import_count: i64 = conn.interact(|conn| {
+      use att_core::schema::import_crates_metadata::dsl::*;
+      import_crates_metadata.count().get_result(conn)
+    }).await??;
     Ok(import_count == 0)
   }
 
   #[instrument(skip_all, err)]
-  fn update_db_dump_file(&self) -> impl Future<Output=Result<bool, Box<dyn Error + Send + Sync + 'static>>> {
+  fn update_db_dump_file(&self) -> impl Future<Output=Result<bool, InternalError>> {
     let db_dump_file = self.db_dump_file.clone();
 
     async move {

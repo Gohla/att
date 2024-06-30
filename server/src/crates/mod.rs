@@ -5,16 +5,13 @@ use std::path::PathBuf;
 use axum::extract::{Path, Query, State};
 use axum::Router;
 use diesel::prelude::*;
-use diesel_async::pooled_connection::deadpool::PoolError;
-use diesel_async::RunQueryDsl;
-use thiserror::Error;
 use tracing::instrument;
 
 use att_core::crates::{Crate, CrateError, CrateSearchQuery};
 use crates_io_client::CratesIoClient;
 
 use crate::crates::crates_io_dump::{CratesIoDump, UpdateCratesIoDumpJob};
-use crate::data::DbPool;
+use crate::data::{DatabaseError, DbPool};
 use crate::users::{AuthSession, User};
 use crate::util::JsonResult;
 
@@ -45,37 +42,33 @@ impl Crates {
   }
 }
 
-#[derive(Debug, Error)]
-pub enum InternalError {
-  #[error("Failed to create database connection from pool")]
-  DbConnection(#[from] PoolError),
-  #[error("Crates query failed")]
-  CratesQuery(#[from] diesel::result::Error),
-}
-
 impl Crates {
   #[instrument(skip(self), err)]
-  pub async fn search(&self, search_term: String) -> Result<Vec<Crate>, InternalError> {
+  pub async fn search(&self, search_term: String) -> Result<Vec<Crate>, DatabaseError> {
     let crates = {
-      use att_core::schema::crates::dsl::*;
-      let mut conn = self.db_pool.get().await?;
-      crates
-        .select(Crate::as_select())
-        .filter(name.ilike(search_term))
-        .load(&mut conn).await?
+      let conn = self.db_pool.get().await?;
+      conn.interact(|conn| {
+        use att_core::schema::crates::dsl::*;
+        crates
+          .select(Crate::as_select())
+          .filter(name.ilike(search_term))
+          .load(conn)
+      }).await??
     };
     Ok(crates)
   }
 
   #[instrument(skip(self), err)]
-  pub async fn get(&self, crate_name: String) -> Result<Option<Crate>, InternalError> {
-    use att_core::schema::crates::dsl::*;
-    let mut conn = self.db_pool.get().await?;
-    let krate = crates
-      .select(Crate::as_select())
-      .filter(name.eq(crate_name))
-      .first(&mut conn).await
-      .optional()?;
+  pub async fn get(&self, crate_name: String) -> Result<Option<Crate>, DatabaseError> {
+    let conn = self.db_pool.get().await?;
+    let krate = conn.interact(|conn| {
+      use att_core::schema::crates::dsl::*;
+      crates
+        .select(Crate::as_select())
+        .filter(name.eq(crate_name))
+        .first(conn)
+        .optional()
+    }).await??;
     Ok(krate)
   }
 }
@@ -90,37 +83,43 @@ pub struct FavoriteCrate {
 
 impl Crates {
   #[instrument(skip(self))]
-  pub async fn get_followed_crates(&self, user: &User) -> Result<Vec<Crate>, InternalError> {
+  pub async fn get_followed_crates(&self, user: User) -> Result<Vec<Crate>, DatabaseError> {
     let crates = {
       use att_core::schema::crates;
-      let mut conn = self.db_pool.get().await?;
-      FavoriteCrate::belonging_to(user)
-        .inner_join(crates::table)
-        .select(Crate::as_select())
-        .load(&mut conn).await?
+      let conn = self.db_pool.get().await?;
+      conn.interact(move |conn| {
+        FavoriteCrate::belonging_to(&user)
+          .inner_join(crates::table)
+          .select(Crate::as_select())
+          .load(conn)
+      }).await??
     };
     Ok(crates)
   }
 
   #[instrument(skip(self), err)]
-  pub async fn follow(&self, user_id: i32, crate_id: i32) -> Result<(), InternalError> {
+  pub async fn follow(&self, user_id: i32, crate_id: i32) -> Result<(), DatabaseError> {
     use att_core::schema::favorite_crates;
-    let mut conn = self.db_pool.get().await?;
-    diesel::insert_into(favorite_crates::table)
-      .values(&FavoriteCrate { crate_id, user_id })
-      .execute(&mut conn).await?;
+    let conn = self.db_pool.get().await?;
+    conn.interact(move |conn| {
+      diesel::insert_into(favorite_crates::table)
+        .values(&FavoriteCrate { crate_id, user_id })
+        .execute(conn)
+    }).await??;
     Ok(())
   }
 
   #[instrument(skip(self), err)]
-  pub async fn unfollow(&self, user_id: i32, crate_id: i32) -> Result<(), InternalError> {
-    use att_core::schema::favorite_crates;
-    let mut conn = self.db_pool.get().await?;
-    diesel::delete(favorite_crates::table
-      .filter(favorite_crates::user_id.eq(user_id))
-      .filter(favorite_crates::crate_id.eq(crate_id))
-    )
-      .execute(&mut conn).await?;
+  pub async fn unfollow(&self, user_id: i32, crate_id: i32) -> Result<(), DatabaseError> {
+    let conn = self.db_pool.get().await?;
+    conn.interact(move |conn| {
+      use att_core::schema::favorite_crates;
+      diesel::delete(favorite_crates::table
+        .filter(favorite_crates::user_id.eq(user_id))
+        .filter(favorite_crates::crate_id.eq(crate_id))
+      )
+        .execute(conn)
+    }).await??;
     Ok(())
   }
 }
@@ -239,7 +238,7 @@ pub fn router() -> Router<Crates> {
       let crates = match search {
         CrateSearchQuery { followed: true, .. } => {
           if let Some(user) = &auth_session.user {
-            state.get_followed_crates(user)
+            state.get_followed_crates(user.clone())
               .await
               .map_err(|_| CrateError::Internal)?
           } else {
