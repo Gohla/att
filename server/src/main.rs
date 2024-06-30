@@ -1,7 +1,6 @@
 use std::error::Error;
 
-use deadpool_diesel::postgres::{Runtime as DeadpoolRuntime, Manager, Pool};
-
+use deadpool_diesel::postgres::{Manager, Pool, Runtime as DeadpoolRuntime};
 use tokio::runtime::Runtime;
 use tokio::signal;
 use tokio::time::{Duration, interval};
@@ -13,7 +12,7 @@ use att_core::app::tracing::AppTracingBuilder;
 use att_core::run_or_compile_time_env;
 
 use crate::crates::{Crates, crates_io_dump};
-use crate::data::{DbPool};
+use crate::db::DbPool;
 use crate::job_scheduler::JobScheduler;
 use crate::server::Server;
 use crate::users::Users;
@@ -21,7 +20,7 @@ use crate::users::Users;
 mod server;
 mod crates;
 mod job_scheduler;
-mod data;
+mod db;
 mod users;
 mod util;
 
@@ -53,9 +52,7 @@ fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn run(storage: Storage, runtime: &Runtime, db_pool: DbPool) -> Result<(), Box<dyn Error>> {
-
   let users = Users::from_db_pool(db_pool.clone());
-  //users.ensure_default_user_exists(&mut database.blocking_write().users)?;
 
   let (crates, crates_io_client_task) = Crates::new(
     db_pool,
@@ -66,15 +63,10 @@ fn run(storage: Storage, runtime: &Runtime, db_pool: DbPool) -> Result<(), Box<d
 
   let (job_scheduler, job_scheduler_task) = JobScheduler::new();
   runtime.spawn(job_scheduler_task);
-  //job_scheduler.blocking_schedule_job(RefreshJob::new(crates.clone(), database.clone()), interval(Duration::from_secs(60 * 60)), "refresh outdated crate data");
-  //job_scheduler.blocking_schedule_blocking_job(StoreDatabaseJob::new(storage.clone(), database.clone()), interval(Duration::from_secs(60 * 5)), "store database");
   job_scheduler.blocking_schedule_job(crates.create_update_crates_io_dump_job(), interval(crates_io_dump::UPDATE_DURATION), "update crates.io database dump");
 
   let server = Server::new(users, crates);
   let result = runtime.block_on(server.run(shutdown_signal()));
-
-  //debug!("storing database");
-  //database.blocking_serialize(&storage)?;
 
   result
 }

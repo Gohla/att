@@ -22,7 +22,7 @@ pub struct SearchCratesComponent {
 pub enum Message {
   SendRequest(SearchCratesRequest),
   ProcessResponse(SearchCratesResponse),
-  Choose(String),
+  Choose(Crate),
 }
 
 impl SearchCratesComponent {
@@ -45,14 +45,14 @@ impl SearchCratesComponent {
 
 impl SearchCratesComponent {
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message) -> Update<Option<String>, Task<Message>> {
+  pub fn update(&mut self, message: Message) -> Update<Option<Crate>, Task<Message>> {
     use Message::*;
     match message {
       SendRequest(request) => return self.search_crates.send(request).opt_perform_into(ProcessResponse).into(),
       ProcessResponse(response) => if let Some(request) = self.search_crates.process(response) {
         return self.search_crates.send(request).opt_perform_into(ProcessResponse).into();
       }
-      Choose(crate_id) => return Update::from_action(Some(crate_id)),
+      Choose(krate) => return Update::from_action(Some(krate)),
     }
     Update::default()
   }
@@ -62,11 +62,11 @@ impl SearchCratesComponent {
     let cell_to_element = |row, col| -> Option<Element<Message>> {
       let Some(krate): Option<&Crate> = crates.get(row) else { return None; };
       let element = match col {
-        0 => WidgetBuilder::once().add_text(&krate.name),
-        1 => WidgetBuilder::once().add_text(&krate.max_version),
+        0 => WidgetBuilder::once().add_text(format!("{}", krate.id)),
+        1 => WidgetBuilder::once().add_text(&krate.name),
         2 => WidgetBuilder::once().add_text(krate.updated_at.format("%Y-%m-%d").to_string()),
-        3 => WidgetBuilder::once().add_text(format!("{}", krate.downloads)),
-        4 => WidgetBuilder::once().button(self.choose_button_text.as_str()).padding([1.0, 5.0]).success_style().on_press(|| Message::Choose(krate.name.clone())).add(),
+        3 => WidgetBuilder::once().add_text(&krate.description),
+        4 => WidgetBuilder::once().button(self.choose_button_text.as_str()).padding([1.0, 5.0]).success_style().on_press(|| Message::Choose(krate.clone())).add(),
         _ => return None,
       };
       Some(element)
@@ -75,10 +75,10 @@ impl SearchCratesComponent {
       .spacing(1.0)
       .body_row_height(24.0)
       .body_row_count(crates.len())
-      .push(2, "Name")
-      .push(1, "Latest Version")
-      .push(1, "Updated at")
-      .push(1, "Downloads")
+      .push(0.5, "Id")
+      .push(1.0, "Name")
+      .push(1.0, "Updated at")
+      .push(2.0, "Description")
       .push(1, "")
       .into_element();
 

@@ -16,7 +16,7 @@ use tracing::{info, instrument};
 
 use att_core::crates::{Crate, CrateDefaultVersion, CrateDownloads, CrateVersion};
 
-use crate::data::{DatabaseError, DbPool};
+use crate::db::{DbError, DbPool};
 use crate::job_scheduler::{Job, JobAction, JobResult};
 
 #[derive(Clone)]
@@ -46,9 +46,9 @@ pub enum InternalError {
   #[error(transparent)]
   Reqwest(#[from] reqwest::Error),
   #[error(transparent)]
-  Database(DatabaseError),
+  Database(DbError),
 }
-impl<E: Into<DatabaseError>> From<E> for InternalError {
+impl<E: Into<DbError>> From<E> for InternalError {
   fn from(value: E) -> Self {
     Self::Database(value.into())
   }
@@ -103,21 +103,21 @@ impl CratesIoDump {
     info!("Importing database dump");
 
     // TODO: transaction
-    // Excluded trick from: https://stackoverflow.com/questions/47626047/execute-an-insert-or-update-using-diesel#comment82217514_47626103
+    // TODO: use upserts (`upsert::excluded`), but they don't directly work with `copy_from`. Example:
+    //   insert_into(crates)
+    //     .values(&all_crates)
+    //     .on_conflict(id).do_update().set(id.eq(excluded(id)))
+    //     .execute(conn)
+    //   excluded trick from: https://stackoverflow.com/questions/47626047/execute-an-insert-or-update-using-diesel#comment82217514_47626103
 
     let conn = self.db_pool.get().await?;
-    // use diesel::{insert_into, upsert::excluded};
-    use diesel::{insert_into};
+    use diesel::insert_into;
     let crates = {
       conn.interact(move |conn| {
         use att_core::schema::crates::dsl::*;
         copy_from(crates)
           .from_insertable(&all_crates)
           .execute(conn)
-        // insert_into(crates)
-        //   .values(&all_crates)
-        //   .on_conflict(id).do_update().set(id.eq(excluded(id)))
-        //   .execute(conn)
       }).await??
     };
     let crate_downloads = {
@@ -126,34 +126,22 @@ impl CratesIoDump {
         copy_from(crate_downloads)
           .from_insertable(&all_crate_downloads)
           .execute(conn)
-        // insert_into(crate_downloads)
-        //   .values(&all_crate_downloads)
-        //   .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
-        //   .execute(conn)
       }).await??
     };
     let crate_versions = {
-      conn.interact(move|conn| {
+      conn.interact(move |conn| {
         use att_core::schema::crate_versions::dsl::*;
         copy_from(crate_versions)
           .from_insertable(&all_crate_versions)
           .execute(conn)
-        // insert_into(crate_versions)
-        //   .values(&all_crate_versions)
-        //   .on_conflict(id).do_update().set(id.eq(excluded(id)))
-        //   .execute(conn)
       }).await??
     };
     let crate_default_versions = {
-      conn.interact(move|conn| {
+      conn.interact(move |conn| {
         use att_core::schema::crate_default_versions::dsl::*;
         copy_from(crate_default_versions)
           .from_insertable(&all_crate_default_versions)
           .execute(conn)
-        // insert_into(crate_default_versions)
-        //   .values(&all_crate_default_versions)
-        //   .on_conflict(crate_id).do_update().set(crate_id.eq(excluded(crate_id)))
-        //   .execute(conn)
       }).await??
     };
     let metadata = {

@@ -16,7 +16,7 @@ use crate::http_client::{AttHttpClient, AttHttpClientError};
 /// Follow crates state that can be (de)serialized.
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct FollowCratesState {
-  id_to_crate: IndexMap<String, Crate>,
+  id_to_crate: IndexMap<i32, Crate>,
 }
 
 /// Keep track of followed crates.
@@ -24,7 +24,7 @@ pub struct FollowCratesState {
 pub struct FollowCrates {
   http_client: AttHttpClient,
   state: FollowCratesState,
-  crates_being_modified: BTreeSet<String>,
+  crates_being_modified: BTreeSet<i32>,
   all_crates_being_modified: bool,
   query_def: QueryDef,
   query: Query,
@@ -83,8 +83,8 @@ impl FollowCrates {
 
 
   #[inline]
-  pub fn is_crate_being_modified(&self, crate_id: &str) -> bool {
-    self.all_crates_being_modified || self.crates_being_modified.contains(crate_id)
+  pub fn is_crate_being_modified(&self, crate_id: i32) -> bool {
+    self.all_crates_being_modified || self.crates_being_modified.contains(&crate_id)
   }
 
   #[inline]
@@ -97,22 +97,14 @@ impl FollowCrates {
 /// Update one crate response.
 #[derive(Debug)]
 pub struct UpdateOne {
-  crate_id: String,
+  crate_id: i32,
   result: Result<Crate, AttHttpClientError>,
 }
 
 impl FollowCrates {
-  pub fn follow(&mut self, crate_id: String) -> impl Future<Output=UpdateOne> {
-    self.crates_being_modified.insert(crate_id.clone());
-    let future = self.http_client.follow_crate(crate_id.clone());
-    async move {
-      UpdateOne { crate_id, result: future.await }
-    }
-  }
-
-  pub fn refresh(&mut self, crate_id: String) -> impl Future<Output=UpdateOne> {
-    self.crates_being_modified.insert(crate_id.clone());
-    let future = self.http_client.refresh_crate(crate_id.clone());
+  pub fn refresh(&mut self, crate_id: i32) -> impl Future<Output=UpdateOne> {
+    self.crates_being_modified.insert(crate_id);
+    let future = self.http_client.refresh_crate(crate_id);
     async move {
       UpdateOne { crate_id, result: future.await }
     }
@@ -173,8 +165,38 @@ impl FollowCrates {
     }
     for krate in crates {
       debug!(crate_id = krate.name, "update crate");
-      self.state.id_to_crate.insert(krate.name.clone(), krate);
+      self.state.id_to_crate.insert(krate.id, krate);
     }
+
+    Ok(())
+  }
+}
+
+/// Follow crate response.
+#[derive(Debug)]
+pub struct Follow {
+  krate: Crate,
+  result: Result<(), AttHttpClientError>,
+}
+
+impl FollowCrates {
+  pub fn follow(&mut self, krate: Crate) -> impl Future<Output=Follow> {
+    let crate_id = krate.id;
+    self.crates_being_modified.insert(crate_id);
+    let future = self.http_client.follow_crate(crate_id);
+    async move {
+      Follow { krate, result: future.await }
+    }
+  }
+
+  pub fn process_follow(&mut self, response: Follow) -> Result<(), AttHttpClientError> {
+    let crate_id = response.krate.id;
+    self.crates_being_modified.remove(&crate_id);
+
+    response.result
+      .inspect_err(|cause| error!(crate = ?response.krate, %cause, "failed to follow crate: {cause:?}"))?;
+    debug!(crate = ?response.krate, "follow crate");
+    self.state.id_to_crate.insert(crate_id, response.krate);
 
     Ok(())
   }
@@ -183,14 +205,14 @@ impl FollowCrates {
 /// Unfollow crate response.
 #[derive(Debug)]
 pub struct Unfollow {
-  crate_id: String,
+  crate_id: i32,
   result: Result<(), AttHttpClientError>,
 }
 
 impl FollowCrates {
-  pub fn unfollow(&mut self, crate_id: String) -> impl Future<Output=Unfollow> {
-    self.crates_being_modified.insert(crate_id.clone());
-    let future = self.http_client.unfollow_crate(crate_id.clone());
+  pub fn unfollow(&mut self, crate_id: i32) -> impl Future<Output=Unfollow> {
+    self.crates_being_modified.insert(crate_id);
+    let future = self.http_client.unfollow_crate(crate_id);
     async move {
       Unfollow { crate_id, result: future.await }
     }
@@ -216,9 +238,9 @@ impl FollowCrates {
 #[derive(Clone, Debug)]
 pub enum FollowCrateRequest {
   GetFollowed,
-  Follow(String),
-  Unfollow(String),
-  Refresh(String),
+  Follow(Crate),
+  Unfollow(i32),
+  Refresh(i32),
   RefreshOutdated,
   RefreshAll,
 }
@@ -229,6 +251,7 @@ pub enum FollowCratesResponse {
   UpdateOne(UpdateOne),
   UpdateAll(UpdateAll<false>),
   SetAll(UpdateAll<true>),
+  Follow(Follow),
   Unfollow(Unfollow),
 }
 impl From<UpdateOne> for FollowCratesResponse {
@@ -242,6 +265,10 @@ impl From<UpdateAll<false>> for FollowCratesResponse {
 impl From<UpdateAll<true>> for FollowCratesResponse {
   #[inline]
   fn from(r: UpdateAll<true>) -> Self { Self::SetAll(r) }
+}
+impl From<Follow> for FollowCratesResponse {
+  #[inline]
+  fn from(r: Follow) -> Self { Self::Follow(r) }
 }
 impl From<Unfollow> for FollowCratesResponse {
   #[inline]
@@ -312,7 +339,7 @@ impl Service for FollowCrates {
 
   #[inline]
   fn data_action<'i>(&self, index: usize, data: &'i Self::Data) -> Option<impl Action<Request=Self::Request> + 'i> {
-    let crate_id = &data.name;
+    let crate_id = data.id;
     let disabled = self.is_crate_being_modified(crate_id);
     let action = match index {
       0 => DataAction { kind: DataActionKind::Refresh, disabled, crate_id },
@@ -333,7 +360,7 @@ impl Service for FollowCrates {
     use FollowCratesResponse::*;
     match request {
       GetFollowed => self.get_followed().map(SetAll).boxed_maybe_send(),
-      Follow(crate_id) => self.follow(crate_id).map(UpdateOne).boxed_maybe_send(),
+      FollowCrateRequest::Follow(krate) => self.follow(krate).map(FollowCratesResponse::Follow).boxed_maybe_send(),
       FollowCrateRequest::Unfollow(crate_id) => self.unfollow(crate_id).map(FollowCratesResponse::Unfollow).boxed_maybe_send(),
       Refresh(crate_id) => self.refresh(crate_id).map(UpdateOne).boxed_maybe_send(),
       RefreshOutdated => self.refresh_outdated().map(UpdateAll).boxed_maybe_send(),
@@ -348,6 +375,7 @@ impl Service for FollowCrates {
       UpdateOne(r) => { let _ = self.process_update_one(r); }
       UpdateAll(r) => { let _ = self.process_update_all(r); }
       SetAll(r) => { let _ = self.process_update_all(r); }
+      Follow(r) => { let _ = self.process_follow(r); }
       Unfollow(r) => { let _ = self.process_unfollow(r); }
     }
   }
@@ -387,13 +415,13 @@ enum DataActionKind {
   Unfollow,
 }
 
-struct DataAction<'i> {
+struct DataAction {
   kind: DataActionKind,
   disabled: bool,
-  crate_id: &'i str,
+  crate_id: i32,
 }
 
-impl Action for DataAction<'_> {
+impl Action for DataAction {
   type Request = FollowCrateRequest;
 
   #[inline]
@@ -402,8 +430,8 @@ impl Action for DataAction<'_> {
   #[inline]
   fn request(&self) -> FollowCrateRequest {
     match self.kind {
-      DataActionKind::Refresh => FollowCrateRequest::Refresh(self.crate_id.to_string()),
-      DataActionKind::Unfollow => FollowCrateRequest::Unfollow(self.crate_id.to_string()),
+      DataActionKind::Refresh => FollowCrateRequest::Refresh(self.crate_id),
+      DataActionKind::Unfollow => FollowCrateRequest::Unfollow(self.crate_id),
     }
   }
 }

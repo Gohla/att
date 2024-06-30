@@ -65,18 +65,18 @@ impl AttHttpClient {
   }
 
   #[instrument(skip(self), err)]
-  pub fn follow_crate(&self, crate_id: String) -> impl Future<Output=Result<Crate, AttHttpClientError>> {
+  pub fn follow_crate(&self, crate_id: i32) -> impl Future<Output=Result<(), AttHttpClientError>> {
     let rb = self.request_builder(Method::POST, format!("crates/{crate_id}/follow"));
     async move { Self::send::<_, CrateError>(rb).await }
   }
   #[instrument(skip(self), err)]
-  pub fn unfollow_crate(&self, crate_id: String) -> impl Future<Output=Result<(), AttHttpClientError>> {
+  pub fn unfollow_crate(&self, crate_id: i32) -> impl Future<Output=Result<(), AttHttpClientError>> {
     let rb = self.request_builder(Method::DELETE, format!("crates/{crate_id}/follow"));
     async move { Self::send::<_, CrateError>(rb).await }
   }
 
   #[instrument(skip(self), err)]
-  pub fn refresh_crate(&self, crate_id: String) -> impl Future<Output=Result<Crate, AttHttpClientError>> {
+  pub fn refresh_crate(&self, crate_id: i32) -> impl Future<Output=Result<Crate, AttHttpClientError>> {
     let rb = self.request_builder(Method::POST, format!("crates/{crate_id}/refresh"));
     async move { Self::send::<_, CrateError>(rb).await }
   }

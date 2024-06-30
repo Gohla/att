@@ -23,6 +23,8 @@ impl Server {
   }
 
   pub async fn run(self, shutdown_signal: impl Future<Output=()> + Send + 'static) -> Result<(), Box<dyn Error>> {
+    self.users.ensure_default_user_exists().await?;
+
     let session_store = MemoryStore::default();
     let session_layer = SessionManagerLayer::new(session_store)
       .with_expiry(Expiry::OnInactivity(Duration::days(30)))

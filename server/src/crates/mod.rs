@@ -11,7 +11,7 @@ use att_core::crates::{Crate, CrateError, CrateSearchQuery};
 use crates_io_client::CratesIoClient;
 
 use crate::crates::crates_io_dump::{CratesIoDump, UpdateCratesIoDumpJob};
-use crate::data::{DatabaseError, DbPool};
+use crate::db::{DbError, DbPool};
 use crate::users::{AuthSession, User};
 use crate::util::JsonResult;
 
@@ -44,14 +44,15 @@ impl Crates {
 
 impl Crates {
   #[instrument(skip(self), err)]
-  pub async fn search(&self, search_term: String) -> Result<Vec<Crate>, DatabaseError> {
+  pub async fn search(&self, search_term: String) -> Result<Vec<Crate>, DbError> {
     let crates = {
       let conn = self.db_pool.get().await?;
-      conn.interact(|conn| {
+      conn.interact(move |conn| {
         use att_core::schema::crates::dsl::*;
         crates
           .select(Crate::as_select())
-          .filter(name.ilike(search_term))
+          .filter(name.ilike(format!("{}%", search_term)))
+          .order(id)
           .load(conn)
       }).await??
     };
@@ -59,7 +60,7 @@ impl Crates {
   }
 
   #[instrument(skip(self), err)]
-  pub async fn get(&self, crate_name: String) -> Result<Option<Crate>, DatabaseError> {
+  pub async fn get(&self, crate_name: String) -> Result<Option<Crate>, DbError> {
     let conn = self.db_pool.get().await?;
     let krate = conn.interact(|conn| {
       use att_core::schema::crates::dsl::*;
@@ -83,7 +84,7 @@ pub struct FavoriteCrate {
 
 impl Crates {
   #[instrument(skip(self))]
-  pub async fn get_followed_crates(&self, user: User) -> Result<Vec<Crate>, DatabaseError> {
+  pub async fn get_followed_crates(&self, user: User) -> Result<Vec<Crate>, DbError> {
     let crates = {
       use att_core::schema::crates;
       let conn = self.db_pool.get().await?;
@@ -98,7 +99,7 @@ impl Crates {
   }
 
   #[instrument(skip(self), err)]
-  pub async fn follow(&self, user_id: i32, crate_id: i32) -> Result<(), DatabaseError> {
+  pub async fn follow(&self, user_id: i32, crate_id: i32) -> Result<(), DbError> {
     use att_core::schema::favorite_crates;
     let conn = self.db_pool.get().await?;
     conn.interact(move |conn| {
@@ -110,7 +111,7 @@ impl Crates {
   }
 
   #[instrument(skip(self), err)]
-  pub async fn unfollow(&self, user_id: i32, crate_id: i32) -> Result<(), DatabaseError> {
+  pub async fn unfollow(&self, user_id: i32, crate_id: i32) -> Result<(), DbError> {
     let conn = self.db_pool.get().await?;
     conn.interact(move |conn| {
       use att_core::schema::favorite_crates;

@@ -12,7 +12,7 @@ use tracing::instrument;
 
 use att_core::users::{AuthError, UserCredentials};
 
-use crate::data::{DatabaseError, DbPool};
+use crate::db::{DbError, DbPool};
 use crate::util::JsonResult;
 
 #[derive(Clone, Queryable, Selectable, Identifiable, AsChangeset, Insertable)]
@@ -34,27 +34,11 @@ impl Debug for User {
 }
 
 
-// Implementation
-
 #[derive(Clone)]
 pub struct Users {
   argon2: Argon2<'static>,
   db_pool: DbPool,
 }
-
-#[derive(Debug, Error)]
-pub enum UsersError {
-  #[error("Parsing hash or hashing password failed")]
-  HashPassword(#[from] password_hash::Error),
-  #[error(transparent)]
-  Database(DatabaseError),
-}
-impl<E: Into<DatabaseError>> From<E> for UsersError {
-  fn from(value: E) -> Self {
-    Self::Database(value.into())
-  }
-}
-
 
 impl Users {
   pub fn new(argon2: Argon2<'static>, db_pool: DbPool) -> Self {
@@ -64,20 +48,34 @@ impl Users {
   pub fn from_db_pool(db_pool: DbPool) -> Self {
     Self::new(Argon2::default(), db_pool)
   }
+}
 
-  // #[instrument(skip_all, err)]
-  // pub fn ensure_default_user_exists(&self, data: &mut UsersData) -> Result<bool, password_hash::Error> {
-  //   let user_credentials = UserCredentials::default();
-  //   let created = if !data.contains_user_by_name(&user_credentials.name) {
-  //     self.create_user(data, user_credentials)?
-  //   } else {
-  //     false
-  //   };
-  //   Ok(created)
-  // }
+
+#[derive(Debug, Error)]
+pub enum InternalError {
+  #[error("Parsing hash or hashing password failed")]
+  HashPassword(#[from] password_hash::Error),
+  #[error(transparent)]
+  Database(DbError),
+}
+impl<E: Into<DbError>> From<E> for InternalError {
+  fn from(value: E) -> Self { Self::Database(value.into()) }
+}
+
+impl Users {
+  #[instrument(skip_all, err)]
+  pub async fn ensure_default_user_exists(&self) -> Result<bool, InternalError> {
+    let user_credentials = UserCredentials::default();
+    let created = if self.get_user_by_name(user_credentials.name.clone()).await?.is_none() {
+      self.create_user(user_credentials).await?.is_some()
+    } else {
+      false
+    };
+    Ok(created)
+  }
 
   #[instrument(skip(self), err)]
-  async fn get_user_by_id(&self, user_id: i32) -> Result<Option<User>, UsersError> {
+  pub async fn get_user_by_id(&self, user_id: i32) -> Result<Option<User>, InternalError> {
     let conn = self.db_pool.get().await?;
     let user = conn.interact(move |conn| {
       use att_core::schema::users::dsl::*;
@@ -90,8 +88,22 @@ impl Users {
     Ok(user)
   }
 
+  #[instrument(skip(self), err)]
+  async fn get_user_by_name(&self, user_name: String) -> Result<Option<User>, InternalError> {
+    let conn = self.db_pool.get().await?;
+    let user = conn.interact(move |conn| {
+      use att_core::schema::users::dsl::*;
+      users
+        .filter(name.eq(user_name))
+        .select(User::as_select())
+        .first(conn)
+        .optional()
+    }).await??;
+    Ok(user)
+  }
+
   #[instrument(skip_all, fields(user_credentials.name = user_credentials.name), err)]
-  async fn authenticate_user(&self, user_credentials: UserCredentials) -> Result<Option<User>, UsersError> {
+  async fn authenticate_user(&self, user_credentials: UserCredentials) -> Result<Option<User>, InternalError> {
     let user = {
       let conn = self.db_pool.get().await?;
       conn.interact(move |conn| {
@@ -118,7 +130,7 @@ impl Users {
   }
 
   #[instrument(skip_all, fields(user_credentials.name = user_credentials.name), err)]
-  async fn create_user(&self, user_credentials: UserCredentials) -> Result<Option<User>, UsersError> {
+  async fn create_user(&self, user_credentials: UserCredentials) -> Result<Option<User>, InternalError> {
     #[derive(Insertable)]
     #[diesel(table_name = att_core::schema::users, check_for_backend(diesel::pg::Pg))]
     struct NewUser<'a> {
@@ -165,7 +177,7 @@ impl AuthUser for User {
 impl AuthnBackend for Users {
   type User = User;
   type Credentials = UserCredentials;
-  type Error = UsersError;
+  type Error = InternalError;
 
   async fn authenticate(&self, credentials: Self::Credentials) -> Result<Option<Self::User>, Self::Error> {
     let user = self.authenticate_user(credentials).await?;

@@ -53,10 +53,10 @@ impl FollowCratesComponent {
       ToSearchCrates(message) => {
         let (action, command) = self.search_crates.update(message).into_action_task();
         let search_command = command.map(ToSearchCrates);
-        if let Some(crate_id) = action {
+        if let Some(krate) = action {
           self.search_crates.clear();
           self.search_crates_modal_open = false;
-          let follow_command = self.follow_crates.follow(crate_id).perform_into(ProcessResponse);
+          let follow_command = self.follow_crates.follow(krate).perform_into(ProcessResponse);
           return Task::batch([search_command, follow_command]).into();
         }
         return search_command.into();
