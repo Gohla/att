@@ -78,7 +78,6 @@ impl Task {
     task
   }
 
-  //noinspection RsBorrowChecker
   async fn run(mut self) {
     loop {
       tokio::select! {

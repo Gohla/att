@@ -6,14 +6,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
-use db_dump::Loader;
+use db_dump::{crate_downloads, crates, default_versions, Loader, versions};
 use futures::StreamExt;
+use nohash::IntMap;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::task::block_in_place;
 use tracing::{info, instrument};
 use trie_rs::map::{Trie, TrieBuilder};
-
 use att_core::crates::Crate;
 
 use crate::job_scheduler::{Job, JobAction, JobResult};
@@ -21,18 +21,46 @@ use crate::job_scheduler::{Job, JobAction, JobResult};
 pub struct CratesIoDump {
   db_dump_file: PathBuf,
   is_loaded: bool,
-  crates: Trie<u8, Crate>,
+
+  crate_id_to_crate: IntMap<u32, crates::Row>,
+  crate_id_to_downloads: IntMap<u32, crate_downloads::Row>,
+  crate_id_to_default_version: IntMap<u32, default_versions::Row>,
+  version_id_to_version: IntMap<u32, versions::Row>,
+
+  crate_name_trie: Trie<u8, u32>,
 }
 
 impl CratesIoDump {
   #[inline]
   pub fn new(db_dump_file: PathBuf) -> Self {
-    Self { db_dump_file, is_loaded: false, crates: TrieBuilder::new().build() }
+    Self {
+      db_dump_file,
+      is_loaded: false,
+
+      crate_id_to_crate: Default::default(),
+      crate_id_to_downloads: Default::default(),
+      crate_id_to_default_version: Default::default(),
+      version_id_to_version: Default::default(),
+
+      crate_name_trie: TrieBuilder::new().build()
+    }
   }
 
-  #[inline]
-  pub fn crates(&self) -> &Trie<u8, Crate> {
-    &self.crates
+  pub fn search(&self, search_term: String) -> impl Iterator<Item=Crate> + '_ {
+    self.crate_name_trie.postfix_search::<String, _>(&search_term)
+      .flat_map(|(_, crate_id)| self.crate_id_to_crate.get(crate_id).map(|row|{
+        let downloads = self.crate_id_to_downloads.get(crate_id).map(|row|row.downloads).unwrap_or_default();
+        let max_version = self.crate_id_to_default_version.get(crate_id)
+          .and_then(|row|self.version_id_to_version.get(&row.version_id.0))
+          .map(|row|row.num.to_string())
+          .unwrap_or_default();
+        Crate {
+          id: row.name.clone(),
+          downloads,
+          updated_at: row.updated_at,
+          max_version,
+        }
+      }))
   }
 }
 
@@ -48,25 +76,33 @@ impl CratesIoDump {
   fn update_crates(&mut self) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
     info!("Updating crates trie from database dump");
 
-    let mut builder = TrieBuilder::new();
-    let mut len = 0usize;
+    self.crate_id_to_crate.clear();
+    self.crate_id_to_downloads.clear();
+    self.crate_id_to_default_version.clear();
+    self.version_id_to_version.clear();
+
+    let mut trie_builder = TrieBuilder::new();
     Loader::new()
       .crates(|row| {
-        let krate = Crate {
-          id: row.name.clone(),
-          downloads: 0,
-          updated_at: row.updated_at,
-          max_version: String::new(),
-        };
-        builder.push(row.name, krate);
-        len += 1;
+        let id = row.id.0;
+        trie_builder.insert(row.name.bytes(), id);
+        self.crate_id_to_crate.insert(id, row);
+      })
+      .crate_downloads(|row| {
+        self.crate_id_to_downloads.insert(row.crate_id.0, row);
+      })
+      .default_versions(|row| {
+        self.crate_id_to_default_version.insert(row.crate_id.0, row);
+      })
+      .versions(|row| {
+        self.version_id_to_version.insert(row.id.0, row);
       })
       .load(&self.db_dump_file)?;
 
-    self.crates = builder.build();
+    self.crate_name_trie = trie_builder.build();
     self.is_loaded = true;
 
-    info!("Updated crates trie: {} entries", len);
+    info!("Updated crates trie: {} entries", self.crate_id_to_crate.len());
 
     Ok(())
   }
