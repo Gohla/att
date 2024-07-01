@@ -18,7 +18,7 @@ diesel::table! {
     crate_versions (id) {
         id -> Int4,
         crate_id -> Int4,
-        version -> Varchar,
+        number -> Varchar,
     }
 }
 

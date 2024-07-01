@@ -2,21 +2,19 @@ use std::error::Error;
 use std::future::Future;
 use std::path::PathBuf;
 
-use axum::extract::{Path, Query, State};
-use axum::Router;
 use diesel::prelude::*;
 use tracing::instrument;
 
-use att_core::crates::{Crate, CrateError, CrateSearchQuery};
+use att_core::crates::Crate;
 use crates_io_client::CratesIoClient;
 
 use crate::crates::crates_io_dump::{CratesIoDump, UpdateCratesIoDumpJob};
 use crate::db::{DbError, DbPool};
-use crate::users::{AuthSession, User};
-use crate::util::JsonResult;
+use crate::users::User;
 
 pub mod crates_io_client;
 pub mod crates_io_dump;
+pub mod route;
 
 #[derive(Clone)]
 pub struct Crates {
@@ -86,9 +84,9 @@ impl Crates {
   #[instrument(skip(self))]
   pub async fn get_followed_crates(&self, user: User) -> Result<Vec<Crate>, DbError> {
     let crates = {
-      use att_core::schema::crates;
       let conn = self.db_pool.get().await?;
       conn.interact(move |conn| {
+        use att_core::schema::crates;
         FavoriteCrate::belonging_to(&user)
           .inner_join(crates::table)
           .select(Crate::as_select())
@@ -100,9 +98,9 @@ impl Crates {
 
   #[instrument(skip(self), err)]
   pub async fn follow(&self, user_id: i32, crate_id: i32) -> Result<(), DbError> {
-    use att_core::schema::favorite_crates;
     let conn = self.db_pool.get().await?;
     conn.interact(move |conn| {
+      use att_core::schema::favorite_crates;
       diesel::insert_into(favorite_crates::table)
         .values(&FavoriteCrate { crate_id, user_id })
         .execute(conn)
@@ -215,103 +213,3 @@ impl Crates {
 // fn refresh_hourly(now: &DateTime<Utc>, last_refresh: &DateTime<Utc>) -> bool {
 //   now.signed_duration_since(last_refresh) > Duration::hours(1)
 // }
-
-
-// Routing
-
-pub fn router() -> Router<Crates> {
-  use axum::routing::{get, post};
-  return Router::new()
-    .route("/", get(search_crates))
-    .route("/:crate_id", get(get_crate))
-    .route("/:crate_id/follow", post(follow_crate).delete(unfollow_crate))
-  // .route("/:crate_id/refresh", post(refresh_crate))
-  // .route("/refresh_outdated", post(refresh_outdated_crates))
-  // .route("/refresh_all", post(refresh_all_crates))
-  ;
-
-  async fn search_crates(
-    auth_session: AuthSession,
-    State(state): State<Crates>,
-    Query(search): Query<CrateSearchQuery>
-  ) -> JsonResult<Vec<Crate>, CrateError> {
-    async move {
-      let crates = match search {
-        CrateSearchQuery { followed: true, .. } => {
-          if let Some(user) = &auth_session.user {
-            state.get_followed_crates(user.clone())
-              .await
-              .map_err(|_| CrateError::Internal)?
-          } else {
-            return Err(CrateError::NotLoggedIn)
-          }
-        }
-        CrateSearchQuery { search_term: Some(search_term), .. } => state
-          .search(search_term)
-          .await
-          .map_err(|_| CrateError::Internal)?,
-        _ => Vec::default()
-      };
-      Ok(crates)
-    }.await.into()
-  }
-
-  async fn get_crate(State(state): State<Crates>, Path(crate_name): Path<String>) -> JsonResult<Option<Crate>, CrateError> {
-    async move {
-      let krate = state.get(crate_name)
-        .await
-        .map_err(|_| CrateError::Internal)?;
-      Ok(krate)
-    }.await.into()
-  }
-
-  async fn follow_crate(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<(), CrateError> {
-    async move {
-      let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id;
-      let krate = state.follow(user_id, crate_id)
-        .await
-        .map_err(|_| CrateError::Internal)?;
-      Ok(krate)
-    }.await.into()
-  }
-
-  async fn unfollow_crate(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<(), CrateError> {
-    async move {
-      let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id;
-      state.unfollow(user_id, crate_id)
-        .await
-        .map_err(|_| CrateError::Internal)?;
-      Ok(())
-    }.await.into()
-  }
-
-  // async fn refresh_crate(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<String>) -> JsonResult<Crate, CrateError> {
-  //   async move {
-  //     let _ = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id();
-  //     let mut data = state.database.write().await;
-  //     let krate = state.crates.refresh_one(&mut data.crates, crate_id).await
-  //       .map_err(CratesIoClientError::into_crate_error)?;
-  //     Ok(krate)
-  //   }.await.into()
-  // }
-  //
-  // async fn refresh_outdated_crates(auth_session: AuthSession, State(state): State<Crates>) -> JsonResult<Vec<Crate>, CrateError> {
-  //   async move {
-  //     let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id();
-  //     let mut data = state.database.write().await;
-  //     let crates = state.crates.refresh_outdated(&mut data.crates, user_id).await
-  //       .map_err(CratesIoClientError::into_crate_error)?;
-  //     Ok(crates)
-  //   }.await.into()
-  // }
-  //
-  // async fn refresh_all_crates(auth_session: AuthSession, State(state): State<Crates>) -> JsonResult<Vec<Crate>, CrateError> {
-  //   async move {
-  //     let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id();
-  //     let mut data = state.database.write().await;
-  //     let crates = state.crates.refresh_all(&mut data.crates, user_id).await
-  //       .map_err(CratesIoClientError::into_crate_error)?;
-  //     Ok(crates)
-  //   }.await.into()
-  // }
-}

@@ -24,6 +24,14 @@ pub struct Crate {
   pub readme: Option<String>,
   pub repository: Option<String>,
 }
+// #[cfg(feature = "diesel")]
+// impl Insertable<schema::import_crates::table> for Crate {
+//   type Values = <Self as Insertable<schema::crates::table>>::Values;
+//
+//   fn values(self) -> Self::Values {
+//     <Self as Insertable<schema::crates::table>>::values(self)
+//   }
+// }
 
 #[cfg_attr(feature = "diesel",
   derive(Queryable, Selectable, Identifiable, Associations, AsChangeset, Insertable),
@@ -43,7 +51,7 @@ pub struct CrateDownloads {
 pub struct CrateVersion {
   pub id: i32,
   pub crate_id: i32,
-  pub version: String,
+  pub number: String,
 }
 
 #[cfg_attr(feature = "diesel",

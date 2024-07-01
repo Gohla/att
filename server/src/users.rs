@@ -202,20 +202,16 @@ pub fn router() -> Router<()> {
 }
 
 async fn login(mut auth_session: AuthSession, Json(credentials): Json<UserCredentials>) -> JsonResult<(), AuthError> {
-  async move {
-    let user = auth_session.authenticate(credentials.clone()).await
-      .map_err(|_| AuthError::Internal)?
-      .ok_or(AuthError::IncorrectUserNameOrPassword)?;
-    auth_session.login(&user).await
-      .map_err(|_| AuthError::Internal)?;
-    Ok(())
-  }.await.into()
+  let user = auth_session.authenticate(credentials.clone()).await
+    .map_err(|_| AuthError::Internal)?
+    .ok_or(AuthError::IncorrectUserNameOrPassword)?;
+  auth_session.login(&user).await
+    .map_err(|_| AuthError::Internal)?;
+  Ok(().into())
 }
 
 async fn logout(mut auth_session: AuthSession) -> JsonResult<(), AuthError> {
-  async move {
-    auth_session.logout().await
-      .map_err(|_| AuthError::Internal)?;
-    Ok(())
-  }.await.into()
+  auth_session.logout().await
+    .map_err(|_| AuthError::Internal)?;
+  Ok(().into())
 }

@@ -5,14 +5,13 @@ use std::time::{Duration, SystemTimeError};
 
 use chrono::Utc;
 use db_dump::Loader;
-use diesel::copy_from;
 use diesel::prelude::*;
 use futures::StreamExt;
 use thiserror::Error;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::task::block_in_place;
-use tracing::{info, instrument};
+use tracing::{debug, info, instrument};
 
 use att_core::crates::{Crate, CrateDefaultVersion, CrateDownloads, CrateVersion};
 
@@ -31,12 +30,50 @@ impl CratesIoDump {
   }
 }
 
+
+// Scheduled job
+
 pub const UPDATE_DURATION: Duration = Duration::from_secs(60 * 60 * 24);
+
+pub struct UpdateCratesIoDumpJob {
+  crates_io_dump: CratesIoDump,
+}
+
+impl UpdateCratesIoDumpJob {
+  pub fn new(crates_io_dump: CratesIoDump) -> Self {
+    Self { crates_io_dump }
+  }
+}
+
+impl Job for UpdateCratesIoDumpJob {
+  async fn run(&self) -> JobResult {
+    let db_dump_file_updated = self.crates_io_dump.update_db_dump_file().await?;
+    let import_required = self.crates_io_dump.is_import_required().await?;
+    if db_dump_file_updated || import_required {
+      self.crates_io_dump.import_db_dump().await?;
+    }
+    Ok(JobAction::Continue)
+  }
+}
+
 
 // Internals
 
+// #[derive(Debug, Insertable)]
+// #[diesel(table_name = schema::import_crates, treat_none_as_default_value = false, check_for_backend(Pg))]
+// pub struct ImportCrate {
+//   pub id: i32,
+//   pub name: String,
+//   pub updated_at: DateTime<Utc>,
+//   pub created_at: DateTime<Utc>,
+//   pub description: String,
+//   pub homepage: Option<String>,
+//   pub readme: Option<String>,
+//   pub repository: Option<String>,
+// }
+
 #[derive(Debug, Error)]
-pub enum InternalError {
+enum InternalError {
   #[error(transparent)]
   DbDump(#[from] db_dump::Error),
   #[error(transparent)]
@@ -44,7 +81,7 @@ pub enum InternalError {
   #[error(transparent)]
   Time(#[from] SystemTimeError),
   #[error(transparent)]
-  Reqwest(#[from] reqwest::Error),
+  HttpRequest(#[from] reqwest::Error),
   #[error(transparent)]
   Database(DbError),
 }
@@ -54,20 +91,19 @@ impl<E: Into<DbError>> From<E> for InternalError {
   }
 }
 
-
 impl CratesIoDump {
   #[instrument(skip_all, err)]
   async fn import_db_dump(&self) -> Result<(), InternalError> {
     info!("Reading database dump");
 
-    let mut all_crates = Vec::new();
-    let mut all_crate_downloads = Vec::new();
-    let mut all_crate_versions = Vec::new();
-    let mut all_crate_default_versions = Vec::new();
+    let mut krates = Vec::new();
+    let mut downloads = Vec::new();
+    let mut versions = Vec::new();
+    let mut default_versions = Vec::new();
 
     block_in_place(|| Loader::new()
       .crates(|row| {
-        all_crates.push(Crate {
+        krates.push(Crate {
           id: row.id.0 as i32,
           name: row.name,
           updated_at: row.updated_at,
@@ -79,20 +115,20 @@ impl CratesIoDump {
         });
       })
       .crate_downloads(|row| {
-        all_crate_downloads.push(CrateDownloads {
+        downloads.push(CrateDownloads {
           crate_id: row.crate_id.0 as i32,
           downloads: row.downloads as i64,
         });
       })
       .versions(|row| {
-        all_crate_versions.push(CrateVersion {
+        versions.push(CrateVersion {
           id: row.id.0 as i32,
           crate_id: row.crate_id.0 as i32,
-          version: row.num.to_string(),
+          number: row.num.to_string(),
         });
       })
       .default_versions(|row| {
-        all_crate_default_versions.push(CrateDefaultVersion {
+        default_versions.push(CrateDefaultVersion {
           crate_id: row.crate_id.0 as i32,
           version_id: row.version_id.0 as i32,
         });
@@ -102,7 +138,6 @@ impl CratesIoDump {
 
     info!("Importing database dump");
 
-    // TODO: transaction
     // TODO: use upserts (`upsert::excluded`), but they don't directly work with `copy_from`. Example:
     //   insert_into(crates)
     //     .values(&all_crates)
@@ -111,49 +146,83 @@ impl CratesIoDump {
     //   excluded trick from: https://stackoverflow.com/questions/47626047/execute-an-insert-or-update-using-diesel#comment82217514_47626103
 
     let conn = self.db_pool.get().await?;
-    use diesel::insert_into;
-    let crates = {
-      conn.interact(move |conn| {
-        use att_core::schema::crates::dsl::*;
-        copy_from(crates)
-          .from_insertable(&all_crates)
-          .execute(conn)
-      }).await??
-    };
-    let crate_downloads = {
-      conn.interact(move |conn| {
-        use att_core::schema::crate_downloads::dsl::*;
-        copy_from(crate_downloads)
-          .from_insertable(&all_crate_downloads)
-          .execute(conn)
-      }).await??
-    };
-    let crate_versions = {
-      conn.interact(move |conn| {
-        use att_core::schema::crate_versions::dsl::*;
-        copy_from(crate_versions)
-          .from_insertable(&all_crate_versions)
-          .execute(conn)
-      }).await??
-    };
-    let crate_default_versions = {
-      conn.interact(move |conn| {
-        use att_core::schema::crate_default_versions::dsl::*;
-        copy_from(crate_default_versions)
-          .from_insertable(&all_crate_default_versions)
-          .execute(conn)
-      }).await??
-    };
-    let metadata = {
-      conn.interact(|conn| {
-        use att_core::schema::import_crates_metadata::dsl::*;
-        insert_into(import_crates_metadata)
-          .values(imported_at.eq(Utc::now()))
-          .execute(conn)
-      }).await??
-    };
+    let inserted_rows = conn.interact(move |conn| {
+      conn.transaction(|conn| {
+        // use att_core::schema::{import_crate_default_versions, import_crate_downloads, import_crate_versions, import_crates, crates, import_crates_metadata};
+        use att_core::schema::{crate_default_versions, crate_downloads, crate_versions, crates, import_crates_metadata};
+        use diesel::{copy_from, delete, insert_into};
 
-    info!(crates, crate_downloads, crate_versions, crate_default_versions, metadata, "Imported database dump");
+        let mut inserted_rows: usize = 0;
+        //diesel::sql_query("SET CONSTRAINTS ALL DEFERRED").execute(conn)?;
+
+        debug!("Deleting table `crate_default_versions`");
+        delete(crate_default_versions::table).execute(conn)?;
+        debug!("Deleting table `crate_versions`");
+        delete(crate_versions::table).execute(conn)?;
+        debug!("Deleting table `crate_downloads`");
+        delete(crate_downloads::table).execute(conn)?;
+        debug!("Deleting table `crates`");
+        delete(crates::table).execute(conn)?;
+
+        debug!("Copying {} crates into `crates`", krates.len());
+        inserted_rows += copy_from(crates::table)
+          .from_insertable(&krates)
+          .execute(conn)?;
+
+        debug!("Copying {} downloads into `crate_downloads`", downloads.len());
+        inserted_rows += copy_from(crate_downloads::table)
+          .from_insertable(&downloads)
+          .execute(conn)?;
+
+        debug!("Copying {} versions into `crate_versions`", versions.len());
+        inserted_rows += copy_from(crate_versions::table)
+          .from_insertable(&versions)
+          .execute(conn)?;
+
+        debug!("Copying {} default versions into `crate_default_versions`", default_versions.len());
+        inserted_rows += copy_from(crate_default_versions::table)
+          .from_insertable(&default_versions)
+          .execute(conn)?;
+
+        debug!("Inserting entry into `import_crates_metadata`");
+        inserted_rows += insert_into(import_crates_metadata::table)
+          .values(import_crates_metadata::imported_at.eq(Utc::now()))
+          .execute(conn)?;
+
+        // diesel::delete(import_crates::table).execute(conn)?;
+        // inserted_rows += diesel::copy_from(import_crates::table)
+        //   .from_insertable(import_crates)
+        //   .execute(conn)?;
+        // import_crates::table
+        //   .insert_into(crates::table)
+        //   .into_columns((posts::user_id, posts::title))
+        //   .on_conflict(crates::id).do_update().set(crates::id.eq(excluded(crates::id)))
+        //   .execute(conn)?;
+        //
+        // diesel::delete(import_crate_downloads::table).execute(conn)?;
+        // inserted_rows += diesel::copy_from(import_crate_downloads::table)
+        //   .from_insertable(&downloads)
+        //   .execute(conn)?;
+        //
+        // diesel::delete(import_crate_versions::table).execute(conn)?;
+        // inserted_rows += diesel::copy_from(import_crate_versions::table)
+        //   .from_insertable(&versions)
+        //   .execute(conn)?;
+        //
+        // diesel::delete(import_crate_default_versions::table).execute(conn)?;
+        // inserted_rows += diesel::copy_from(import_crate_default_versions::table)
+        //   .from_insertable(&default_versions)
+        //   .execute(conn)?;
+        //
+        // inserted_rows += diesel::insert_into(import_crates_metadata::table)
+        //   .values(import_crates_metadata::imported_at.eq(Utc::now()))
+        //   .execute(conn)?;
+
+        Ok::<_, InternalError>(inserted_rows)
+      })
+    }).await??;
+
+    info!(inserted_rows, "Imported database dump");
     Ok(())
   }
 
@@ -198,29 +267,5 @@ impl CratesIoDump {
       }
       Ok(true)
     }
-  }
-}
-
-
-// Scheduled job
-
-pub struct UpdateCratesIoDumpJob {
-  crates_io_dump: CratesIoDump,
-}
-
-impl UpdateCratesIoDumpJob {
-  pub fn new(crates_io_dump: CratesIoDump) -> Self {
-    Self { crates_io_dump }
-  }
-}
-
-impl Job for UpdateCratesIoDumpJob {
-  async fn run(&self) -> JobResult {
-    let db_dump_file_updated = self.crates_io_dump.update_db_dump_file().await?;
-    let import_required = self.crates_io_dump.is_import_required().await?;
-    if db_dump_file_updated || import_required {
-      self.crates_io_dump.import_db_dump().await?;
-    }
-    Ok(JobAction::Continue)
   }
 }

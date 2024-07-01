@@ -17,12 +17,12 @@ use crate::job_scheduler::JobScheduler;
 use crate::server::Server;
 use crate::users::Users;
 
-mod server;
-mod crates;
-mod job_scheduler;
-mod db;
-mod users;
-mod util;
+pub mod server;
+pub mod crates;
+pub mod job_scheduler;
+pub mod db;
+pub mod users;
+pub mod util;
 
 fn main() -> Result<(), Box<dyn Error>> {
   env::load_dotenv_into_env();

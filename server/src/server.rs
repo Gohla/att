@@ -34,7 +34,7 @@ impl Server {
       .build();
 
     let users_routes = users::router().with_state(());
-    let crates_routes = crates::router()
+    let crates_routes = crates::route::router()
       .with_state(self.crates);
 
     let api_routes = Router::new()
