@@ -76,7 +76,7 @@ impl AttHttpClient {
   }
 
   #[instrument(skip(self), err)]
-  pub fn refresh_crate(&self, crate_id: i32) -> impl Future<Output=Result<Crate, AttHttpClientError>> {
+  pub fn refresh_crate(&self, crate_id: i32) -> impl Future<Output=Result<Option<Crate>, AttHttpClientError>> {
     let rb = self.request_builder(Method::POST, format!("crates/{crate_id}/refresh"));
     async move { Self::send::<_, CrateError>(rb).await }
   }

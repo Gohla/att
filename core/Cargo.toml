@@ -21,7 +21,7 @@ iced_virtual = { path = "../iced_virtual", optional = true }
 hashlink = "0.9"
 thiserror.workspace = true
 http = { workspace = true, optional = true }
-diesel = { workspace = true, features = ["chrono"], optional = true }
+diesel = { workspace = true, optional = true, default-features = false, features = ["chrono"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 tokio = { workspace = true, features = ["time"], optional = true }

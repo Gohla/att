@@ -43,6 +43,6 @@ tracing-appender = "0.2"
 hashbrown = "0.14"
 iced = { git = "https://github.com/iced-rs/iced.git", rev = "b9eb861", default-features = false }
 iced_winit = { git = "https://github.com/iced-rs/iced.git", rev = "b9eb861", default-features = false }
-iced_renderer= { git = "https://github.com/iced-rs/iced.git", rev = "b9eb861", default-features = false }
+iced_renderer = { git = "https://github.com/iced-rs/iced.git", rev = "b9eb861", default-features = false }
 http = "1"
-diesel = "2"
+diesel = { version = "2", default-features = false }

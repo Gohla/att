@@ -13,7 +13,7 @@ pub fn router() -> Router<Crates> {
     .route("/", get(search_crates))
     .route("/:crate_id", get(get_crate))
     .route("/:crate_id/follow", post(follow_crate).delete(unfollow_crate))
-  // .route("/:crate_id/refresh", post(refresh_crate))
+    .route("/:crate_id/refresh", post(refresh_crate))
   // .route("/refresh_outdated", post(refresh_outdated_crates))
   // .route("/refresh_all", post(refresh_all_crates))
 }
@@ -42,8 +42,8 @@ async fn search_crates(
   Ok(crates.into())
 }
 
-async fn get_crate(State(state): State<Crates>, Path(crate_name): Path<String>) -> JsonResult<Option<Crate>, CrateError> {
-  let krate = state.get(crate_name)
+async fn get_crate(State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<Option<Crate>, CrateError> {
+  let krate = state.get(crate_id)
     .await
     .map_err(|_| CrateError::Internal)?;
   Ok(krate.into())
@@ -65,15 +65,11 @@ async fn unfollow_crate(auth_session: AuthSession, State(state): State<Crates>, 
   Ok(().into())
 }
 
-// async fn refresh_crate(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<String>) -> JsonResult<Crate, CrateError> {
-//   async move {
-//     let _ = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id();
-//     let mut data = state.database.write().await;
-//     let krate = state.crates.refresh_one(&mut data.crates, crate_id).await
-//       .map_err(CratesIoClientError::into_crate_error)?;
-//     Ok(krate)
-//   }.await.into()
-// }
+async fn refresh_crate(State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<Option<Crate>, CrateError> {
+  let krate = state.refresh_one(crate_id).await
+    .map_err(|_| CrateError::Internal)?;
+  Ok(krate.into())
+}
 //
 // async fn refresh_outdated_crates(auth_session: AuthSession, State(state): State<Crates>) -> JsonResult<Vec<Crate>, CrateError> {
 //   async move {

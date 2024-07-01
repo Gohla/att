@@ -4,7 +4,7 @@ use std::future::Future;
 use futures::FutureExt;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error};
+use tracing::{debug, error, warn};
 
 use att_core::crates::{Crate, CrateSearchQuery};
 use att_core::query::{FacetDef, FacetType, Query, QueryDef};
@@ -98,7 +98,7 @@ impl FollowCrates {
 #[derive(Debug)]
 pub struct UpdateOne {
   crate_id: i32,
-  result: Result<Crate, AttHttpClientError>,
+  result: Result<Option<Crate>, AttHttpClientError>,
 }
 
 impl FollowCrates {
@@ -117,7 +117,11 @@ impl FollowCrates {
     let krate = response.result
       .inspect_err(|cause| error!(crate_id, %cause, "failed to update crate: {cause:?}"))?;
     debug!(crate_id, "update crate");
-    self.state.id_to_crate.insert(crate_id, krate);
+    if let Some(krate) = krate {
+      self.state.id_to_crate.insert(crate_id, krate);
+    } else {
+      warn!(crate_id, "crate was not found")
+    }
 
     Ok(())
   }
