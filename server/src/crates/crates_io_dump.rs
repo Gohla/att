@@ -59,19 +59,6 @@ impl Job for UpdateCratesIoDumpJob {
 
 // Internals
 
-// #[derive(Debug, Insertable)]
-// #[diesel(table_name = schema::import_crates, treat_none_as_default_value = false, check_for_backend(Pg))]
-// pub struct ImportCrate {
-//   pub id: i32,
-//   pub name: String,
-//   pub updated_at: DateTime<Utc>,
-//   pub created_at: DateTime<Utc>,
-//   pub description: String,
-//   pub homepage: Option<String>,
-//   pub readme: Option<String>,
-//   pub repository: Option<String>,
-// }
-
 #[derive(Debug, Error)]
 enum InternalError {
   #[error(transparent)]
@@ -138,22 +125,13 @@ impl CratesIoDump {
 
     info!("Importing database dump");
 
-    // TODO: use upserts (`upsert::excluded`), but they don't directly work with `copy_from`. Example:
-    //   insert_into(crates)
-    //     .values(&all_crates)
-    //     .on_conflict(id).do_update().set(id.eq(excluded(id)))
-    //     .execute(conn)
-    //   excluded trick from: https://stackoverflow.com/questions/47626047/execute-an-insert-or-update-using-diesel#comment82217514_47626103
-
     let conn = self.db_pool.get().await?;
     let inserted_rows = conn.interact(move |conn| {
       conn.transaction(|conn| {
-        // use att_core::schema::{import_crate_default_versions, import_crate_downloads, import_crate_versions, import_crates, crates, import_crates_metadata};
         use att_core::schema::{crate_default_versions, crate_downloads, crate_versions, crates, import_crates_metadata};
         use diesel::{copy_from, delete, insert_into};
 
         let mut inserted_rows: usize = 0;
-        //diesel::sql_query("SET CONSTRAINTS ALL DEFERRED").execute(conn)?;
 
         debug!("Deleting table `crate_default_versions`");
         delete(crate_default_versions::table).execute(conn)?;
@@ -188,35 +166,6 @@ impl CratesIoDump {
         inserted_rows += insert_into(import_crates_metadata::table)
           .values(import_crates_metadata::imported_at.eq(Utc::now()))
           .execute(conn)?;
-
-        // diesel::delete(import_crates::table).execute(conn)?;
-        // inserted_rows += diesel::copy_from(import_crates::table)
-        //   .from_insertable(import_crates)
-        //   .execute(conn)?;
-        // import_crates::table
-        //   .insert_into(crates::table)
-        //   .into_columns((posts::user_id, posts::title))
-        //   .on_conflict(crates::id).do_update().set(crates::id.eq(excluded(crates::id)))
-        //   .execute(conn)?;
-        //
-        // diesel::delete(import_crate_downloads::table).execute(conn)?;
-        // inserted_rows += diesel::copy_from(import_crate_downloads::table)
-        //   .from_insertable(&downloads)
-        //   .execute(conn)?;
-        //
-        // diesel::delete(import_crate_versions::table).execute(conn)?;
-        // inserted_rows += diesel::copy_from(import_crate_versions::table)
-        //   .from_insertable(&versions)
-        //   .execute(conn)?;
-        //
-        // diesel::delete(import_crate_default_versions::table).execute(conn)?;
-        // inserted_rows += diesel::copy_from(import_crate_default_versions::table)
-        //   .from_insertable(&default_versions)
-        //   .execute(conn)?;
-        //
-        // inserted_rows += diesel::insert_into(import_crates_metadata::table)
-        //   .values(import_crates_metadata::imported_at.eq(Utc::now()))
-        //   .execute(conn)?;
 
         Ok::<_, InternalError>(inserted_rows)
       })

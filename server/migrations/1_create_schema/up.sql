@@ -103,38 +103,3 @@ CREATE TABLE import_crates_metadata (
 );
 ALTER TABLE ONLY import_crates_metadata
   ADD CONSTRAINT import_crates_metadata_pkey PRIMARY KEY (id);
-
-
--- ON DELETE CASCADE
-
--- CREATE TABLE import_crates as
---   TABLE crates
---   WITH NO DATA;
--- ALTER TABLE import_crates
---   ADD CONSTRAINT import_crates_pkey PRIMARY KEY (id);
---
--- CREATE TABLE import_crate_downloads as
---   TABLE crate_downloads
---   WITH NO DATA;
--- ALTER TABLE import_crate_downloads
---   ADD CONSTRAINT import_crate_downloads_pkey PRIMARY KEY (crate_id);
--- ALTER TABLE import_crate_downloads
---   ADD CONSTRAINT import_crate_downloads_crate_id_fkey FOREIGN KEY (crate_id) REFERENCES import_crates (id);
---
--- CREATE TABLE import_crate_versions as
---   TABLE crate_versions
---   WITH NO DATA;
--- ALTER TABLE import_crate_versions
---   ADD CONSTRAINT import_crate_versions_pkey PRIMARY KEY (id);
--- ALTER TABLE import_crate_versions
---   ADD CONSTRAINT import_crate_versions_crate_id_fkey FOREIGN KEY (crate_id) REFERENCES import_crates (id);
---
--- CREATE TABLE import_crate_default_versions as
---   TABLE crate_default_versions
---   WITH NO DATA;
--- ALTER TABLE import_crate_default_versions
---   ADD CONSTRAINT import_crate_default_versions_pkey PRIMARY KEY (crate_id);
--- ALTER TABLE import_crate_default_versions
---   ADD CONSTRAINT import_crate_default_versions_crate_id_fkey FOREIGN KEY (crate_id) REFERENCES import_crates (id);
--- ALTER TABLE import_crate_default_versions
---   ADD CONSTRAINT import_crate_default_versions_version_id_fkey FOREIGN KEY (version_id) REFERENCES import_crate_versions (id);
