@@ -2,18 +2,16 @@ use std::error::Error;
 use std::future::Future;
 use std::path::PathBuf;
 
-use chrono::{DateTime, Utc};
-use diesel::prelude::*;
 use thiserror::Error;
 use tracing::instrument;
 
 use att_core::crates::Crate;
+use att_server_db::{DbError, DbPool};
+use att_server_db::crates::{CratesDb, UpdateCrate};
 use crates_io_client::CratesIoClient;
 
 use crate::crates::crates_io_client::CratesIoClientError;
 use crate::crates::crates_io_dump::{CratesIoDump, UpdateCratesIoDumpJob};
-use crate::db::{DbError, DbPool};
-use crate::users::User;
 
 pub mod crates_io_client;
 pub mod crates_io_dump;
@@ -21,7 +19,7 @@ pub mod route;
 
 #[derive(Clone)]
 pub struct Crates {
-  db_pool: DbPool,
+  db: CratesDb,
   crates_io_client: CratesIoClient,
   crates_io_dump: CratesIoDump,
 }
@@ -32,9 +30,10 @@ impl Crates {
     crates_io_user_agent: &str,
     crates_io_db_dump_file: PathBuf
   ) -> Result<(Self, impl Future<Output=()>), Box<dyn Error>> {
+    let db = CratesDb::new(db_pool);
     let (crates_io_client, task) = CratesIoClient::new(crates_io_user_agent)?;
-    let crates_io_dump = CratesIoDump::new(crates_io_db_dump_file, db_pool.clone());
-    let crates = Self { db_pool, crates_io_client, crates_io_dump };
+    let crates_io_dump = CratesIoDump::new(crates_io_db_dump_file, db.clone());
+    let crates = Self { db, crates_io_client, crates_io_dump };
     Ok((crates, task))
   }
 
@@ -43,128 +42,27 @@ impl Crates {
   }
 }
 
-impl Crates {
-  #[instrument(skip(self), err)]
-  pub async fn search(&self, search_term: String) -> Result<Vec<Crate>, DbError> {
-    let crates = {
-      let conn = self.db_pool.get().await?;
-      conn.interact(move |conn| {
-        use att_core::schema::crates::dsl::*;
-        crates
-          .filter(name.ilike(format!("{}%", search_term)))
-          .order(id)
-          .load(conn)
-      }).await??
-    };
-    Ok(crates)
-  }
-
-  #[instrument(skip(self), err)]
-  pub async fn get(&self, crate_id: i32) -> Result<Option<Crate>, DbError> {
-    let conn = self.db_pool.get().await?;
-    let krate = conn.interact(move |conn| {
-      use att_core::schema::crates;
-      crates::table
-        .find(crate_id)
-        .first(conn)
-        .optional()
-    }).await??;
-    Ok(krate)
-  }
-}
-
-#[derive(Identifiable, Selectable, Queryable, Associations, Insertable)]
-#[diesel(table_name = att_core::schema::favorite_crates, check_for_backend(diesel::pg::Pg))]
-#[diesel(primary_key(user_id, crate_id), belongs_to(User), belongs_to(Crate))]
-pub struct FavoriteCrate {
-  pub user_id: i32,
-  pub crate_id: i32,
-}
-
-impl Crates {
-  #[instrument(skip(self))]
-  pub async fn get_followed_crates(&self, user: User) -> Result<Vec<Crate>, DbError> {
-    let conn = self.db_pool.get().await?;
-    let crates = conn.interact(move |conn| {
-      use att_core::schema::crates;
-      FavoriteCrate::belonging_to(&user)
-        .inner_join(crates::table)
-        .select(Crate::as_select())
-        .load(conn)
-    }).await??;
-    Ok(crates)
-  }
-
-  #[instrument(skip(self), err)]
-  pub async fn follow(&self, user_id: i32, crate_id: i32) -> Result<(), DbError> {
-    let conn = self.db_pool.get().await?;
-    conn.interact(move |conn| {
-      use att_core::schema::favorite_crates;
-      diesel::insert_into(favorite_crates::table)
-        .values(&FavoriteCrate { crate_id, user_id })
-        .execute(conn)
-    }).await??;
-    Ok(())
-  }
-
-  #[instrument(skip(self), err)]
-  pub async fn unfollow(&self, user_id: i32, crate_id: i32) -> Result<(), DbError> {
-    let conn = self.db_pool.get().await?;
-    conn.interact(move |conn| {
-      use att_core::schema::favorite_crates;
-      diesel::delete(favorite_crates::table)
-        .filter(favorite_crates::user_id.eq(user_id))
-        .filter(favorite_crates::crate_id.eq(crate_id))
-        .execute(conn)
-    }).await??;
-    Ok(())
-  }
-}
-
 
 // crates.io API refresh
 
 #[derive(Debug, Error)]
 pub enum InternalError {
-  #[error(transparent)]
+  #[error("crates.io API operation failed: {0}")]
   CratesIoClient(#[from] CratesIoClientError),
-  #[error(transparent)]
-  Database(DbError),
-}
-impl<E: Into<DbError>> From<E> for InternalError {
-  fn from(value: E) -> Self { Self::Database(value.into()) }
+  #[error("Database operation failed: {0}")]
+  Database(#[from] DbError),
 }
 
-#[derive(AsChangeset)]
-#[diesel(table_name = att_core::schema::crates, check_for_backend(diesel::pg::Pg))]
-pub struct UpdateCrate {
-  pub updated_at: DateTime<Utc>,
-}
 
 impl Crates {
   #[instrument(skip(self), err)]
   pub async fn refresh_one(&self, crate_id: i32) -> Result<Option<Crate>, InternalError> {
-    let conn = self.db_pool.get().await?;
-    let krate = conn.interact(move |conn| {
-      use att_core::schema::crates;
-      crates::table
-        .select(Crate::as_select())
-        .find(crate_id)
-        .first(conn)
-        .optional()
-    }).await??;
-    if let Some(mut krate) = krate {
+    if let Some(mut krate) = self.db.find(crate_id).await? {
       // TODO: update more fields
       let response = self.crates_io_client.refresh(krate.name.clone()).await?;
       let updated_at = response.crate_data.updated_at;
       krate.updated_at = updated_at;
-      conn.interact(move |conn| {
-        use att_core::schema::crates;
-        diesel::update(crates::table)
-          .filter(crates::id.eq(crate_id))
-          .set(UpdateCrate { updated_at })
-          .execute(conn)
-      }).await??;
+      self.db.update(crate_id, UpdateCrate { updated_at }).await?;
       Ok(Some(krate))
     } else {
       Ok(None)

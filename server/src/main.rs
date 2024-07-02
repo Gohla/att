@@ -1,6 +1,5 @@
 use std::error::Error;
 
-use deadpool_diesel::postgres::{Manager, Pool, Runtime as DeadpoolRuntime};
 use tokio::runtime::Runtime;
 use tokio::signal;
 use tokio::time::{Duration, interval};
@@ -9,10 +8,9 @@ use tracing::debug;
 use att_core::app::env;
 use att_core::app::storage::Storage;
 use att_core::app::tracing::AppTracingBuilder;
-use att_core::run_or_compile_time_env;
+use att_server_db::DbPool;
 
 use crate::crates::{Crates, crates_io_dump};
-use crate::db::DbPool;
 use crate::job_scheduler::JobScheduler;
 use crate::server::Server;
 use crate::users::Users;
@@ -20,7 +18,6 @@ use crate::users::Users;
 pub mod server;
 pub mod crates;
 pub mod job_scheduler;
-pub mod db;
 pub mod users;
 pub mod util;
 
@@ -36,12 +33,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     .build()?;
   let runtime_guard = runtime.enter();
 
-  let manager = Manager::new(run_or_compile_time_env!("DATABASE_URL"), DeadpoolRuntime::Tokio1);
-  let pool = Pool::builder(manager)
-    .max_size(8)
-    .build()?;
+  let db_pool = DbPool::new()?;
 
-  let result = run(storage, &runtime, pool);
+  let result = run(storage, &runtime, db_pool);
 
   debug!("shutting down tokio runtime..");
   drop(runtime_guard);

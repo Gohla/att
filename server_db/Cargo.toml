@@ -1,0 +1,13 @@
+[package]
+name = "att_server_db"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[dependencies]
+att_core = { workspace = true, features = ["diesel", "app_env"] }
+diesel = { workspace = true, default-features = false, features = ["chrono", "postgres"] }
+deadpool-diesel = { version = "0.6", features = ["rt_tokio_1", "postgres"] }
+chrono = { workspace = true }
+thiserror.workspace = true
+tracing.workspace = true

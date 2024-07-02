@@ -11,9 +11,9 @@ pub fn router() -> Router<Crates> {
   use axum::routing::{get, post};
   Router::new()
     .route("/", get(search_crates))
-    .route("/:crate_id", get(get_crate))
-    .route("/:crate_id/follow", post(follow_crate).delete(unfollow_crate))
-    .route("/:crate_id/refresh", post(refresh_crate))
+    .route("/:crate_id", get(find))
+    .route("/:crate_id/follow", post(follow).delete(unfollow))
+    .route("/:crate_id/refresh", post(refresh))
   // .route("/refresh_outdated", post(refresh_outdated_crates))
   // .route("/refresh_all", post(refresh_all_crates))
 }
@@ -26,14 +26,14 @@ async fn search_crates(
   let crates = match search {
     CrateSearchQuery { followed: true, .. } => {
       if let Some(user) = &auth_session.user {
-        state.get_followed_crates(user.clone())
+        state.db.get_followed(user.0.clone())
           .await
           .map_err(|_| CrateError::Internal)?
       } else {
         Err(CrateError::NotLoggedIn)?
       }
     }
-    CrateSearchQuery { search_term: Some(search_term), .. } => state
+    CrateSearchQuery { search_term: Some(search_term), .. } => state.db
       .search(search_term)
       .await
       .map_err(|_| CrateError::Internal)?,
@@ -42,30 +42,30 @@ async fn search_crates(
   Ok(crates.into())
 }
 
-async fn get_crate(State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<Option<Crate>, CrateError> {
-  let krate = state.get(crate_id)
+async fn find(State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<Option<Crate>, CrateError> {
+  let krate = state.db.find(crate_id)
     .await
     .map_err(|_| CrateError::Internal)?;
   Ok(krate.into())
 }
 
-async fn follow_crate(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<(), CrateError> {
+async fn follow(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<(), CrateError> {
   let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id;
-  let krate = state.follow(user_id, crate_id)
+  let krate = state.db.follow(user_id, crate_id)
     .await
     .map_err(|_| CrateError::Internal)?;
   Ok(krate.into())
 }
 
-async fn unfollow_crate(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<(), CrateError> {
+async fn unfollow(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<(), CrateError> {
   let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id;
-  state.unfollow(user_id, crate_id)
+  state.db.unfollow(user_id, crate_id)
     .await
     .map_err(|_| CrateError::Internal)?;
   Ok(().into())
 }
 
-async fn refresh_crate(State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<Option<Crate>, CrateError> {
+async fn refresh(State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<Option<Crate>, CrateError> {
   let krate = state.refresh_one(crate_id).await
     .map_err(|_| CrateError::Internal)?;
   Ok(krate.into())

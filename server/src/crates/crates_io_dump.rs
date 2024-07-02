@@ -3,30 +3,29 @@ use std::io;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTimeError};
 
-use chrono::Utc;
 use db_dump::Loader;
-use diesel::prelude::*;
 use futures::StreamExt;
 use thiserror::Error;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::task::block_in_place;
-use tracing::{debug, info, instrument};
+use tracing::{info, instrument};
 
 use att_core::crates::{Crate, CrateDefaultVersion, CrateDownloads, CrateVersion};
+use att_server_db::crates::{CratesDb, ImportCrates};
+use att_server_db::DbError;
 
-use crate::db::{DbError, DbPool};
 use crate::job_scheduler::{Job, JobAction, JobResult};
 
 #[derive(Clone)]
 pub struct CratesIoDump {
   db_dump_file: PathBuf,
-  db_pool: DbPool,
+  db: CratesDb,
 }
 
 impl CratesIoDump {
-  pub fn new(db_dump_file: PathBuf, db_pool: DbPool) -> Self {
-    Self { db_dump_file, db_pool }
+  pub fn new(db_dump_file: PathBuf, db: CratesDb) -> Self {
+    Self { db_dump_file, db }
   }
 }
 
@@ -70,27 +69,17 @@ enum InternalError {
   #[error(transparent)]
   HttpRequest(#[from] reqwest::Error),
   #[error(transparent)]
-  Database(DbError),
-}
-impl<E: Into<DbError>> From<E> for InternalError {
-  fn from(value: E) -> Self {
-    Self::Database(value.into())
-  }
+  Database(#[from] DbError),
 }
 
 impl CratesIoDump {
   #[instrument(skip_all, err)]
   async fn import_db_dump(&self) -> Result<(), InternalError> {
     info!("Reading database dump");
-
-    let mut krates = Vec::new();
-    let mut downloads = Vec::new();
-    let mut versions = Vec::new();
-    let mut default_versions = Vec::new();
-
+    let mut import_crates = ImportCrates::default();
     block_in_place(|| Loader::new()
       .crates(|row| {
-        krates.push(Crate {
+        import_crates.crates.push(Crate {
           id: row.id.0 as i32,
           name: row.name,
           updated_at: row.updated_at,
@@ -102,20 +91,20 @@ impl CratesIoDump {
         });
       })
       .crate_downloads(|row| {
-        downloads.push(CrateDownloads {
+        import_crates.downloads.push(CrateDownloads {
           crate_id: row.crate_id.0 as i32,
           downloads: row.downloads as i64,
         });
       })
       .versions(|row| {
-        versions.push(CrateVersion {
+        import_crates.versions.push(CrateVersion {
           id: row.id.0 as i32,
           crate_id: row.crate_id.0 as i32,
           number: row.num.to_string(),
         });
       })
       .default_versions(|row| {
-        default_versions.push(CrateDefaultVersion {
+        import_crates.default_versions.push(CrateDefaultVersion {
           crate_id: row.crate_id.0 as i32,
           version_id: row.version_id.0 as i32,
         });
@@ -124,65 +113,16 @@ impl CratesIoDump {
     )?;
 
     info!("Importing database dump");
-
-    let conn = self.db_pool.get().await?;
-    let inserted_rows = conn.interact(move |conn| {
-      conn.transaction(|conn| {
-        use att_core::schema::{crate_default_versions, crate_downloads, crate_versions, crates, import_crates_metadata};
-        use diesel::{copy_from, delete, insert_into};
-
-        let mut inserted_rows: usize = 0;
-
-        debug!("Deleting table `crate_default_versions`");
-        delete(crate_default_versions::table).execute(conn)?;
-        debug!("Deleting table `crate_versions`");
-        delete(crate_versions::table).execute(conn)?;
-        debug!("Deleting table `crate_downloads`");
-        delete(crate_downloads::table).execute(conn)?;
-        debug!("Deleting table `crates`");
-        delete(crates::table).execute(conn)?;
-
-        debug!("Copying {} crates into `crates`", krates.len());
-        inserted_rows += copy_from(crates::table)
-          .from_insertable(&krates)
-          .execute(conn)?;
-
-        debug!("Copying {} downloads into `crate_downloads`", downloads.len());
-        inserted_rows += copy_from(crate_downloads::table)
-          .from_insertable(&downloads)
-          .execute(conn)?;
-
-        debug!("Copying {} versions into `crate_versions`", versions.len());
-        inserted_rows += copy_from(crate_versions::table)
-          .from_insertable(&versions)
-          .execute(conn)?;
-
-        debug!("Copying {} default versions into `crate_default_versions`", default_versions.len());
-        inserted_rows += copy_from(crate_default_versions::table)
-          .from_insertable(&default_versions)
-          .execute(conn)?;
-
-        debug!("Inserting entry into `import_crates_metadata`");
-        inserted_rows += insert_into(import_crates_metadata::table)
-          .values(import_crates_metadata::imported_at.eq(Utc::now()))
-          .execute(conn)?;
-
-        Ok::<_, InternalError>(inserted_rows)
-      })
-    }).await??;
-
+    let inserted_rows = self.db.import(import_crates).await?;
     info!(inserted_rows, "Imported database dump");
+
     Ok(())
   }
 
   #[instrument(skip_all, err)]
   async fn is_import_required(&self) -> Result<bool, InternalError> {
-    let conn = self.db_pool.get().await?;
-    let import_count: i64 = conn.interact(|conn| {
-      use att_core::schema::import_crates_metadata::dsl::*;
-      import_crates_metadata.count().get_result(conn)
-    }).await??;
-    Ok(import_count == 0)
+    let last_imported_at = self.db.get_last_imported_at().await?;
+    Ok(last_imported_at.is_none())
   }
 
   #[instrument(skip_all, err)]

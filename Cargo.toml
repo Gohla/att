@@ -6,6 +6,7 @@ members = [
   "iced_virtual",
   "client_iced",
   "server",
+  "server_db",
 ]
 default-members = [
   "core",
@@ -14,6 +15,7 @@ default-members = [
   "iced_virtual",
   "client_iced",
   "server",
+  "server_db",
 ]
 resolver = "2"
 
