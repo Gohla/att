@@ -9,9 +9,12 @@ use {crate::schema, diesel::{pg::Pg, prelude::*}};
 
 use crate::table::{AsTableRow, Column};
 
+/// A Rust crate.
 #[cfg_attr(feature = "diesel",
-  derive(Queryable, Selectable, Identifiable, AsChangeset, Insertable),
-  diesel(table_name = schema::crates, treat_none_as_default_value = false, check_for_backend(Pg)),
+  derive(Queryable, Selectable, Identifiable, Associations, AsChangeset, Insertable),
+  diesel(
+    table_name = schema::crates, belongs_to(CrateVersion, foreign_key = default_version_id), treat_none_as_default_value = false, check_for_backend(Pg)
+  ),
 )]
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
 pub struct Crate {
@@ -23,21 +26,13 @@ pub struct Crate {
   pub homepage: Option<String>,
   pub readme: Option<String>,
   pub repository: Option<String>,
-}
 
-#[cfg_attr(feature = "diesel",
-  derive(Queryable, Selectable, Identifiable, Associations, AsChangeset, Insertable),
-  diesel(
-    table_name = schema::crate_downloads, treat_none_as_default_value = false, check_for_backend(Pg),
-    primary_key(crate_id), belongs_to(Crate),
-  ),
-)]
-#[derive(Default, Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
-pub struct CrateDownloads {
-  pub crate_id: i32,
   pub downloads: i64,
+
+  pub default_version_id: i32,
 }
 
+/// A version of a crate.
 #[cfg_attr(feature = "diesel",
   derive(Queryable, Selectable, Identifiable, Associations, AsChangeset, Insertable),
   diesel(
@@ -52,66 +47,39 @@ pub struct CrateVersion {
   pub number: String,
 }
 
-#[cfg_attr(feature = "diesel",
-  derive(Queryable, Selectable, Identifiable, Associations, Insertable),
-  diesel(
-    table_name = schema::crate_default_versions, treat_none_as_default_value = false, check_for_backend(Pg),
-    primary_key(crate_id), belongs_to(Crate), belongs_to(CrateVersion, foreign_key = version_id)
-  ),
-)]
+/// A crate along with its associated data.
+#[cfg_attr(feature = "diesel", derive(Selectable, Queryable), diesel(check_for_backend(Pg)))]
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
-pub struct CrateDefaultVersion {
-  pub crate_id: i32,
-  pub version_id: i32,
+pub struct FullCrate {
+  #[cfg_attr(feature = "diesel", diesel(embed))]
+  pub krate: Crate,
+  #[cfg_attr(feature = "diesel", diesel(embed))]
+  pub default_version: CrateVersion,
 }
 
-
-impl AsTableRow for Crate {
+impl AsTableRow for FullCrate {
   const COLUMNS: &'static [Column] = &[
     Column::with_default_alignment("Id", 0.5),
     Column::with_default_alignment("Name", 1.0),
     Column::with_default_alignment("Updated At", 1.0),
+    Column::with_default_alignment("Latest Version", 1.0),
+    Column::with_default_alignment("Downloads", 1.0),
     Column::with_default_alignment("Description", 2.0),
   ];
 
   fn cell(&self, column_index: u8) -> Option<Cow<str>> {
     let str = match column_index {
-      0 => Cow::from(format!("{}", self.id)),
-      1 => Cow::from(&self.name),
-      2 => Cow::from(self.updated_at.format("%Y-%m-%d").to_string()),
-      3 => Cow::from(&self.description),
+      0 => Cow::from(format!("{}", self.krate.id)),
+      1 => Cow::from(&self.krate.name),
+      2 => Cow::from(self.krate.updated_at.format("%Y-%m-%d").to_string()),
+      3 => Cow::from(&self.default_version.number),
+      4 => Cow::from(format!("{}", self.krate.downloads)),
+      5 => Cow::from(&self.krate.description),
       _ => return None,
     };
     Some(str)
   }
 }
-
-// #[cfg(feature = "crates_io_api")]
-// pub mod crates_io {
-//   use super::Crate;
-//
-//   impl From<crates_io_api::Crate> for Crate {
-//     fn from(c: crates_io_api::Crate) -> Self {
-//       Self {
-//         name: c.name,
-//         downloads: c.downloads as i64,
-//         updated_at: c.updated_at,
-//         max_version: c.max_version,
-//       }
-//     }
-//   }
-//
-//   impl From<&crates_io_api::Crate> for Crate {
-//     fn from(c: &crates_io_api::Crate) -> Self {
-//       Self {
-//         name: c.id.clone(),
-//         downloads: c.downloads as i64,
-//         updated_at: c.updated_at,
-//         max_version: c.max_version.clone(),
-//       }
-//     }
-//   }
-// }
 
 
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]

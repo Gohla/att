@@ -6,13 +6,14 @@ use std::time::{Duration, SystemTimeError};
 use chrono::Utc;
 use db_dump::Loader;
 use futures::StreamExt;
+use nohash_hasher::{BuildNoHashHasher, IntMap};
 use thiserror::Error;
 use tokio::fs;
 use tokio::fs::File;
 use tokio::task::block_in_place;
 use tracing::{info, instrument};
 
-use att_core::crates::{Crate, CrateDefaultVersion, CrateDownloads, CrateVersion};
+use att_core::crates::{Crate, CrateVersion};
 use att_server_db::{DbError, DbPool};
 use att_server_db::crates::{CratesDb, ImportCrates};
 
@@ -77,7 +78,13 @@ impl CratesIoDump {
   #[instrument(skip_all, err)]
   async fn import_db_dump(&self) -> Result<(), InternalError> {
     info!("Reading database dump");
-    let mut import_crates = ImportCrates::default();
+
+    const EXPECTED_CRATE_COUNT: usize = 1024 * 512;
+    let mut import_crates = ImportCrates::with_expected_crate_count(EXPECTED_CRATE_COUNT);
+    //let mut crate_id_to_index = IntMap::with_capacity_and_hasher(EXPECTED_CRATE_COUNT, BuildNoHashHasher::default());;
+    let mut downloads = IntMap::with_capacity_and_hasher(EXPECTED_CRATE_COUNT, BuildNoHashHasher::default());
+    let mut default_version_ids = IntMap::with_capacity_and_hasher(EXPECTED_CRATE_COUNT, BuildNoHashHasher::default());
+
     block_in_place(|| Loader::new()
       .crates(|row| {
         import_crates.crates.push(Crate {
@@ -89,13 +96,14 @@ impl CratesIoDump {
           homepage: row.homepage,
           readme: row.readme,
           repository: row.repository,
+
+          downloads: 0,
+
+          default_version_id: 0,
         });
       })
       .crate_downloads(|row| {
-        import_crates.downloads.push(CrateDownloads {
-          crate_id: row.crate_id.0 as i32,
-          downloads: row.downloads as i64,
-        });
+        downloads.insert(row.crate_id.0 as i32, row.downloads as i64);
       })
       .versions(|row| {
         import_crates.versions.push(CrateVersion {
@@ -105,13 +113,15 @@ impl CratesIoDump {
         });
       })
       .default_versions(|row| {
-        import_crates.default_versions.push(CrateDefaultVersion {
-          crate_id: row.crate_id.0 as i32,
-          version_id: row.version_id.0 as i32,
-        });
+        default_version_ids.insert(row.crate_id.0 as i32, row.version_id.0 as i32);
       })
       .load(&self.db_dump_file)
     )?;
+
+    for krate in &mut import_crates.crates {
+      krate.downloads = *downloads.get(&krate.id).unwrap();
+      krate.default_version_id = *default_version_ids.get(&krate.id).unwrap();
+    }
 
     info!("Importing database dump");
     let inserted_rows = self.db_pool.query(move |db| db.import(import_crates))

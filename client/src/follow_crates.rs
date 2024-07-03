@@ -4,9 +4,9 @@ use std::future::Future;
 use futures::FutureExt;
 use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
-use tracing::{debug, error, warn};
+use tracing::{debug, error};
 
-use att_core::crates::{Crate, CrateSearchQuery};
+use att_core::crates::{CrateSearchQuery, FullCrate};
 use att_core::query::{FacetDef, FacetType, Query, QueryDef};
 use att_core::service::{Action, ActionDef, Service};
 use att_core::util::maybe_send::MaybeSendFuture;
@@ -16,7 +16,7 @@ use crate::http_client::{AttHttpClient, AttHttpClientError};
 /// Follow crates state that can be (de)serialized.
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct FollowCratesState {
-  id_to_crate: IndexMap<i32, Crate>,
+  id_to_crate: IndexMap<i32, FullCrate>,
 }
 
 /// Keep track of followed crates.
@@ -60,10 +60,10 @@ impl FollowCrates {
 
 
   #[inline]
-  fn queried_crates(&self) -> impl Iterator<Item=&Crate> {
+  fn queried_crates(&self) -> impl Iterator<Item=&FullCrate> {
     let name = self.query.facet("name").unwrap().as_str().unwrap_or_default();
     let follow = self.query.facet("follow").unwrap().as_bool().unwrap_or(true);
-    self.state.id_to_crate.values().filter(move |c| follow && c.name.contains(name))
+    self.state.id_to_crate.values().filter(move |c| follow && c.krate.name.contains(name))
   }
 
   #[inline]
@@ -72,12 +72,12 @@ impl FollowCrates {
   }
 
   #[inline]
-  fn get_crates(&self, index: usize) -> Option<&Crate> {
+  fn get_crates(&self, index: usize) -> Option<&FullCrate> {
     self.queried_crates().nth(index)
   }
 
   #[inline]
-  fn iter_crates(&self) -> impl Iterator<Item=&Crate> {
+  fn iter_crates(&self) -> impl Iterator<Item=&FullCrate> {
     self.queried_crates()
   }
 
@@ -98,7 +98,7 @@ impl FollowCrates {
 #[derive(Debug)]
 pub struct UpdateOne {
   crate_id: i32,
-  result: Result<Option<Crate>, AttHttpClientError>,
+  result: Result<FullCrate, AttHttpClientError>,
 }
 
 impl FollowCrates {
@@ -114,14 +114,10 @@ impl FollowCrates {
     let crate_id = response.crate_id;
     self.crates_being_modified.remove(&crate_id);
 
-    let krate = response.result
+    let full_crate = response.result
       .inspect_err(|cause| error!(crate_id, %cause, "failed to update crate: {cause:?}"))?;
     debug!(crate_id, "update crate");
-    if let Some(krate) = krate {
-      self.state.id_to_crate.insert(crate_id, krate);
-    } else {
-      warn!(crate_id, "crate was not found")
-    }
+    self.state.id_to_crate.insert(crate_id, full_crate);
 
     Ok(())
   }
@@ -131,7 +127,7 @@ impl FollowCrates {
 /// Update or set all crates response.
 #[derive(Debug)]
 pub struct UpdateAll<const SET: bool> {
-  result: Result<Vec<Crate>, AttHttpClientError>,
+  result: Result<Vec<FullCrate>, AttHttpClientError>,
 }
 
 impl FollowCrates {
@@ -162,14 +158,14 @@ impl FollowCrates {
   pub fn process_update_all<const SET: bool>(&mut self, response: UpdateAll<SET>) -> Result<(), AttHttpClientError> {
     self.all_crates_being_modified = false;
 
-    let crates = response.result
+    let full_crates = response.result
       .inspect_err(|cause| error!(%cause, "failed to update crates: {cause:?}"))?;
     if SET {
       self.state.id_to_crate.clear();
     }
-    for krate in crates {
-      debug!(crate_id = krate.name, "update crate");
-      self.state.id_to_crate.insert(krate.id, krate);
+    for full_crate in full_crates {
+      debug!(crate_id = full_crate.krate.id, "update crate");
+      self.state.id_to_crate.insert(full_crate.krate.id, full_crate);
     }
 
     Ok(())
@@ -179,28 +175,28 @@ impl FollowCrates {
 /// Follow crate response.
 #[derive(Debug)]
 pub struct Follow {
-  krate: Crate,
+  full_crate: FullCrate,
   result: Result<(), AttHttpClientError>,
 }
 
 impl FollowCrates {
-  pub fn follow(&mut self, krate: Crate) -> impl Future<Output=Follow> {
-    let crate_id = krate.id;
+  pub fn follow(&mut self, full_crate: FullCrate) -> impl Future<Output=Follow> {
+    let crate_id = full_crate.krate.id;
     self.crates_being_modified.insert(crate_id);
     let future = self.http_client.follow_crate(crate_id);
     async move {
-      Follow { krate, result: future.await }
+      Follow { full_crate, result: future.await }
     }
   }
 
   pub fn process_follow(&mut self, response: Follow) -> Result<(), AttHttpClientError> {
-    let crate_id = response.krate.id;
+    let crate_id = response.full_crate.krate.id;
     self.crates_being_modified.remove(&crate_id);
 
     response.result
-      .inspect_err(|cause| error!(crate = ?response.krate, %cause, "failed to follow crate: {cause:?}"))?;
-    debug!(crate = ?response.krate, "follow crate");
-    self.state.id_to_crate.insert(crate_id, response.krate);
+      .inspect_err(|cause| error!(crate = ?response.full_crate, %cause, "failed to follow crate: {cause:?}"))?;
+    debug!(crate = ?response.full_crate, "follow crate");
+    self.state.id_to_crate.insert(crate_id, response.full_crate);
 
     Ok(())
   }
@@ -242,7 +238,7 @@ impl FollowCrates {
 #[derive(Clone, Debug)]
 pub enum FollowCrateRequest {
   GetFollowed,
-  Follow(Crate),
+  Follow(FullCrate),
   Unfollow(i32),
   Refresh(i32),
   RefreshOutdated,
@@ -297,7 +293,7 @@ impl Service for FollowCrates {
   }
 
 
-  type Data = Crate;
+  type Data = FullCrate;
 
   #[inline]
   fn data_len(&self) -> usize {
@@ -343,7 +339,7 @@ impl Service for FollowCrates {
 
   #[inline]
   fn data_action<'i>(&self, index: usize, data: &'i Self::Data) -> Option<impl Action<Request=Self::Request> + 'i> {
-    let crate_id = data.id;
+    let crate_id = data.krate.id;
     let disabled = self.is_crate_being_modified(crate_id);
     let action = match index {
       0 => DataAction { kind: DataActionKind::Refresh, disabled, crate_id },

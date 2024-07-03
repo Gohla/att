@@ -4,7 +4,7 @@ use tracing::instrument;
 
 use att_client::http_client::AttHttpClient;
 use att_client::search_crates::{SearchCrates, SearchCratesRequest, SearchCratesResponse};
-use att_core::crates::Crate;
+use att_core::crates::FullCrate;
 use iced_builder::WidgetBuilder;
 use iced_virtual::table::Table;
 
@@ -22,7 +22,7 @@ pub struct SearchCratesComponent {
 pub enum Message {
   SendRequest(SearchCratesRequest),
   ProcessResponse(SearchCratesResponse),
-  Choose(Crate),
+  Choose(FullCrate),
 }
 
 impl SearchCratesComponent {
@@ -45,41 +45,45 @@ impl SearchCratesComponent {
 
 impl SearchCratesComponent {
   #[instrument(skip_all)]
-  pub fn update(&mut self, message: Message) -> Update<Option<Crate>, Task<Message>> {
+  pub fn update(&mut self, message: Message) -> Update<Option<FullCrate>, Task<Message>> {
     use Message::*;
     match message {
       SendRequest(request) => return self.search_crates.send(request).opt_perform_into(ProcessResponse).into(),
       ProcessResponse(response) => if let Some(request) = self.search_crates.process(response) {
         return self.search_crates.send(request).opt_perform_into(ProcessResponse).into();
       }
-      Choose(krate) => return Update::from_action(Some(krate)),
+      Choose(full_crate) => return Update::from_action(Some(full_crate)),
     }
     Update::default()
   }
 
   pub fn view(&self) -> Element<Message> {
-    let crates = self.search_crates.found_crates();
+    let full_crates = self.search_crates.found_crates();
     let cell_to_element = |row, col| -> Option<Element<Message>> {
-      let Some(krate): Option<&Crate> = crates.get(row) else { return None; };
+      let Some(full_crate): Option<&FullCrate> = full_crates.get(row) else { return None; };
       let element = match col {
-        0 => WidgetBuilder::once().add_text(format!("{}", krate.id)),
-        1 => WidgetBuilder::once().add_text(&krate.name),
-        2 => WidgetBuilder::once().add_text(krate.updated_at.format("%Y-%m-%d").to_string()),
-        3 => WidgetBuilder::once().add_text(&krate.description),
-        4 => WidgetBuilder::once().button(self.choose_button_text.as_str()).padding([1.0, 5.0]).success_style().on_press(|| Message::Choose(krate.clone())).add(),
+        0 => WidgetBuilder::once().add_text(format!("{}", full_crate.krate.id)),
+        1 => WidgetBuilder::once().add_text(&full_crate.krate.name),
+        2 => WidgetBuilder::once().add_text(full_crate.krate.updated_at.format("%Y-%m-%d").to_string()),
+        3 => WidgetBuilder::once().add_text(&full_crate.default_version.number),
+        4 => WidgetBuilder::once().add_text(format!("{}", full_crate.krate.downloads)),
+        5 => WidgetBuilder::once().add_text(&full_crate.krate.description),
+        6 => WidgetBuilder::once().button(self.choose_button_text.as_str()).padding([1.0, 5.0]).success_style().on_press(|| Message::Choose(full_crate.clone())).add(),
         _ => return None,
       };
       Some(element)
     };
-    let crates_table = Table::with_capacity(5, cell_to_element)
+    let crates_table = Table::with_capacity(7, cell_to_element)
       .spacing(1.0)
       .body_row_height(24.0)
-      .body_row_count(crates.len())
+      .body_row_count(full_crates.len())
       .push(0.5, "Id")
       .push(1.0, "Name")
       .push(1.0, "Updated at")
+      .push(1.0, "Latest Version")
+      .push(1.0, "Downloads")
       .push(2.0, "Description")
-      .push(1, "")
+      .push(1.0, "")
       .into_element();
 
     WidgetBuilder::stack()

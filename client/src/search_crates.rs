@@ -4,7 +4,7 @@ use std::time::Duration;
 use futures::FutureExt;
 use tracing::{debug, error};
 
-use att_core::crates::{Crate, CrateSearchQuery};
+use att_core::crates::{CrateSearchQuery, FullCrate};
 use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture};
 use att_core::util::time::{Instant, sleep};
 
@@ -16,7 +16,7 @@ pub struct SearchCrates {
   http_client: AttHttpClient,
   search_query: CrateSearchQuery,
   wait_until: Option<Instant>,
-  found_crates: Vec<Crate>,
+  found_crates: Vec<FullCrate>,
 }
 impl SearchCrates {
   pub fn new(http_client: AttHttpClient) -> Self {
@@ -36,7 +36,7 @@ impl SearchCrates {
   pub fn search_term(&self) -> &str { &self.search_query.search_term() }
   /// Returns the found crates returned by the latest search.
   #[inline]
-  pub fn found_crates(&self) -> &Vec<Crate> { &self.found_crates }
+  pub fn found_crates(&self) -> &Vec<FullCrate> { &self.found_crates }
 
   /// Set the [search query](CrateSearchQuery), possibly returning a future producing a [response](WaitCleared) that
   /// must be [processed](Self::process_wait_cleared).
@@ -101,7 +101,7 @@ pub struct WaitCleared;
 /// Found crates by search response.
 #[derive(Debug)]
 pub struct FoundCrates {
-  result: Result<Vec<Crate>, AttHttpClientError>
+  result: Result<Vec<FullCrate>, AttHttpClientError>
 }
 
 

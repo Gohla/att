@@ -5,9 +5,9 @@ use std::path::PathBuf;
 use thiserror::Error;
 use tracing::instrument;
 
-use att_core::crates::Crate;
+use att_core::crates::{Crate, CrateError, CrateSearchQuery, FullCrate};
 use att_server_db::{DbError, DbPool};
-use att_server_db::crates::{CratesDb, UpdateCrate, UpdateDownloads};
+use att_server_db::crates::{CratesDb, UpdateCrate};
 use crates_io_client::CratesIoClient;
 
 use crate::crates::crates_io_client::CratesIoClientError;
@@ -43,43 +43,74 @@ impl Crates {
 }
 
 
-// crates.io API refresh
-
 #[derive(Debug, Error)]
 pub enum InternalError {
+  #[error("Crate with ID {0} was not found")]
+  CrateNotFound(i32),
   #[error("crates.io API operation failed: {0}")]
   CratesIoClient(#[from] CratesIoClientError),
   #[error("Database operation failed: {0}")]
   Database(#[from] DbError),
 }
-
+impl From<InternalError> for CrateError {
+  fn from(e: InternalError) -> Self {
+    match e {
+      InternalError::CrateNotFound(_) => CrateError::NotFound,
+      _ => CrateError::Internal,
+    }
+  }
+}
 
 impl Crates {
   #[instrument(skip(self), err)]
-  pub async fn refresh_one(&self, crate_id: i32) -> Result<Option<Crate>, InternalError> {
-    if let Some(crate_name) = self.db_pool.query(move |conn| conn.find_name(crate_id)).await? {
-      let response = self.crates_io_client.refresh(crate_name).await?;
-      let update_crate = UpdateCrate { // TODO: update more fields
-        id: crate_id,
-        updated_at: Some(response.crate_data.updated_at),
-        description: response.crate_data.description,
-        homepage: Some(response.crate_data.homepage),
-        repository: Some(response.crate_data.repository),
-        ..UpdateCrate::default()
-      };
-      let update_downloads = UpdateDownloads {
-        crate_id,
-        downloads: response.crate_data.downloads as i64,
-      };
-      let (krate, _downloads) = self.db_pool.query(move |db| {
-        let krate = db.update_crate(update_crate)?;
-        let downloads = db.update_crate_downloads(update_downloads)?;
-        Ok((krate, downloads))
-      }).await?;
-      Ok(krate)
-    } else {
-      Ok(None)
-    }
+  pub async fn find(&self, crate_id: i32) -> Result<FullCrate, InternalError> {
+    self.db_pool.perform(move |conn| conn.find(crate_id))
+      .await?
+      .ok_or_else(|| InternalError::CrateNotFound(crate_id))
+  }
+
+  #[instrument(skip(self), err)]
+  pub async fn search(&self, query: CrateSearchQuery, user_id: i32) -> Result<Vec<FullCrate>, InternalError> {
+    let crates = match query {
+      CrateSearchQuery { followed: true, .. } => self.db_pool
+        .query(move |conn| conn.get_followed_crates(user_id))
+        .await?,
+      CrateSearchQuery { search_term: Some(search_term), .. } => self.db_pool
+        .perform(move |conn| conn.search(&search_term))
+        .await?,
+      _ => Vec::default()
+    };
+    Ok(crates.into())
+  }
+
+  #[instrument(skip(self), err)]
+  pub async fn refresh_one(&self, crate_id: i32) -> Result<FullCrate, InternalError> {
+    let db_pool_obj = self.db_pool.get().await?;
+
+    let full_crate = db_pool_obj.query(move |conn| conn.find(crate_id))
+      .await?
+      .ok_or_else(|| InternalError::CrateNotFound(crate_id))?;
+
+    let response = self.crates_io_client.refresh(full_crate.krate.name).await?;
+    let update_crate = UpdateCrate { // TODO: update more fields
+      id: crate_id,
+      updated_at: Some(response.crate_data.updated_at),
+      description: response.crate_data.description,
+      homepage: Some(response.crate_data.homepage),
+      repository: Some(response.crate_data.repository),
+      readme: None, // Not in `CrateResponse`.
+      downloads: Some(response.crate_data.downloads as i64),
+      ..UpdateCrate::default()
+    };
+    // TODO: update versions and possibly default version
+
+    let full_crate = db_pool_obj.perform::<InternalError, _>(move |conn| {
+      let krate = conn.update_crate(update_crate)?
+        .ok_or_else(|| InternalError::CrateNotFound(crate_id))?;
+      let full_crate = FullCrate { krate, default_version: full_crate.default_version };
+      Ok(full_crate)
+    }).await?;
+    Ok(full_crate)
   }
 
   #[instrument(skip(self), err)]

@@ -7,7 +7,6 @@ use iced_builder::WidgetBuilder;
 use iced_virtual::constrained_row::Constraint;
 use iced_virtual::table::Table;
 
-use crate::crates::Crate;
 use crate::query::{Facet, FacetType, Query, QueryDef};
 use crate::service::{Action, ActionStyle, ActionWithDef, Service};
 use crate::table::AsTableRow;
@@ -83,7 +82,7 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
       return Some(WidgetBuilder::once().add_text(text))
     }
 
-    let action_index = col - Crate::COLUMNS.len();
+    let action_index = col - S::Data::COLUMNS.len();
     let element = if let Some(action) = service.data_action_with_definition(action_index, krate) {
       action.into_element().map(map_request)
     } else {
@@ -91,11 +90,12 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
     };
     Some(element)
   };
-  let mut table = Table::with_capacity(5, cell_to_element)
+  let num_cols = S::Data::COLUMNS.len() + service.data_action_definitions().len();
+  let mut table = Table::with_capacity(num_cols, cell_to_element)
     .spacing(1.0)
     .body_row_height(24.0)
     .body_row_count(service.data_len());
-  for column in Crate::COLUMNS {
+  for column in S::Data::COLUMNS {
     table = table.push(Constraint::new(column.width_fill_portion, column.horizontal_alignment.into(), column.vertical_alignment.into()), column.header)
   }
   for _ in service.data_action_definitions() {
@@ -116,7 +116,7 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
     .element(view_query(service.query_definition(), service.query())).map(map_query_message).add()
     .add_horizontal_rule(1.0)
     .add_element(table)
-    .column().spacing(10.0).padding(10).fill().add()
+    .column().spacing(10).padding(10).fill().add()
     .take()
 }
 

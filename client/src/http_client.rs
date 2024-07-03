@@ -6,7 +6,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
-use att_core::crates::{Crate, CrateError, CrateSearchQuery};
+use att_core::crates::{CrateError, CrateSearchQuery, FullCrate};
 use att_core::users::{UserCredentials, AuthError};
 
 #[derive(Clone, Debug)]
@@ -58,7 +58,7 @@ impl AttHttpClient {
   }
 
   #[instrument(skip(self), err)]
-  pub fn search_crates(&self, crate_search: CrateSearchQuery) -> impl Future<Output=Result<Vec<Crate>, AttHttpClientError>> {
+  pub fn search_crates(&self, crate_search: CrateSearchQuery) -> impl Future<Output=Result<Vec<FullCrate>, AttHttpClientError>> {
     let rb = self.request_builder(Method::GET, "crates")
       .query(&crate_search);
     async move { Self::send::<_, CrateError>(rb).await }
@@ -76,17 +76,17 @@ impl AttHttpClient {
   }
 
   #[instrument(skip(self), err)]
-  pub fn refresh_crate(&self, crate_id: i32) -> impl Future<Output=Result<Option<Crate>, AttHttpClientError>> {
+  pub fn refresh_crate(&self, crate_id: i32) -> impl Future<Output=Result<FullCrate, AttHttpClientError>> {
     let rb = self.request_builder(Method::POST, format!("crates/{crate_id}/refresh"));
     async move { Self::send::<_, CrateError>(rb).await }
   }
   #[instrument(skip(self), err)]
-  pub fn refresh_outdated_crates(&self) -> impl Future<Output=Result<Vec<Crate>, AttHttpClientError>> {
+  pub fn refresh_outdated_crates(&self) -> impl Future<Output=Result<Vec<FullCrate>, AttHttpClientError>> {
     let rb = self.request_builder(Method::POST, "crates/refresh_outdated");
     async move { Self::send::<_, CrateError>(rb).await }
   }
   #[instrument(skip(self), err)]
-  pub fn refresh_all_crates(&self) -> impl Future<Output=Result<Vec<Crate>, AttHttpClientError>> {
+  pub fn refresh_all_crates(&self) -> impl Future<Output=Result<Vec<FullCrate>, AttHttpClientError>> {
     let rb = self.request_builder(Method::POST, "crates/refresh_all");
     async move { Self::send::<_, CrateError>(rb).await }
   }

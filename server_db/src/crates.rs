@@ -4,8 +4,8 @@ use diesel::pg::Pg;
 use diesel::prelude::*;
 use tracing::{debug, instrument};
 
-use att_core::crates::{Crate, CrateDefaultVersion, CrateDownloads, CrateVersion};
-use att_core::schema::{crate_default_versions, crate_downloads, crate_versions, crates, favorite_crates, import_crates_metadata};
+use att_core::crates::{Crate, CrateVersion, FullCrate};
+use att_core::schema::{crate_versions, crates, favorite_crates, import_crates_metadata};
 
 use crate::{DbConn, DbError};
 use crate::users::User;
@@ -18,12 +18,14 @@ pub struct CratesDb;
 
 impl DbConn<'_, CratesDb> {
   #[instrument(skip(self), err)]
-  pub fn find(&mut self, crate_id: i32) -> Result<Option<Crate>, DbError> {
-    let krate = crates::table
+  pub fn find(&mut self, crate_id: i32) -> Result<Option<FullCrate>, DbError> {
+    let full_crate = crates::table
       .find(crate_id)
+      .inner_join(crate_versions::table.on(crate_versions::id.eq(crates::default_version_id)))
+      .select(FullCrate::as_select())
       .first(self.conn)
       .optional()?;
-    Ok(krate)
+    Ok(full_crate)
   }
 
   #[instrument(skip(self), err)]
@@ -37,12 +39,14 @@ impl DbConn<'_, CratesDb> {
   }
 
   #[instrument(skip(self), err)]
-  pub fn search(&mut self, search_term: &str) -> Result<Vec<Crate>, DbError> {
-    let crates = crates::table
+  pub fn search(&mut self, search_term: &str) -> Result<Vec<FullCrate>, DbError> {
+    let full_crates = crates::table
       .filter(crates::name.ilike(format!("{}%", search_term)))
       .order(crates::id)
+      .inner_join(crate_versions::table.on(crate_versions::id.eq(crates::default_version_id)))
+      .select(FullCrate::as_select())
       .load(self.conn)?;
-    Ok(crates)
+    Ok(full_crates)
   }
 }
 
@@ -58,13 +62,16 @@ pub struct UpdateCrate {
   pub homepage: Option<Option<String>>,
   pub readme: Option<Option<String>>,
   pub repository: Option<Option<String>>,
+
+  pub downloads: Option<i64>,
 }
 
 #[derive(Debug, Identifiable, AsChangeset)]
-#[diesel(table_name = crate_downloads, primary_key(crate_id), check_for_backend(Pg))]
-pub struct UpdateDownloads {
+#[diesel(table_name = crate_versions, check_for_backend(Pg))]
+pub struct UpdateVersion {
+  pub id: i32,
   pub crate_id: i32,
-  pub downloads: i64,
+  pub number: String,
 }
 
 impl DbConn<'_, CratesDb> {
@@ -75,9 +82,9 @@ impl DbConn<'_, CratesDb> {
   }
 
   #[instrument(skip(self), err)]
-  pub fn update_crate_downloads(&mut self, update: UpdateDownloads) -> Result<Option<CrateDownloads>, DbError> {
-    let crate_downloads = update.save_changes::<CrateDownloads>(self.conn).optional()?;
-    Ok(crate_downloads)
+  pub fn update_crate_version(&mut self, update: UpdateVersion) -> Result<Option<CrateVersion>, DbError> {
+    let version = update.save_changes::<CrateVersion>(self.conn).optional()?;
+    Ok(version)
   }
 }
 
@@ -86,33 +93,25 @@ impl DbConn<'_, CratesDb> {
 
 pub struct ImportCrates {
   pub crates: Vec<Crate>,
-  pub downloads: Vec<CrateDownloads>,
   pub versions: Vec<CrateVersion>,
-  pub default_versions: Vec<CrateDefaultVersion>,
 }
-impl Default for ImportCrates {
-  fn default() -> Self {
-    const EXPECTED_CRATE_COUNT: usize = 1024 * 512;
+impl ImportCrates {
+  pub fn with_expected_crate_count(count: usize) -> Self {
     Self {
-      crates: Vec::with_capacity(EXPECTED_CRATE_COUNT),
-      downloads: Vec::with_capacity(EXPECTED_CRATE_COUNT),
-      versions: Vec::with_capacity(EXPECTED_CRATE_COUNT * 2),
-      default_versions: Vec::with_capacity(EXPECTED_CRATE_COUNT),
+      crates: Vec::with_capacity(count),
+      versions: Vec::with_capacity(count * 2),
     }
   }
 }
 
 impl DbConn<'_, CratesDb> {
+  #[instrument(skip_all, err)]
   pub fn import(&mut self, import_crates: ImportCrates) -> Result<usize, DbError> {
     let inserted_rows = self.conn.transaction(|conn| {
       let mut inserted_rows: usize = 0;
 
-      debug!("Deleting table `crate_default_versions`");
-      delete(crate_default_versions::table).execute(conn)?;
       debug!("Deleting table `crate_versions`");
       delete(crate_versions::table).execute(conn)?;
-      debug!("Deleting table `crate_downloads`");
-      delete(crate_downloads::table).execute(conn)?;
       debug!("Deleting table `crates`");
       delete(crates::table).execute(conn)?;
 
@@ -121,19 +120,9 @@ impl DbConn<'_, CratesDb> {
         .from_insertable(import_crates.crates)
         .execute(conn)?;
 
-      debug!("Copying {} downloads into `crate_downloads`", import_crates.downloads.len());
-      inserted_rows += copy_from(crate_downloads::table)
-        .from_insertable(import_crates.downloads)
-        .execute(conn)?;
-
       debug!("Copying {} versions into `crate_versions`", import_crates.versions.len());
       inserted_rows += copy_from(crate_versions::table)
         .from_insertable(import_crates.versions)
-        .execute(conn)?;
-
-      debug!("Copying {} default versions into `crate_default_versions`", import_crates.default_versions.len());
-      inserted_rows += copy_from(crate_default_versions::table)
-        .from_insertable(import_crates.default_versions)
         .execute(conn)?;
 
       debug!("Inserting entry into `import_crates_metadata`");
@@ -147,6 +136,7 @@ impl DbConn<'_, CratesDb> {
     Ok(inserted_rows)
   }
 
+  #[instrument(skip(self), err)]
   pub fn get_last_imported_at(&mut self) -> Result<Option<DateTime<Utc>>, DbError> {
     let last_imported_at = import_crates_metadata::table
       .select(import_crates_metadata::imported_at)
@@ -169,17 +159,18 @@ pub struct FavoriteCrate {
 }
 
 impl DbConn<'_, CratesDb> {
-  #[instrument(skip(self))]
-  pub fn get_followed_crates(&mut self, user_id: i32) -> Result<Vec<Crate>, DbError> {
-    let crates = favorite_crates::table
+  #[instrument(skip(self), err)]
+  pub fn get_followed_crates(&mut self, user_id: i32) -> Result<Vec<FullCrate>, DbError> {
+    let full_crates = favorite_crates::table
       .filter(favorite_crates::user_id.eq(user_id))
       .inner_join(crates::table)
-      .select(Crate::as_select())
-      .load(self.conn)?;
-    Ok(crates)
+      .inner_join(crate_versions::table.on(crate_versions::id.eq(crates::default_version_id)))
+      .select(FullCrate::as_select())
+      .load::<FullCrate>(self.conn)?;
+    Ok(full_crates)
   }
 
-  #[instrument(skip(self))]
+  #[instrument(skip(self), err)]
   pub fn get_followed_crate_ids(&mut self, user_id: i32) -> Result<Vec<i32>, DbError> {
     let crates_ids = favorite_crates::table
       .filter(favorite_crates::user_id.eq(user_id))

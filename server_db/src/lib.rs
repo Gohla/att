@@ -62,38 +62,44 @@ impl From<InteractError> for DbError {
 }
 
 impl<M> DbPool<M> {
+  /// Obtain a database connection pool object from the pool.
   #[inline]
-  pub async fn connect(&self) -> Result<DbPoolObj<M>, DbError> {
+  pub async fn get(&self) -> Result<DbPoolObj<M>, DbError> {
     let obj = self.pool.get().await?;
     Ok(DbPoolObj { obj, marker: self.marker })
   }
 
+  /// Interact synchronously with `f` that returns `R`, on a database connection newly obtained from the pool.
   #[inline]
   pub async fn interact<R: Send + 'static>(
     &self,
     f: impl for<'c> FnOnce(&mut DbConn<'c, M>) -> R + Send + 'static
   ) -> Result<R, DbError> {
-    let output = self.connect().await?.interact(f).await?;
+    let output = self.get().await?.interact(f).await?;
     Ok(output)
   }
 
-  #[inline]
-  pub async fn perform<T: Send + 'static, E: Send + 'static>(
-    &self,
-    f: impl for<'c> FnOnce(&mut DbConn<'c, M>) -> Result<T, E> + Send + 'static
-  ) -> Result<T, DbError> where
-    DbError: From<E>
-  {
-    let output = self.connect().await?.perform(f).await?;
-    Ok(output)
-  }
-
+  /// Query synchronously with `f` that returns `Result<T, DbError>`, on a database connection newly obtained from the
+  /// pool.
   #[inline]
   pub async fn query<T: Send + 'static>(
     &self,
     f: impl for<'c> FnOnce(&mut DbConn<'c, M>) -> Result<T, DbError> + Send + 'static
   ) -> Result<T, DbError> {
-    let output = self.connect().await?.query(f).await?;
+    let output = self.get().await?.query(f).await?;
+    Ok(output)
+  }
+
+  /// Perform `f` synchronously with `f` returning `Result<T, E>` where `E: From<DbError>`, on a database connection
+  /// newly obtained from the pool.
+  #[inline]
+  pub async fn perform<E: Send + 'static, T: Send + 'static>(
+    &self,
+    f: impl for<'c> FnOnce(&mut DbConn<'c, M>) -> Result<T, E> + Send + 'static
+  ) -> Result<T, E> where
+    E: From<DbError>
+  {
+    let output = self.get().await?.perform(f).await?;
     Ok(output)
   }
 }
@@ -106,37 +112,37 @@ pub struct DbPoolObj<M> {
 }
 
 impl<M> DbPoolObj<M> {
+  /// Interact synchronously with `f` that returns `R`.
   #[inline]
   pub async fn interact<R: Send + 'static>(
     &self,
     f: impl for<'c> FnOnce(&mut DbConn<'c, M>) -> R + Send + 'static
   ) -> Result<R, DbError> {
-    let output = self.obj.interact(move |conn| f(&mut Self::db_conn(conn))).await?;
+    let output = self.obj.interact(move |conn| f(&mut DbConn::new(conn))).await?;
     Ok(output)
   }
 
-  #[inline]
-  pub async fn perform<T: Send + 'static, E: Send + 'static>(
-    &self,
-    f: impl for<'c> FnOnce(&mut DbConn<'c, M>) -> Result<T, E> + Send + 'static
-  ) -> Result<T, DbError> where
-    DbError: From<E>
-  {
-    let output = self.obj.interact(move |conn| f(&mut Self::db_conn(conn))).await??;
-    Ok(output)
-  }
-
+  /// Query synchronously with `f` that returns `Result<T, DbError>`.
   #[inline]
   pub async fn query<T: Send + 'static>(
     &self,
     f: impl for<'c> FnOnce(&mut DbConn<'c, M>) -> Result<T, DbError> + Send + 'static
   ) -> Result<T, DbError> {
-    let output = self.obj.interact(move |conn| f(&mut Self::db_conn(conn))).await??;
+    let output = self.interact(f).await??;
     Ok(output)
   }
 
+  /// Perform `f` synchronously, with `f` returning `Result<T, E>` where `E: From<DbError>`.
   #[inline]
-  fn db_conn(conn: &mut PgConnection) -> DbConn<M> { DbConn::new(conn) }
+  pub async fn perform<E: Send + 'static, T: Send + 'static>(
+    &self,
+    f: impl for<'c> FnOnce(&mut DbConn<'c, M>) -> Result<T, E> + Send + 'static
+  ) -> Result<T, E> where
+    E: From<DbError>
+  {
+    let output = self.interact(f).await??;
+    Ok(output)
+  }
 }
 
 

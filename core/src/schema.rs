@@ -1,20 +1,6 @@
 // @generated automatically by Diesel CLI.
 
 diesel::table! {
-    crate_default_versions (crate_id) {
-        crate_id -> Int4,
-        version_id -> Int4,
-    }
-}
-
-diesel::table! {
-    crate_downloads (crate_id) {
-        crate_id -> Int4,
-        downloads -> Int8,
-    }
-}
-
-diesel::table! {
     crate_versions (id) {
         id -> Int4,
         crate_id -> Int4,
@@ -32,6 +18,8 @@ diesel::table! {
         homepage -> Nullable<Varchar>,
         readme -> Nullable<Varchar>,
         repository -> Nullable<Varchar>,
+        downloads -> Int8,
+        default_version_id -> Int4,
     }
 }
 
@@ -57,16 +45,10 @@ diesel::table! {
     }
 }
 
-diesel::joinable!(crate_default_versions -> crate_versions (version_id));
-diesel::joinable!(crate_default_versions -> crates (crate_id));
-diesel::joinable!(crate_downloads -> crates (crate_id));
-diesel::joinable!(crate_versions -> crates (crate_id));
 diesel::joinable!(favorite_crates -> crates (crate_id));
 diesel::joinable!(favorite_crates -> users (user_id));
 
 diesel::allow_tables_to_appear_in_same_query!(
-    crate_default_versions,
-    crate_downloads,
     crate_versions,
     crates,
     favorite_crates,
