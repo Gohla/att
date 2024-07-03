@@ -26,15 +26,15 @@ async fn search_crates(
   let crates = match search {
     CrateSearchQuery { followed: true, .. } => {
       if let Some(user) = &auth_session.user {
-        state.db.get_followed(user.0.clone())
+        let user = user.0.clone();
+        state.db_pool.query(move |db| db.get_followed_crates(user))
           .await
           .map_err(|_| CrateError::Internal)?
       } else {
         Err(CrateError::NotLoggedIn)?
       }
     }
-    CrateSearchQuery { search_term: Some(search_term), .. } => state.db
-      .search(search_term)
+    CrateSearchQuery { search_term: Some(search_term), .. } => state.db_pool.perform(move |c| c.search(search_term))
       .await
       .map_err(|_| CrateError::Internal)?,
     _ => Vec::default()
@@ -43,7 +43,7 @@ async fn search_crates(
 }
 
 async fn find(State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<Option<Crate>, CrateError> {
-  let krate = state.db.find(crate_id)
+  let krate = state.db_pool.query(move |db| db.find(crate_id))
     .await
     .map_err(|_| CrateError::Internal)?;
   Ok(krate.into())
@@ -51,7 +51,7 @@ async fn find(State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonRes
 
 async fn follow(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<(), CrateError> {
   let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id;
-  let krate = state.db.follow(user_id, crate_id)
+  let krate = state.db_pool.query(move |db| db.follow(user_id, crate_id))
     .await
     .map_err(|_| CrateError::Internal)?;
   Ok(krate.into())
@@ -59,7 +59,7 @@ async fn follow(auth_session: AuthSession, State(state): State<Crates>, Path(cra
 
 async fn unfollow(auth_session: AuthSession, State(state): State<Crates>, Path(crate_id): Path<i32>) -> JsonResult<(), CrateError> {
   let user_id = auth_session.user.ok_or(CrateError::NotLoggedIn)?.id;
-  state.db.unfollow(user_id, crate_id)
+  state.db_pool.query(move |db| db.unfollow(user_id, crate_id))
     .await
     .map_err(|_| CrateError::Internal)?;
   Ok(().into())

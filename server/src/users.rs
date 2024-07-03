@@ -18,20 +18,20 @@ use crate::util::JsonResult;
 #[derive(Clone)]
 pub struct Users {
   argon2: Argon2<'static>,
-  db: UsersDb,
+  db_pool: DbPool<UsersDb>,
 }
 
 impl Users {
-  pub fn new(argon2: Argon2<'static>, db: UsersDb) -> Self {
-    Self { argon2, db }
+  pub fn new(argon2: Argon2<'static>, db_pool: DbPool) -> Self {
+    Self { argon2, db_pool: db_pool.with() }
   }
 
   pub fn from_db_pool(db_pool: DbPool) -> Self {
-    Self::new(Argon2::default(), UsersDb::new(db_pool.clone()))
+    Self::new(Argon2::default(), db_pool)
   }
 
   #[inline]
-  pub fn db(&self) -> &UsersDb { &self.db }
+  pub fn db_pool(&self) -> &DbPool<UsersDb> { &self.db_pool }
 }
 
 
@@ -47,17 +47,25 @@ impl Users {
   #[instrument(skip_all, err)]
   pub async fn ensure_default_user_exists(&self) -> Result<bool, InternalError> {
     let user_credentials = UserCredentials::default();
-    let created = if self.db.get_by_name(user_credentials.name.clone()).await?.is_none() {
-      self.create_user(user_credentials).await?.is_some()
-    } else {
-      false
-    };
+    let password_hash = self.hash_password(user_credentials.password.as_bytes())?;
+    let created = self.db_pool.interact(move |conn| {
+      let created = if conn.get_by_name(&user_credentials.name)?.is_none() {
+        let user = conn.insert(NewUser { name: user_credentials.name, password_hash })?;
+        user.is_some()
+      } else {
+        false
+      };
+      Ok::<_, InternalError>(created)
+    }).await??;
     Ok(created)
   }
 
   #[instrument(skip_all, fields(user_credentials.name = user_credentials.name), err)]
   async fn authenticate_user(&self, user_credentials: UserCredentials) -> Result<Option<User>, InternalError> {
-    let user = if let Some(user) = self.db.get_by_name(user_credentials.name).await? {
+    let user = self.db_pool
+      .query(move |db| db.get_by_name(&user_credentials.name))
+      .await?;
+    let user = if let Some(user) = user {
       let parsed_hash = PasswordHash::new(&user.password_hash)?;
       match self.argon2.verify_password(user_credentials.password.as_bytes(), &parsed_hash) {
         Ok(()) => Some(user),
@@ -73,7 +81,9 @@ impl Users {
   #[instrument(skip_all, fields(user_credentials.name = user_credentials.name), err)]
   async fn create_user(&self, user_credentials: UserCredentials) -> Result<Option<User>, InternalError> {
     let password_hash = self.hash_password(user_credentials.password.as_bytes())?;
-    let user = self.db.insert(NewUser { name: user_credentials.name, password_hash }).await?;
+    let user = self.db_pool
+      .interact(|conn| conn.insert(NewUser { name: user_credentials.name, password_hash }))
+      .await??;
     Ok(user)
   }
 
@@ -115,7 +125,8 @@ impl AuthnBackend for Users {
   }
 
   async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<Self::User>, Self::Error> {
-    let user = self.db.find(*user_id).await?.map(LoginUser);
+    let user_id = *user_id;
+    let user = self.db_pool.query(move |db| db.find(user_id)).await?.map(LoginUser);
     Ok(user)
   }
 }

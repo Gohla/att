@@ -3,6 +3,7 @@ use std::io;
 use std::path::PathBuf;
 use std::time::{Duration, SystemTimeError};
 
+use chrono::Utc;
 use db_dump::Loader;
 use futures::StreamExt;
 use thiserror::Error;
@@ -12,20 +13,20 @@ use tokio::task::block_in_place;
 use tracing::{info, instrument};
 
 use att_core::crates::{Crate, CrateDefaultVersion, CrateDownloads, CrateVersion};
+use att_server_db::{DbError, DbPool};
 use att_server_db::crates::{CratesDb, ImportCrates};
-use att_server_db::DbError;
 
 use crate::job_scheduler::{Job, JobAction, JobResult};
 
 #[derive(Clone)]
 pub struct CratesIoDump {
   db_dump_file: PathBuf,
-  db: CratesDb,
+  db_pool: DbPool<CratesDb>,
 }
 
 impl CratesIoDump {
-  pub fn new(db_dump_file: PathBuf, db: CratesDb) -> Self {
-    Self { db_dump_file, db }
+  pub fn new(db_dump_file: PathBuf, db_pool: DbPool<CratesDb>) -> Self {
+    Self { db_dump_file, db_pool }
   }
 }
 
@@ -113,7 +114,8 @@ impl CratesIoDump {
     )?;
 
     info!("Importing database dump");
-    let inserted_rows = self.db.import(import_crates).await?;
+    let inserted_rows = self.db_pool.query(move |db| db.import(import_crates))
+      .await?;
     info!(inserted_rows, "Imported database dump");
 
     Ok(())
@@ -121,8 +123,15 @@ impl CratesIoDump {
 
   #[instrument(skip_all, err)]
   async fn is_import_required(&self) -> Result<bool, InternalError> {
-    let last_imported_at = self.db.get_last_imported_at().await?;
-    Ok(last_imported_at.is_none())
+    let last_imported_at = self.db_pool.query(move |db| db.get_last_imported_at())
+      .await?;
+    let import_required = if let Some(last_imported_at) = last_imported_at {
+      let delta = Utc::now() - last_imported_at;
+      delta.num_days() > 0
+    } else {
+      true
+    };
+    Ok(import_required)
   }
 
   #[instrument(skip_all, err)]

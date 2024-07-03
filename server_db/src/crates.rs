@@ -7,43 +7,41 @@ use tracing::{debug, instrument};
 use att_core::crates::{Crate, CrateDefaultVersion, CrateDownloads, CrateVersion};
 use att_core::schema::{crate_default_versions, crate_downloads, crate_versions, crates, favorite_crates, import_crates_metadata};
 
-use crate::{DbError, DbPool};
+use crate::{DbConn, DbError};
 use crate::users::User;
 
-#[derive(Clone)]
-pub struct CratesDb {
-  pool: DbPool,
-}
-
-impl CratesDb {
-  pub fn new(pool: DbPool) -> Self {
-    Self { pool }
-  }
-}
+#[derive(Copy, Clone)]
+pub struct CratesDb;
 
 
 // Select crates
 
-impl CratesDb {
+impl DbConn<'_, CratesDb> {
   #[instrument(skip(self), err)]
-  pub async fn find(&self, crate_id: i32) -> Result<Option<Crate>, DbError> {
-    let krate = self.pool.connect_and_query(move |conn| {
-      crates::table
-        .find(crate_id)
-        .first(conn)
-        .optional()
-    }).await?;
+  pub fn find(&mut self, crate_id: i32) -> Result<Option<Crate>, DbError> {
+    let krate = crates::table
+      .find(crate_id)
+      .first(self.conn)
+      .optional()?;
     Ok(krate)
   }
 
   #[instrument(skip(self), err)]
-  pub async fn search(&self, search_term: String) -> Result<Vec<Crate>, DbError> {
-    let crates = self.pool.connect_and_query(move |conn| {
-      crates::table
-        .filter(crates::name.ilike(format!("{}%", search_term)))
-        .order(crates::id)
-        .load(conn)
-    }).await?;
+  pub fn find_name(&mut self, crate_id: i32) -> Result<Option<String>, DbError> {
+    let crate_name = crates::table
+      .find(crate_id)
+      .select(crates::name)
+      .first(self.conn)
+      .optional()?;
+    Ok(crate_name)
+  }
+
+  #[instrument(skip(self), err)]
+  pub fn search(&mut self, search_term: String) -> Result<Vec<Crate>, DbError> {
+    let crates = crates::table
+      .filter(crates::name.ilike(format!("{}%", search_term)))
+      .order(crates::id)
+      .load(self.conn)?;
     Ok(crates)
   }
 }
@@ -51,28 +49,40 @@ impl CratesDb {
 
 // Update crates
 
-#[derive(Debug, AsChangeset)]
+#[derive(Default, Debug, Identifiable, AsChangeset)]
 #[diesel(table_name = crates, check_for_backend(Pg))]
 pub struct UpdateCrate {
-  pub updated_at: DateTime<Utc>,
+  pub id: i32,
+  pub updated_at: Option<DateTime<Utc>>,
+  pub description: Option<String>,
+  pub homepage: Option<Option<String>>,
+  pub readme: Option<Option<String>>,
+  pub repository: Option<Option<String>>,
 }
 
-impl CratesDb {
+#[derive(Debug, Identifiable, AsChangeset)]
+#[diesel(table_name = crate_downloads, primary_key(crate_id), check_for_backend(Pg))]
+pub struct UpdateDownloads {
+  pub crate_id: i32,
+  pub downloads: i64,
+}
+
+impl DbConn<'_, CratesDb> {
   #[instrument(skip(self), err)]
-  pub async fn update(&self, crate_id: i32, update_crate: UpdateCrate) -> Result<(), DbError> {
-    self.pool.connect_and_query(move |conn| {
-      diesel::update(crates::table)
-        .filter(crates::id.eq(crate_id))
-        .set(update_crate)
-        .execute(conn)
-    }).await?;
-    Ok(())
+  pub fn update_crate(&mut self, update: UpdateCrate) -> Result<Option<Crate>, DbError> {
+    let krate = update.save_changes::<Crate>(self.conn).optional()?;
+    Ok(krate)
+  }
+
+  #[instrument(skip(self), err)]
+  pub fn update_crate_downloads(&mut self, update: UpdateDownloads) -> Result<Option<CrateDownloads>, DbError> {
+    let crate_downloads = update.save_changes::<CrateDownloads>(self.conn).optional()?;
+    Ok(crate_downloads)
   }
 }
 
 
 // Import crates
-
 
 pub struct ImportCrates {
   pub crates: Vec<Crate>,
@@ -92,9 +102,9 @@ impl Default for ImportCrates {
   }
 }
 
-impl CratesDb {
-  pub async fn import(&self, import_crates: ImportCrates) -> Result<usize, DbError> {
-    let inserted_rows = self.pool.connect_and_query(move |conn| {
+impl DbConn<'_, CratesDb> {
+  pub fn import(&mut self, import_crates: ImportCrates) -> Result<usize, DbError> {
+    let inserted_rows = self.conn.transaction(|conn| {
       let mut inserted_rows: usize = 0;
 
       debug!("Deleting table `crate_default_versions`");
@@ -131,19 +141,18 @@ impl CratesDb {
         .values(import_crates_metadata::imported_at.eq(Utc::now()))
         .execute(conn)?;
 
-      Ok(inserted_rows)
-    }).await?;
+      Ok::<_, DbError>(inserted_rows)
+    })?;
+
     Ok(inserted_rows)
   }
 
-  pub async fn get_last_imported_at(&self) -> Result<Option<DateTime<Utc>>, DbError> {
-    let last_imported_at = self.pool.connect_and_query(|conn| {
-      import_crates_metadata::table
-        .select(import_crates_metadata::imported_at)
-        .order(import_crates_metadata::id.desc())
-        .first(conn)
-        .optional()
-    }).await?;
+  pub fn get_last_imported_at(&mut self) -> Result<Option<DateTime<Utc>>, DbError> {
+    let last_imported_at = import_crates_metadata::table
+      .select(import_crates_metadata::imported_at)
+      .order(import_crates_metadata::id.desc())
+      .first(self.conn)
+      .optional()?;
     Ok(last_imported_at)
   }
 }
@@ -159,36 +168,38 @@ pub struct FavoriteCrate {
   pub crate_id: i32,
 }
 
-impl CratesDb {
+impl DbConn<'_, CratesDb> {
   #[instrument(skip(self))]
-  pub async fn get_followed(&self, user: User) -> Result<Vec<Crate>, DbError> {
-    let crates = self.pool.connect_and_query(move |conn| {
-      FavoriteCrate::belonging_to(&user)
-        .inner_join(crates::table)
-        .select(Crate::as_select())
-        .load(conn)
-    }).await?;
+  pub fn get_followed_crates(&mut self, user: User) -> Result<Vec<Crate>, DbError> {
+    let crates = FavoriteCrate::belonging_to(&user)
+      .inner_join(crates::table)
+      .select(Crate::as_select())
+      .load(self.conn)?;
     Ok(crates)
   }
 
+  #[instrument(skip(self))]
+  pub fn get_followed_crate_ids(&mut self, user: User) -> Result<Vec<i32>, DbError> {
+    let crate_ids = FavoriteCrate::belonging_to(&user)
+      .select(favorite_crates::crate_id)
+      .load(self.conn)?;
+    Ok(crate_ids)
+  }
+
   #[instrument(skip(self), err)]
-  pub async fn follow(&self, user_id: i32, crate_id: i32) -> Result<(), DbError> {
-    self.pool.connect_and_query(move |conn| {
-      insert_into(favorite_crates::table)
-        .values(&FavoriteCrate { crate_id, user_id })
-        .execute(conn)
-    }).await?;
+  pub fn follow(&mut self, user_id: i32, crate_id: i32) -> Result<(), DbError> {
+    insert_into(favorite_crates::table)
+      .values(&FavoriteCrate { crate_id, user_id })
+      .execute(self.conn)?;
     Ok(())
   }
 
   #[instrument(skip(self), err)]
-  pub async fn unfollow(&self, user_id: i32, crate_id: i32) -> Result<(), DbError> {
-    self.pool.connect_and_query(move |conn| {
-      delete(favorite_crates::table)
-        .filter(favorite_crates::user_id.eq(user_id))
-        .filter(favorite_crates::crate_id.eq(crate_id))
-        .execute(conn)
-    }).await?;
+  pub fn unfollow(&mut self, user_id: i32, crate_id: i32) -> Result<(), DbError> {
+    delete(favorite_crates::table)
+      .filter(favorite_crates::user_id.eq(user_id))
+      .filter(favorite_crates::crate_id.eq(crate_id))
+      .execute(self.conn)?;
     Ok(())
   }
 }

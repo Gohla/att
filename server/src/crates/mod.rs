@@ -7,7 +7,7 @@ use tracing::instrument;
 
 use att_core::crates::Crate;
 use att_server_db::{DbError, DbPool};
-use att_server_db::crates::{CratesDb, UpdateCrate};
+use att_server_db::crates::{CratesDb, UpdateCrate, UpdateDownloads};
 use crates_io_client::CratesIoClient;
 
 use crate::crates::crates_io_client::CratesIoClientError;
@@ -19,7 +19,7 @@ pub mod route;
 
 #[derive(Clone)]
 pub struct Crates {
-  db: CratesDb,
+  db_pool: DbPool<CratesDb>,
   crates_io_client: CratesIoClient,
   crates_io_dump: CratesIoDump,
 }
@@ -30,10 +30,10 @@ impl Crates {
     crates_io_user_agent: &str,
     crates_io_db_dump_file: PathBuf
   ) -> Result<(Self, impl Future<Output=()>), Box<dyn Error>> {
-    let db = CratesDb::new(db_pool);
+    let db_pool = db_pool.with();
     let (crates_io_client, task) = CratesIoClient::new(crates_io_user_agent)?;
-    let crates_io_dump = CratesIoDump::new(crates_io_db_dump_file, db.clone());
-    let crates = Self { db, crates_io_client, crates_io_dump };
+    let crates_io_dump = CratesIoDump::new(crates_io_db_dump_file, db_pool.clone());
+    let crates = Self { db_pool, crates_io_client, crates_io_dump };
     Ok((crates, task))
   }
 
@@ -57,16 +57,34 @@ pub enum InternalError {
 impl Crates {
   #[instrument(skip(self), err)]
   pub async fn refresh_one(&self, crate_id: i32) -> Result<Option<Crate>, InternalError> {
-    if let Some(mut krate) = self.db.find(crate_id).await? {
-      // TODO: update more fields
-      let response = self.crates_io_client.refresh(krate.name.clone()).await?;
-      let updated_at = response.crate_data.updated_at;
-      krate.updated_at = updated_at;
-      self.db.update(crate_id, UpdateCrate { updated_at }).await?;
-      Ok(Some(krate))
+    if let Some(crate_name) = self.db_pool.query(move |db| db.find_name(crate_id)).await? {
+      let response = self.crates_io_client.refresh(crate_name).await?;
+      let update_crate = UpdateCrate { // TODO: update more fields
+        id: crate_id,
+        updated_at: Some(response.crate_data.updated_at),
+        description: response.crate_data.description,
+        homepage: Some(response.crate_data.homepage),
+        repository: Some(response.crate_data.repository),
+        ..UpdateCrate::default()
+      };
+      let update_downloads = UpdateDownloads {
+        crate_id,
+        downloads: response.crate_data.downloads as i64,
+      };
+      let (krate, _downloads) = self.db_pool.query(move |db|{
+        let krate = db.update_crate(update_crate)?;
+        let downloads = db.update_crate_downloads(update_downloads)?;
+        Ok((krate, downloads))
+      }).await?;
+      Ok(krate)
     } else {
       Ok(None)
     }
+  }
+
+  #[instrument(skip(self), err)]
+  pub async fn refresh_all(&self, user_id: u64) -> Result<Vec<Crate>, CratesIoClientError> {
+    todo!()
   }
 }
 // impl Crates {
