@@ -26,15 +26,15 @@ async fn search_crates(
   let crates = match search {
     CrateSearchQuery { followed: true, .. } => {
       if let Some(user) = &auth_session.user {
-        let user = user.0.clone();
-        state.db_pool.query(move |db| db.get_followed_crates(user))
+        let user_id = user.id;
+        state.db_pool.query(move |db| db.get_followed_crates(user_id))
           .await
           .map_err(|_| CrateError::Internal)?
       } else {
         Err(CrateError::NotLoggedIn)?
       }
     }
-    CrateSearchQuery { search_term: Some(search_term), .. } => state.db_pool.perform(move |c| c.search(search_term))
+    CrateSearchQuery { search_term: Some(search_term), .. } => state.db_pool.perform(move |c| c.search(&search_term))
       .await
       .map_err(|_| CrateError::Internal)?,
     _ => Vec::default()

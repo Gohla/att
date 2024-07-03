@@ -37,7 +37,7 @@ impl DbConn<'_, CratesDb> {
   }
 
   #[instrument(skip(self), err)]
-  pub fn search(&mut self, search_term: String) -> Result<Vec<Crate>, DbError> {
+  pub fn search(&mut self, search_term: &str) -> Result<Vec<Crate>, DbError> {
     let crates = crates::table
       .filter(crates::name.ilike(format!("{}%", search_term)))
       .order(crates::id)
@@ -170,8 +170,9 @@ pub struct FavoriteCrate {
 
 impl DbConn<'_, CratesDb> {
   #[instrument(skip(self))]
-  pub fn get_followed_crates(&mut self, user: User) -> Result<Vec<Crate>, DbError> {
-    let crates = FavoriteCrate::belonging_to(&user)
+  pub fn get_followed_crates(&mut self, user_id: i32) -> Result<Vec<Crate>, DbError> {
+    let crates = favorite_crates::table
+      .filter(favorite_crates::user_id.eq(user_id))
       .inner_join(crates::table)
       .select(Crate::as_select())
       .load(self.conn)?;
@@ -179,11 +180,13 @@ impl DbConn<'_, CratesDb> {
   }
 
   #[instrument(skip(self))]
-  pub fn get_followed_crate_ids(&mut self, user: User) -> Result<Vec<i32>, DbError> {
-    let crate_ids = FavoriteCrate::belonging_to(&user)
-      .select(favorite_crates::crate_id)
+  pub fn get_followed_crate_ids(&mut self, user_id: i32) -> Result<Vec<i32>, DbError> {
+    let crates_ids = favorite_crates::table
+      .filter(favorite_crates::user_id.eq(user_id))
+      .inner_join(crates::table)
+      .select(crates::id)
       .load(self.conn)?;
-    Ok(crate_ids)
+    Ok(crates_ids)
   }
 
   #[instrument(skip(self), err)]

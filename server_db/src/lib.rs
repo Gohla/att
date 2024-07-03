@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+
 use deadpool_diesel::postgres::{BuildError, InteractError, Manager, Object, Pool, PoolError, Runtime};
 use diesel::PgConnection;
 use thiserror::Error;
@@ -8,7 +9,7 @@ use att_core::run_or_compile_time_env;
 pub mod users;
 pub mod crates;
 
-/// Database connection pool
+/// Database connection pool.
 #[derive(Clone)]
 pub struct DbPool<M = ()> {
   pool: Pool,
@@ -31,7 +32,7 @@ impl DbPool {
 }
 
 
-/// Database connection, interaction, query error
+/// Database connection, interaction, or query error.
 #[derive(Debug, Error)]
 pub enum DbError {
   #[error("Database query failed: {0}")]
@@ -145,114 +146,6 @@ pub struct DbConn<'c, M> {
   marker: PhantomData<M>,
 }
 impl<'c, M> DbConn<'c, M> {
-  fn new(conn: &'c mut PgConnection) -> Self {
-    Self { conn, marker: PhantomData }
-  }
+  #[inline]
+  fn new(conn: &'c mut PgConnection) -> Self { Self { conn, marker: PhantomData } }
 }
-
-
-// pub trait DbPoolMethods {
-//   type Obj: DbPoolObjMethods;
-//   fn as_pool(&self) -> &DbPool;
-//   fn convert_obj(obj: DbPoolObj) -> Self::Obj;
-//
-//   #[inline]
-//   fn connect(&self) -> impl Future<Output=Result<Self::Obj, DbError>> {
-//     async {
-//       let obj = self.as_pool().pool.get().await?;
-//       Ok(Self::convert_obj(DbPoolObj { obj }))
-//     }
-//   }
-//
-//   #[inline]
-//   fn interact<R: Send + 'static>(
-//     &self,
-//     f: impl for<'a> FnOnce(&mut <Self::Obj as DbPoolObjMethods>::Inner<'a>) -> R + Send + 'static
-//   ) -> impl Future<Output=Result<R, DbError>> {
-//     async {
-//       let output = self.connect().await?.interact(f).await?;
-//       Ok(output)
-//     }
-//   }
-//
-//   #[inline]
-//   fn perform<T: Send + 'static, E: Send + 'static>(
-//     &self,
-//     f: impl for<'a> FnOnce(&mut <Self::Obj as DbPoolObjMethods>::Inner<'a>) -> Result<T, E> + Send + 'static
-//   ) -> impl Future<Output=Result<T, DbError>> where
-//     DbError: From<E>
-//   {
-//     async {
-//       let output = self.connect().await?.perform(f).await?;
-//       Ok(output)
-//     }
-//   }
-//
-//   #[inline]
-//   fn query<T: Send + 'static>(
-//     &self,
-//     f: impl for<'a> FnOnce(&mut <Self::Obj as DbPoolObjMethods>::Inner<'a>) -> Result<T, DbError> + Send + 'static
-//   ) -> impl Future<Output=Result<T, DbError>> {
-//     async {
-//       let output = self.connect().await?.query(f).await?;
-//       Ok(output)
-//     }
-//   }
-// }
-//
-// pub trait DbPoolObjMethods {
-//   type Inner<'a>;
-//   fn as_obj(&self) -> &DbPoolObj;
-//   fn convert_conn<'a>(conn: &'a mut PgConnection) -> Self::Inner<'a>;
-//
-//   #[inline]
-//   fn interact<R: Send + 'static>(
-//     &self,
-//     f: impl for<'a> FnOnce(&mut Self::Inner<'a>) -> R + Send + 'static
-//   ) -> impl Future<Output=Result<R, DbError>> {
-//     async {
-//       let output = self.as_obj().obj.interact(|conn| f(&mut Self::convert_conn(conn))).await?;
-//       Ok(output)
-//     }
-//   }
-//
-//   #[inline]
-//   fn perform<T: Send + 'static, E: Send + 'static>(
-//     &self,
-//     f: impl for<'a> FnOnce(&mut Self::Inner<'a>) -> Result<T, E> + Send + 'static
-//   ) -> impl Future<Output=Result<T, DbError>> where
-//     DbError: From<E>
-//   {
-//     async {
-//       let output = self.as_obj().obj.interact(|conn| f(&mut Self::convert_conn(conn))).await??;
-//       Ok(output)
-//     }
-//   }
-//
-//   #[inline]
-//   fn query<T: Send + 'static>(
-//     &self,
-//     f: impl for<'a> FnOnce(&mut Self::Inner<'a>) -> Result<T, DbError> + Send + 'static
-//   ) -> impl Future<Output=Result<T, DbError>> {
-//     async {
-//       let output = self.as_obj().obj.interact(|conn| f(&mut Self::convert_conn(conn))).await??;
-//       Ok(output)
-//     }
-//   }
-// }
-
-// impl DbPoolObj {
-//   #[inline]
-//   pub fn lock(&self) -> SyncGuard<'_, PgConnection> {
-//     self.obj.lock().unwrap()
-//   }
-//
-//   #[inline]
-//   pub fn try_lock(&self) -> Option<SyncGuard<'_, PgConnection>> {
-//     match self.obj.try_lock() {
-//       Ok(l) => Some(l),
-//       Err(TryLockError::WouldBlock) => None,
-//       Err(TryLockError::Poisoned(e)) => panic!("{}", e),
-//     }
-//   }
-// }

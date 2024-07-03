@@ -57,7 +57,7 @@ pub enum InternalError {
 impl Crates {
   #[instrument(skip(self), err)]
   pub async fn refresh_one(&self, crate_id: i32) -> Result<Option<Crate>, InternalError> {
-    if let Some(crate_name) = self.db_pool.query(move |db| db.find_name(crate_id)).await? {
+    if let Some(crate_name) = self.db_pool.query(move |conn| conn.find_name(crate_id)).await? {
       let response = self.crates_io_client.refresh(crate_name).await?;
       let update_crate = UpdateCrate { // TODO: update more fields
         id: crate_id,
@@ -71,7 +71,7 @@ impl Crates {
         crate_id,
         downloads: response.crate_data.downloads as i64,
       };
-      let (krate, _downloads) = self.db_pool.query(move |db|{
+      let (krate, _downloads) = self.db_pool.query(move |db| {
         let krate = db.update_crate(update_crate)?;
         let downloads = db.update_crate_downloads(update_downloads)?;
         Ok((krate, downloads))

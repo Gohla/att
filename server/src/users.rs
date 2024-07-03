@@ -29,9 +29,6 @@ impl Users {
   pub fn from_db_pool(db_pool: DbPool) -> Self {
     Self::new(Argon2::default(), db_pool)
   }
-
-  #[inline]
-  pub fn db_pool(&self) -> &DbPool<UsersDb> { &self.db_pool }
 }
 
 
@@ -63,7 +60,7 @@ impl Users {
   #[instrument(skip_all, fields(user_credentials.name = user_credentials.name), err)]
   async fn authenticate_user(&self, user_credentials: UserCredentials) -> Result<Option<User>, InternalError> {
     let user = self.db_pool
-      .query(move |db| db.get_by_name(&user_credentials.name))
+      .query(move |conn| conn.get_by_name(&user_credentials.name))
       .await?;
     let user = if let Some(user) = user {
       let parsed_hash = PasswordHash::new(&user.password_hash)?;
