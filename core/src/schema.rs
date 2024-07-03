@@ -48,10 +48,13 @@ diesel::table! {
 diesel::joinable!(favorite_crates -> crates (crate_id));
 diesel::joinable!(favorite_crates -> users (user_id));
 
-diesel::allow_tables_to_appear_in_same_query!(
-    crate_versions,
-    crates,
-    favorite_crates,
-    import_crates_metadata,
-    users,
-);
+diesel::allow_tables_to_appear_in_same_query!(favorite_crates, crates, crate_versions);
+diesel::allow_tables_to_appear_in_same_query!(favorite_crates, users);
+
+// diesel::allow_tables_to_appear_in_same_query!(
+//     crate_versions,
+//     crates,
+//     favorite_crates,
+//     import_crates_metadata,
+//     users,
+// );
