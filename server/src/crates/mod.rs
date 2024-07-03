@@ -5,8 +5,8 @@ use std::path::PathBuf;
 use thiserror::Error;
 use tracing::instrument;
 
-use att_core::crates::{Crate, CrateError, CrateSearchQuery, FullCrate};
-use att_server_db::{DbError, DbPool};
+use att_core::crates::{CrateError, CrateSearchQuery, FullCrate};
+use att_server_db::{DbError, DbPool, DbPoolObj};
 use att_server_db::crates::{CratesDb, UpdateCrate};
 use crates_io_client::CratesIoClient;
 
@@ -87,11 +87,35 @@ impl Crates {
   pub async fn refresh_one(&self, crate_id: i32) -> Result<FullCrate, InternalError> {
     let db_pool_obj = self.db_pool.get().await?;
 
-    let full_crate = db_pool_obj.query(move |conn| conn.find(crate_id))
+    let mut full_crate = db_pool_obj.query(move |conn| conn.find(crate_id))
       .await?
       .ok_or_else(|| InternalError::CrateNotFound(crate_id))?;
 
-    let response = self.crates_io_client.refresh(full_crate.krate.name).await?;
+    self.update(&mut full_crate, &db_pool_obj)
+      .await?;
+
+    Ok(full_crate)
+  }
+
+  #[instrument(skip(self), err)]
+  pub async fn refresh_followed(&self, user_id: i32) -> Result<Vec<FullCrate>, InternalError> {
+    let db_pool_obj = self.db_pool.get().await?;
+
+    let mut full_crates = db_pool_obj.query(move |conn| conn.get_followed_crates(user_id))
+      .await?;
+
+    for full_crate in &mut full_crates {
+      self.update(full_crate, &db_pool_obj)
+        .await?;
+    }
+
+    Ok(full_crates)
+  }
+
+  async fn update(&self, full_crate: &mut FullCrate, db_pool_obj: &DbPoolObj<CratesDb>) -> Result<(), InternalError> {
+    let crate_id = full_crate.krate.id;
+
+    let response = self.crates_io_client.refresh(full_crate.krate.name.clone()).await?;
     let update_crate = UpdateCrate { // TODO: update more fields
       id: crate_id,
       updated_at: Some(response.crate_data.updated_at),
@@ -102,110 +126,15 @@ impl Crates {
       downloads: Some(response.crate_data.downloads as i64),
       ..UpdateCrate::default()
     };
-    // TODO: update versions and possibly default version
+    // TODO: update versions and default version
 
-    let full_crate = db_pool_obj.perform::<InternalError, _>(move |conn| {
+    let krate = db_pool_obj.perform::<InternalError, _>(move |conn| {
       let krate = conn.update_crate(update_crate)?
         .ok_or_else(|| InternalError::CrateNotFound(crate_id))?;
-      let full_crate = FullCrate { krate, default_version: full_crate.default_version };
-      Ok(full_crate)
+      Ok(krate)
     }).await?;
-    Ok(full_crate)
-  }
+    full_crate.krate = krate;
 
-  #[instrument(skip(self), err)]
-  pub async fn refresh_all(&self, user_id: u64) -> Result<Vec<Crate>, CratesIoClientError> {
-    todo!()
+    Ok(())
   }
 }
-// impl Crates {
-//   #[instrument(skip(self), err)]
-//   pub async fn refresh_one(&self, crate_id: String) -> Result<Crate, CratesIoClientError> {
-//     self.ensure_refreshed(&mut data.id_to_crate, &crate_id, Utc::now(), |_, _| true).await
-//   }
-//
-//   #[instrument(skip(self), err)]
-//   pub async fn refresh_outdated(&self, user_id: u64) -> Result<Vec<Crate>, CratesIoClientError> {
-//     self.refresh_multiple(data, user_id, Utc::now(), refresh_hourly).await
-//   }
-//
-//   #[instrument(skip(self), err)]
-//   pub async fn refresh_all(&self, user_id: u64) -> Result<Vec<Crate>, CratesIoClientError> {
-//     self.refresh_multiple(data, user_id, Utc::now(), |_, _| true).await
-//   }
-//
-//
-//   #[instrument(skip_all, err)]
-//   async fn refresh_for_all_users(
-//     &self,
-//     now: DateTime<Utc>,
-//     should_refresh: impl Fn(&DateTime<Utc>, &DateTime<Utc>) -> bool
-//   ) -> Result<Vec<Crate>, CratesIoClientError> {
-//     // TODO: remove data from unfollowed crates? Probably best done in a separate step and done in a job.
-//     let mut refreshed = Vec::new();
-//     // Refresh outdated cached crate data.
-//     for (krate, last_refreshed) in data.id_to_crate.values_mut() {
-//       let crate_id = &krate.name;
-//       if should_refresh(&now, last_refreshed) {
-//         let response = self.crates_io_client.refresh(crate_id.clone()).await?;
-//         *krate = response.crate_data.into();
-//         *last_refreshed = now;
-//         refreshed.push(krate.clone());
-//       }
-//     }
-//     // Refresh missing cached crate data.
-//     for crate_id in data.followed_crate_ids.values().flatten() {
-//       if !data.id_to_crate.contains_key(crate_id) {
-//         let response = self.crates_io_client.refresh(crate_id.clone()).await?;
-//         let krate: Crate = response.crate_data.into();
-//         data.id_to_crate.insert(crate_id.clone(), (krate.clone(), now));
-//         refreshed.push(krate);
-//       }
-//     }
-//     Ok(refreshed)
-//   }
-//
-//   #[instrument(skip_all, err)]
-//   async fn refresh_multiple(
-//     &self,
-//     user_id: u64,
-//     now: DateTime<Utc>,
-//     should_refresh: impl Fn(&DateTime<Utc>, &DateTime<Utc>) -> bool
-//   ) -> Result<Vec<Crate>, CratesIoClientError> {
-//     let mut refreshed = Vec::new();
-//     if let Some(followed_crate_ids) = data.followed_crate_ids.get(&user_id) {
-//       for crate_id in followed_crate_ids {
-//         let krate = self.ensure_refreshed(&mut data.id_to_crate, crate_id, now, &should_refresh).await?;
-//         refreshed.push(krate);
-//       }
-//     }
-//     Ok(refreshed)
-//   }
-//
-//   async fn ensure_refreshed(
-//     &self,
-//     id_to_crate: &mut BTreeMap<String, (Crate, DateTime<Utc>)>,
-//     crate_id: &String,
-//     now: DateTime<Utc>,
-//     should_refresh: impl Fn(&DateTime<Utc>, &DateTime<Utc>) -> bool
-//   ) -> Result<Crate, CratesIoClientError> {
-//     let krate = if let Some((krate, last_refreshed)) = id_to_crate.get_mut(crate_id) {
-//       if should_refresh(&now, last_refreshed) {
-//         let response = self.crates_io_client.refresh(crate_id.clone()).await?;
-//         *krate = response.crate_data.into();
-//         *last_refreshed = now;
-//       }
-//       krate.clone()
-//     } else {
-//       let response = self.crates_io_client.refresh(crate_id.clone()).await?;
-//       let krate: Crate = response.crate_data.into();
-//       id_to_crate.insert(crate_id.clone(), (krate.clone(), now));
-//       krate
-//     }; // Note: can't use entry API due to async.
-//     Ok(krate)
-//   }
-// }
-//
-// fn refresh_hourly(now: &DateTime<Utc>, last_refresh: &DateTime<Utc>) -> bool {
-//   now.signed_duration_since(last_refresh) > Duration::hours(1)
-// }

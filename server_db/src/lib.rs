@@ -154,4 +154,7 @@ pub struct DbConn<'c, M> {
 impl<'c, M> DbConn<'c, M> {
   #[inline]
   fn new(conn: &'c mut PgConnection) -> Self { Self { conn, marker: PhantomData } }
+
+  #[inline]
+  pub fn inner(&'c mut self) -> &'c mut PgConnection { &mut self.conn }
 }

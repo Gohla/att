@@ -139,17 +139,9 @@ impl FollowCrates {
     }
   }
 
-  pub fn refresh_outdated(&mut self) -> impl Future<Output=UpdateAll<false>> {
+  pub fn refresh_followed(&mut self) -> impl Future<Output=UpdateAll<false>> {
     self.all_crates_being_modified = true;
-    let future = self.http_client.refresh_outdated_crates();
-    async move {
-      UpdateAll { result: future.await }
-    }
-  }
-
-  pub fn refresh_all(&mut self) -> impl Future<Output=UpdateAll<true>> {
-    self.all_crates_being_modified = true;
-    let future = self.http_client.refresh_all_crates();
+    let future = self.http_client.refresh_followed();
     async move {
       UpdateAll { result: future.await }
     }
@@ -241,8 +233,7 @@ pub enum FollowCrateRequest {
   Follow(FullCrate),
   Unfollow(i32),
   Refresh(i32),
-  RefreshOutdated,
-  RefreshAll,
+  RefreshFollowed,
 }
 
 /// Follow crate responses in message form.
@@ -278,8 +269,7 @@ impl From<Unfollow> for FollowCratesResponse {
 impl Service for FollowCrates {
   fn action_definitions(&self) -> &[ActionDef] {
     const ACTION_DEFS: &'static [ActionDef] = &[
-      ActionDef::from_text("Refresh Outdated"),
-      ActionDef::from_text("Refresh All"),
+      ActionDef::from_text("Refresh Followed"),
     ];
     ACTION_DEFS
   }
@@ -287,8 +277,7 @@ impl Service for FollowCrates {
   fn actions(&self) -> impl IntoIterator<Item=impl Action<Request=Self::Request>> {
     let disabled = self.are_all_crates_being_modified();
     [
-      ServiceAction { kind: ServiceActionKind::RefreshOutdated, disabled },
-      ServiceAction { kind: ServiceActionKind::RefreshAll, disabled },
+      ServiceAction { kind: ServiceActionKind::RefreshFollowed, disabled },
     ]
   }
 
@@ -363,8 +352,7 @@ impl Service for FollowCrates {
       FollowCrateRequest::Follow(krate) => self.follow(krate).map(FollowCratesResponse::Follow).boxed_maybe_send(),
       FollowCrateRequest::Unfollow(crate_id) => self.unfollow(crate_id).map(FollowCratesResponse::Unfollow).boxed_maybe_send(),
       Refresh(crate_id) => self.refresh(crate_id).map(UpdateOne).boxed_maybe_send(),
-      RefreshOutdated => self.refresh_outdated().map(UpdateAll).boxed_maybe_send(),
-      RefreshAll => self.refresh_all().map(SetAll).boxed_maybe_send(),
+      RefreshFollowed => self.refresh_followed().map(UpdateAll).boxed_maybe_send(),
     }
   }
 
@@ -384,8 +372,7 @@ impl Service for FollowCrates {
 // Service actions
 
 enum ServiceActionKind {
-  RefreshOutdated,
-  RefreshAll,
+  RefreshFollowed,
 }
 
 struct ServiceAction {
@@ -402,8 +389,7 @@ impl Action for ServiceAction {
   #[inline]
   fn request(&self) -> FollowCrateRequest {
     match self.kind {
-      ServiceActionKind::RefreshOutdated => FollowCrateRequest::RefreshOutdated,
-      ServiceActionKind::RefreshAll => FollowCrateRequest::RefreshAll,
+      ServiceActionKind::RefreshFollowed => FollowCrateRequest::RefreshFollowed,
     }
   }
 }

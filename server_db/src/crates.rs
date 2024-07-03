@@ -148,7 +148,7 @@ impl DbConn<'_, CratesDb> {
 }
 
 
-// Query favorite crates
+// Favorite crates
 
 #[derive(Debug, Identifiable, Selectable, Queryable, Associations, Insertable)]
 #[diesel(table_name = favorite_crates, check_for_backend(Pg))]

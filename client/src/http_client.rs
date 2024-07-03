@@ -7,7 +7,7 @@ use tracing::{debug, instrument};
 use url::Url;
 
 use att_core::crates::{CrateError, CrateSearchQuery, FullCrate};
-use att_core::users::{UserCredentials, AuthError};
+use att_core::users::{AuthError, UserCredentials};
 
 #[derive(Clone, Debug)]
 pub struct AttHttpClient {
@@ -81,13 +81,8 @@ impl AttHttpClient {
     async move { Self::send::<_, CrateError>(rb).await }
   }
   #[instrument(skip(self), err)]
-  pub fn refresh_outdated_crates(&self) -> impl Future<Output=Result<Vec<FullCrate>, AttHttpClientError>> {
-    let rb = self.request_builder(Method::POST, "crates/refresh_outdated");
-    async move { Self::send::<_, CrateError>(rb).await }
-  }
-  #[instrument(skip(self), err)]
-  pub fn refresh_all_crates(&self) -> impl Future<Output=Result<Vec<FullCrate>, AttHttpClientError>> {
-    let rb = self.request_builder(Method::POST, "crates/refresh_all");
+  pub fn refresh_followed(&self) -> impl Future<Output=Result<Vec<FullCrate>, AttHttpClientError>> {
+    let rb = self.request_builder(Method::POST, "crates/refresh_followed");
     async move { Self::send::<_, CrateError>(rb).await }
   }
 
@@ -116,7 +111,9 @@ impl AttHttpClient {
   }
   async fn send<T: DeserializeOwned, E: DeserializeOwned>(
     request_builder: RequestBuilder,
-  ) -> Result<T, AttHttpClientError> where AttHttpClientError: From<E> {
+  ) -> Result<T, AttHttpClientError> where
+    AttHttpClientError: From<E>
+  {
     debug!(request = ?request_builder, "sending HTTP request");
     let response = request_builder.send().await?;
     let body: Result<T, E> = response.json().await?;
