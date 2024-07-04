@@ -7,7 +7,7 @@ use iced_builder::WidgetBuilder;
 use iced_virtual::constrained_row::Constraint;
 use iced_virtual::table::Table;
 
-use crate::query::{Facet, FacetType, Query, QueryDef};
+use crate::query::{Facet, FacetType, Query, QueryDef, QueryMessage};
 use crate::service::{Action, ActionStyle, ActionWithDef, Service};
 use crate::table::AsTableRow;
 
@@ -165,14 +165,6 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
   table.into_element()
 }
 
-#[derive(Debug)]
-pub enum QueryMessage {
-  FacetChange {
-    facet_id: &'static str,
-    new_facet: Facet,
-  }
-}
-
 pub fn view_query<'a>(query_def: &'a QueryDef, query: &'a Query) -> Element<'a, QueryMessage> {
   // Label text element + actual element + space element between elements.
   let capacity = query_def.facet_defs_len() * 2 + query_def.facet_defs_len().saturating_sub(1);
@@ -207,16 +199,4 @@ pub fn view_query<'a>(query_def: &'a QueryDef, query: &'a Query) -> Element<'a, 
   builder
     .row().spacing(5.0).align_center().fill_width().add()
     .take()
-}
-
-pub fn update_query(query: &mut Query, message: QueryMessage) {
-  match message {
-    QueryMessage::FacetChange { facet_id, new_facet } => {
-      if let Some(facet) = query.facet_mut(facet_id) {
-        facet.set_from(new_facet);
-      } else {
-        panic!("facet '{}' not found in query {:?}", facet_id, query);
-      }
-    }
-  }
 }

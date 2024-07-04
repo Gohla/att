@@ -3,7 +3,8 @@ use tracing::instrument;
 
 use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesResponse, FollowCratesState};
 use att_client::http_client::AttHttpClient;
-use att_core::iced_impls::{as_full_table, QueryMessage, update_query};
+use att_core::iced_impls::as_full_table;
+use att_core::query::QueryMessage;
 use att_core::service::Service;
 use iced_builder::WidgetBuilder;
 
@@ -72,7 +73,7 @@ impl FollowCratesComponent {
       SendRequest(request) => return self.follow_crates.send(request).perform(ProcessResponse).into(),
       ProcessResponse(response) => self.follow_crates.process(response),
       Query(message) => {
-        update_query(self.follow_crates.query_mut(), message);
+        message.update_query(self.follow_crates.query_mut());
       }
     }
     Update::default()

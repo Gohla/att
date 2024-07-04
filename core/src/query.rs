@@ -90,9 +90,18 @@ pub enum FacetValue {
   Boolean(bool),
   String(String),
 }
+impl FacetValue {
+  #[inline]
+  pub fn is_empty(&self) -> bool {
+    match self {
+      FacetValue::Boolean(_) => false,
+      FacetValue::String(s) => s.is_empty(),
+    }
+  }
+}
 
 /// Facet of a query.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Facet {
   value: Option<FacetValue>,
 }
@@ -118,6 +127,14 @@ impl Facet {
     Self::new(Some(FacetValue::String(string)))
   }
 
+
+  #[inline]
+  pub fn is_empty(&self) -> bool {
+    let Some(value) = self.value.as_ref() else {
+      return false;
+    };
+    value.is_empty()
+  }
 
   #[inline]
   pub fn as_bool(&self) -> Option<bool> {
@@ -167,7 +184,7 @@ impl Facet {
 }
 
 /// A faceted search query.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Query {
   facets: LinkedHashMap<&'static str, Facet>,
 }
@@ -176,6 +193,14 @@ impl Query {
   #[inline]
   pub fn facets_len(&self) -> usize {
     self.facets.len()
+  }
+
+  #[inline]
+  pub fn is_empty(&self) -> bool {
+    for facet in self.facets.values() {
+      if !facet.is_empty() { return false }
+    }
+    true
   }
 
 
@@ -208,5 +233,27 @@ impl Query {
   #[inline]
   pub fn facets_with_defs_mut<'a>(&'a mut self, query_def: &'a QueryDef) -> impl Iterator<Item=(&'static str, &'a FacetDef, &'a mut Facet)> + 'a {
     self.facets_mut().flat_map(|(facet_id, facet)| query_def.facet_def(facet_id).map(|facet_def| (facet_id, facet_def, facet)))
+  }
+}
+
+
+#[derive(Debug)]
+pub enum QueryMessage {
+  FacetChange {
+    facet_id: &'static str,
+    new_facet: Facet,
+  }
+}
+impl QueryMessage {
+  pub fn update_query(self, query: &mut Query) {
+    match self {
+      QueryMessage::FacetChange { facet_id, new_facet } => {
+        if let Some(facet) = query.facet_mut(facet_id) {
+          facet.set_from(new_facet);
+        } else {
+          panic!("facet '{}' not found in query {:?}", facet_id, query);
+        }
+      }
+    }
   }
 }
