@@ -7,6 +7,7 @@ use thiserror::Error;
 #[cfg(feature = "diesel")]
 use {crate::schema, diesel::{pg::Pg, prelude::*}};
 
+use crate::query::{Facet, FacetDef, FacetRef, FacetType, Query};
 use crate::table::{AsTableRow, Column};
 
 /// A Rust crate.
@@ -83,35 +84,56 @@ impl AsTableRow for FullCrate {
 
 
 #[derive(Default, Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug, Serialize, Deserialize)]
-pub struct CrateSearchQuery {
-  pub search_term: Option<String>,
-  pub followed: bool,
+pub struct CratesQuery {
+  pub followed: Option<bool>,
+  pub name: Option<String>,
 }
 
-impl CrateSearchQuery {
+impl CratesQuery {
   #[inline]
-  pub fn from_term(search_term: String) -> Self { Self { search_term: Some(search_term), ..Self::default() } }
+  pub fn from_name(name: String) -> Self { Self { name: Some(name), ..Self::default() } }
   #[inline]
-  pub fn from_followed() -> Self { Self { followed: true, ..Self::default() } }
+  pub fn from_followed() -> Self { Self { followed: Some(true), ..Self::default() } }
+}
 
-  #[inline]
-  pub fn search_term(&self) -> &str { self.search_term.as_deref().unwrap_or_default() }
+impl Query for CratesQuery {
+  const FACET_DEFS: &'static [FacetDef] = &[
+    FacetDef::new("Following", FacetType::Boolean { default_value: None }),
+    FacetDef::new("Name", FacetType::String { default_value: None, placeholder: Some("Crate name contains...") })
+  ];
 
-  #[inline]
-  pub fn is_empty(&self) -> bool {
-    let Some(search_term) = &self.search_term else {
+  fn is_empty(&self) -> bool {
+    let Some(search_term) = &self.name else {
       return false;
     };
     if !search_term.is_empty() {
       return false;
     }
-    !self.followed
+    self.followed.is_none()
+  }
+
+  fn facet(&self, index: u8) -> Option<FacetRef> {
+    match index {
+      0 => self.followed.map(|b| FacetRef::Boolean(b)),
+      1 => self.name.as_ref().map(|s| FacetRef::String(s)),
+      _ => panic!("facet index {} is out of bounds for `CratesQuery`", index),
+    }
+  }
+
+  fn set_facet(&mut self, index: u8, facet: Option<Facet>) {
+    match index {
+      i@0 => self.followed = facet.map(Facet::into_bool)
+        .transpose().unwrap_or_else(|f| panic!("facet {:?} at index {} is not a boolean", f, i)),
+      i@1 => self.name = facet.map(Facet::into_string)
+        .transpose().unwrap_or_else(|f| panic!("facet {:?} at index {} is not a string", f, i)),
+      _ => panic!("facet index {} is out of bounds for `CratesQuery`", index),
+    }
   }
 }
 
-impl From<String> for CrateSearchQuery {
+impl From<String> for CratesQuery {
   fn from(search_term: String) -> Self {
-    Self::from_term(search_term)
+    Self::from_name(search_term)
   }
 }
 

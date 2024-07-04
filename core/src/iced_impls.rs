@@ -7,7 +7,7 @@ use iced_builder::WidgetBuilder;
 use iced_virtual::constrained_row::Constraint;
 use iced_virtual::table::Table;
 
-use crate::query::{Facet, FacetType, Query, QueryDef, QueryMessage};
+use crate::query::{FacetRef, FacetType, Query, QueryMessage};
 use crate::service::{Action, ActionStyle, ActionWithDef, Service};
 use crate::table::AsTableRow;
 
@@ -127,7 +127,7 @@ pub fn as_table_header<'a, S: Service, M: 'a>(
 
 /// Creates a table query for `service`.
 pub fn as_table_query<S: Service>(service: &S) -> Element<QueryMessage> {
-  view_query(service.query_definition(), service.query())
+  view_query(service.query())
 }
 
 /// Creates a table showing `service`'s data. Requests are converted to a message of type [M] with `map_request`.
@@ -165,13 +165,17 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
   table.into_element()
 }
 
-pub fn view_query<'a>(query_def: &'a QueryDef, query: &'a Query) -> Element<'a, QueryMessage> {
+pub fn view_query<'a, Q: Query>(query: &'a Q) -> Element<'a, QueryMessage> {
+  let num_facets = Q::FACET_DEFS.len();
   // Label text element + actual element + space element between elements.
-  let capacity = query_def.facet_defs_len() * 2 + query_def.facet_defs_len().saturating_sub(1);
+  let capacity = num_facets * 2 + num_facets.saturating_sub(1);
   let mut builder = WidgetBuilder::heap_with_capacity(capacity);
 
   let mut first = true;
-  for (facet_id, facet_def, facet) in query.facets_with_defs(query_def) {
+  for (facet_index, facet_def) in Q::FACET_DEFS.iter().enumerate() {
+    let facet_index = facet_index as u8;
+    let facet = query.facet(facet_index);
+
     if !first {
       // Spacing does not work with nested rows for some reason. Hack around it by adding space between elements.
       builder = builder.space().width(5.0).add();
@@ -182,15 +186,23 @@ pub fn view_query<'a>(query_def: &'a QueryDef, query: &'a Query) -> Element<'a, 
 
     match &facet_def.facet_type { // TODO: create combined facet type + facet value for type safety
       FacetType::Boolean { default_value } => {
-        let toggle_fn = |toggled| QueryMessage::FacetChange { facet_id, new_facet: Facet::new_boolean(toggled) };
-        builder = builder.toggler(None::<String>, facet.as_bool().or(*default_value).unwrap_or_default(), toggle_fn)
+        let toggle_fn = move |toggled| QueryMessage::facet_change_bool(facet_index, toggled);
+        let is_toggled = facet.map(FacetRef::as_bool)
+          .transpose().unwrap_or_else(|f| panic!("facet {:?} at index {} is not a boolean", f, facet_index))
+          .or(*default_value)
+          .unwrap_or_default();
+        builder = builder.toggler(None::<String>, is_toggled, toggle_fn)
           .spacing(0)
           .width_shrink()
           .add();
       }
       FacetType::String { default_value, placeholder } => {
-        builder = builder.text_input(placeholder.unwrap_or_default(), facet.as_str().or(default_value.as_deref()).unwrap_or_default())
-          .on_input(|text| QueryMessage::FacetChange { facet_id, new_facet: Facet::new_string(text) })
+        let text = facet.map(FacetRef::as_str)
+          .transpose().unwrap_or_else(|f| panic!("facet {:?} at index {} is not a string", f, facet_index))
+          .or(default_value.as_deref())
+          .unwrap_or_default();
+        builder = builder.text_input(placeholder.unwrap_or_default(), text)
+          .on_input(move |text| QueryMessage::facet_change_string(facet_index, text))
           .add();
       }
     }

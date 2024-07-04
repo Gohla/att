@@ -6,8 +6,7 @@ use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
-use att_core::crates::{CrateSearchQuery, FullCrate};
-use att_core::query::{FacetDef, FacetType, Query, QueryDef};
+use att_core::crates::{CratesQuery, FullCrate};
 use att_core::service::{Action, ActionDef, Service};
 use att_core::util::maybe_send::MaybeSendFuture;
 
@@ -26,23 +25,18 @@ pub struct FollowCrates {
   state: FollowCratesState,
   crates_being_modified: BTreeSet<i32>,
   all_crates_being_modified: bool,
-  query_def: QueryDef,
-  query: Query,
+  query: CratesQuery,
 }
 
 impl FollowCrates {
   #[inline]
   pub fn new(http_client: AttHttpClient, state: FollowCratesState) -> Self {
-    let query_def = QueryDef::default()
-      .with_facet_def("follow", FacetDef::new("Following", FacetType::Boolean { default_value: Some(true) }))
-      .with_facet_def("name", FacetDef::new("Name", FacetType::String { default_value: Some(String::new()), placeholder: Some("Crate name contains...") }));
     Self {
       http_client,
       state,
       crates_being_modified: Default::default(),
       all_crates_being_modified: false,
-      query: query_def.create_query(),
-      query_def,
+      query: CratesQuery::from_followed(),
     }
   }
 
@@ -61,8 +55,8 @@ impl FollowCrates {
 
   #[inline]
   fn queried_crates(&self) -> impl Iterator<Item=&FullCrate> {
-    let name = self.query.facet("name").unwrap().as_str().unwrap_or_default();
-    let follow = self.query.facet("follow").unwrap().as_bool().unwrap_or(true);
+    let name = self.query.name.as_deref().unwrap_or_default();
+    let follow = self.query.followed.unwrap_or(true);
     self.state.id_to_crate.values().filter(move |c| follow && c.krate.name.contains(name))
   }
 
@@ -133,7 +127,7 @@ pub struct UpdateAll<const SET: bool> {
 impl FollowCrates {
   pub fn get_followed(&mut self) -> impl Future<Output=UpdateAll<true>> {
     self.all_crates_being_modified = true;
-    let future = self.http_client.search_crates(CrateSearchQuery::from_followed());
+    let future = self.http_client.search_crates(CratesQuery::from_followed());
     async move {
       UpdateAll { result: future.await }
     }
@@ -299,19 +293,15 @@ impl Service for FollowCrates {
     self.iter_crates()
   }
 
+  type Query = CratesQuery;
 
   #[inline]
-  fn query_definition(&self) -> &QueryDef {
-    &self.query_def
-  }
-
-  #[inline]
-  fn query(&self) -> &Query {
+  fn query(&self) -> &Self::Query {
     &self.query
   }
 
   #[inline]
-  fn query_mut(&mut self) -> &mut Query {
+  fn query_mut(&mut self) -> &mut Self::Query {
     &mut self.query
   }
 

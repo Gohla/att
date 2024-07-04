@@ -1,7 +1,7 @@
 use axum::extract::{Path, Query, State};
 use axum::Router;
 
-use att_core::crates::{CrateError, CrateSearchQuery, FullCrate};
+use att_core::crates::{CrateError, CratesQuery, FullCrate};
 
 use crate::crates::Crates;
 use crate::users::AuthSession;
@@ -20,24 +20,12 @@ pub fn router() -> Router<Crates> {
 async fn search_crates(
   auth_session: AuthSession,
   State(state): State<Crates>,
-  Query(search): Query<CrateSearchQuery>
+  Query(query): Query<CratesQuery>
 ) -> JsonResult<Vec<FullCrate>, CrateError> {
-  let full_crates = match search {
-    CrateSearchQuery { followed: true, .. } => {
-      if let Some(user) = &auth_session.user {
-        let user_id = user.id;
-        state.db_pool.query(move |db| db.get_followed_crates(user_id))
-          .await
-          .map_err(|_| CrateError::Internal)?
-      } else {
-        Err(CrateError::NotLoggedIn)?
-      }
-    }
-    CrateSearchQuery { search_term: Some(search_term), .. } => state.db_pool.perform(move |c| c.search(&search_term))
-      .await
-      .map_err(|_| CrateError::Internal)?,
-    _ => Vec::default()
-  };
+  let user_id = auth_session.user.map(|u| u.id);
+  let full_crates = state.search(query, user_id)
+    .await
+    .map_err(|_| CrateError::Internal)?;
   Ok(full_crates.into())
 }
 

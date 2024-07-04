@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use thiserror::Error;
 use tracing::instrument;
 
-use att_core::crates::{CrateError, CrateSearchQuery, FullCrate};
+use att_core::crates::{CrateError, CratesQuery, FullCrate};
 use att_server_db::{DbError, DbPool, DbPoolObj};
 use att_server_db::crates::{CratesDb, UpdateCrate};
 use crates_io_client::CratesIoClient;
@@ -70,17 +70,10 @@ impl Crates {
   }
 
   #[instrument(skip(self), err)]
-  pub async fn search(&self, query: CrateSearchQuery, user_id: i32) -> Result<Vec<FullCrate>, InternalError> {
-    let crates = match query {
-      CrateSearchQuery { followed: true, .. } => self.db_pool
-        .query(move |conn| conn.get_followed_crates(user_id))
-        .await?,
-      CrateSearchQuery { search_term: Some(search_term), .. } => self.db_pool
-        .perform(move |conn| conn.search(&search_term))
-        .await?,
-      _ => Vec::default()
-    };
-    Ok(crates.into())
+  pub async fn search(&self, query: CratesQuery, user_id: Option<i32>) -> Result<Vec<FullCrate>, InternalError> {
+    let full_crates = self.db_pool.query(move |db| db.search(query, user_id))
+      .await?;
+    Ok(full_crates)
   }
 
   #[instrument(skip(self), err)]

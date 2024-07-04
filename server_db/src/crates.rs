@@ -4,7 +4,7 @@ use diesel::pg::Pg;
 use diesel::prelude::*;
 use tracing::{debug, instrument};
 
-use att_core::crates::{Crate, CrateVersion, FullCrate};
+use att_core::crates::{Crate, CratesQuery, CrateVersion, FullCrate};
 use att_core::schema::{crate_versions, crates, favorite_crates, import_crates_metadata};
 
 use crate::{DbConn, DbError};
@@ -39,13 +39,25 @@ impl DbConn<'_, CratesDb> {
   }
 
   #[instrument(skip(self), err)]
-  pub fn search(&mut self, search_term: &str) -> Result<Vec<FullCrate>, DbError> {
-    let full_crates = crates::table
-      .filter(crates::name.ilike(format!("{}%", search_term)))
-      .order(crates::id)
+  pub fn search(&mut self, crates_query: CratesQuery, user_id: Option<i32>) -> Result<Vec<FullCrate>, DbError> {
+    let mut query = crates::table
       .inner_join(crate_versions::table.on(crate_versions::id.eq(crates::default_version_id)))
       .select(FullCrate::as_select())
-      .load(self.conn)?;
+      .order(crates::id)
+      .into_boxed();
+
+    if let Some(name) = crates_query.name {
+      query = query.filter(crates::name.ilike(format!("{}%", name)));
+    }
+
+    let full_crates = if let (Some(true), Some(user_id)) = (crates_query.followed, user_id) {
+      query
+        .inner_join(favorite_crates::table.on(favorite_crates::crate_id.eq(crates::id).and(favorite_crates::user_id.eq(user_id))))
+        .load::<FullCrate>(self.conn)?
+    } else {
+      query.load::<FullCrate>(self.conn)?
+    };
+
     Ok(full_crates)
   }
 }
@@ -161,20 +173,18 @@ pub struct FavoriteCrate {
 impl DbConn<'_, CratesDb> {
   #[instrument(skip(self), err)]
   pub fn get_followed_crates(&mut self, user_id: i32) -> Result<Vec<FullCrate>, DbError> {
-    let full_crates = favorite_crates::table
-      .filter(favorite_crates::user_id.eq(user_id))
-      .inner_join(crates::table)
+    let full_crates = crates::table
       .inner_join(crate_versions::table.on(crate_versions::id.eq(crates::default_version_id)))
       .select(FullCrate::as_select())
+      .inner_join(favorite_crates::table.on(favorite_crates::crate_id.eq(crates::id).and(favorite_crates::user_id.eq(user_id))))
       .load::<FullCrate>(self.conn)?;
     Ok(full_crates)
   }
 
   #[instrument(skip(self), err)]
   pub fn get_followed_crate_ids(&mut self, user_id: i32) -> Result<Vec<i32>, DbError> {
-    let crates_ids = favorite_crates::table
-      .filter(favorite_crates::user_id.eq(user_id))
-      .inner_join(crates::table)
+    let crates_ids = crates::table
+      .inner_join(favorite_crates::table.on(favorite_crates::crate_id.eq(crates::id).and(favorite_crates::user_id.eq(user_id))))
       .select(crates::id)
       .load(self.conn)?;
     Ok(crates_ids)

@@ -5,30 +5,31 @@ use std::time::Duration;
 use futures::FutureExt;
 use tracing::{debug, error};
 
-use att_core::query::{Query, QueryDef, QueryMessage};
+use att_core::query::{Query, QueryMessage};
 use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture};
 use att_core::util::time::{Instant, sleep};
 
 #[derive(Debug)]
-pub struct SearchQuery<T, F> {
-  query_def: QueryDef,
-  create_future: F,
+pub struct SearchQuery<T, Q, Fn> {
+  create_future: Fn,
+  default_query: Q,
 
-  query: Query,
+  query: Q,
   wait_until: Option<Instant>,
   data: Vec<T>,
 }
-impl<T, E, Fut, F> SearchQuery<T, F> where
+impl<T, Q, E, Fut, F> SearchQuery<T, Q, F> where
   T: 'static,
+  Q: Query + Clone + 'static,
   E: Display + Debug + 'static,
   Fut: Future<Output=Result<Vec<T>, E>> + Send + 'static,
-  F: Fn(Query) -> Fut + 'static
+  F: Fn(Q) -> Fut + 'static
 {
-  pub fn new(query_def: QueryDef, create_future: F) -> Self {
-    let query = query_def.create_query();
+  pub fn new(default_query: Q, create_future: F) -> Self {
+    let query = default_query.clone();
     Self {
-      query_def,
       create_future,
+      default_query,
 
       query,
       wait_until: None,
@@ -39,11 +40,7 @@ impl<T, E, Fut, F> SearchQuery<T, F> where
 
   /// Returns the query.
   #[inline]
-  pub fn query_def(&self) -> &QueryDef { &self.query_def }
-
-  /// Returns the query.
-  #[inline]
-  pub fn query(&self) -> &Query { &self.query }
+  pub fn query(&self) -> &Q { &self.query }
 
   /// Returns the data.
   #[inline]
@@ -127,7 +124,7 @@ impl<T, E, Fut, F> SearchQuery<T, F> where
 
   /// Clears the query and data, and cancels ongoing queries.
   pub fn clear(&mut self) {
-    self.query = self.query_def.create_query(); // OPTO: reduce allocation by reusing query.
+    self.query = self.default_query.clone();
     self.wait_until = None;
     self.data.clear();
   }

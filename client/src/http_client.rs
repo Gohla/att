@@ -6,7 +6,7 @@ use thiserror::Error;
 use tracing::{debug, instrument};
 use url::Url;
 
-use att_core::crates::{CrateError, CrateSearchQuery, FullCrate};
+use att_core::crates::{CrateError, CratesQuery, FullCrate};
 use att_core::users::{AuthError, UserCredentials};
 
 #[derive(Clone, Debug)]
@@ -58,7 +58,7 @@ impl AttHttpClient {
   }
 
   #[instrument(skip(self), err)]
-  pub fn search_crates(&self, crate_search: CrateSearchQuery) -> impl Future<Output=Result<Vec<FullCrate>, AttHttpClientError>> {
+  pub fn search_crates(&self, crate_search: CratesQuery) -> impl Future<Output=Result<Vec<FullCrate>, AttHttpClientError>> {
     let rb = self.request_builder(Method::GET, "crates")
       .query(&crate_search);
     async move { Self::send::<_, CrateError>(rb).await }

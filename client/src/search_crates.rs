@@ -4,7 +4,8 @@ use std::time::Duration;
 use futures::FutureExt;
 use tracing::{debug, error};
 
-use att_core::crates::{CrateSearchQuery, FullCrate};
+use att_core::crates::{CratesQuery, FullCrate};
+use att_core::query::Query;
 use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture};
 use att_core::util::time::{Instant, sleep};
 
@@ -14,7 +15,7 @@ use crate::http_client::{AttHttpClient, AttHttpClientError};
 #[derive(Debug)]
 pub struct SearchCrates {
   http_client: AttHttpClient,
-  search_query: CrateSearchQuery,
+  search_query: CratesQuery,
   wait_until: Option<Instant>,
   found_crates: Vec<FullCrate>,
 }
@@ -22,25 +23,25 @@ impl SearchCrates {
   pub fn new(http_client: AttHttpClient) -> Self {
     Self {
       http_client,
-      search_query: CrateSearchQuery::default(),
+      search_query: CratesQuery::default(),
       wait_until: None,
       found_crates: Vec::new()
     }
   }
 
-  /// Returns the [search query](CrateSearchQuery).
+  /// Returns the [search query](CratesQuery).
   #[inline]
-  pub fn search_query(&self) -> &CrateSearchQuery { &self.search_query }
+  pub fn search_query(&self) -> &CratesQuery { &self.search_query }
   /// Returns the search term of the search query.
   #[inline]
-  pub fn search_term(&self) -> &str { &self.search_query.search_term() }
+  pub fn search_term(&self) -> &str { &self.search_query.name.as_deref().unwrap_or_default() }
   /// Returns the found crates returned by the latest search.
   #[inline]
   pub fn found_crates(&self) -> &Vec<FullCrate> { &self.found_crates }
 
-  /// Set the [search query](CrateSearchQuery), possibly returning a future producing a [response](WaitCleared) that
+  /// Set the [search query](CratesQuery), possibly returning a future producing a [response](WaitCleared) that
   /// must be [processed](Self::process_wait_cleared).
-  pub fn set_search_query(&mut self, search_query: CrateSearchQuery) -> Option<impl Future<Output=WaitCleared>> {
+  pub fn set_search_query(&mut self, search_query: CratesQuery) -> Option<impl Future<Output=WaitCleared>> {
     self.search_query = search_query;
     if self.search_query.is_empty() {
       self.wait_until = None;
@@ -88,7 +89,7 @@ impl SearchCrates {
 
   /// Clears the search query and found crates, and cancels ongoing searches.
   pub fn clear(&mut self) {
-    self.search_query = CrateSearchQuery::default();
+    self.search_query = CratesQuery::default();
     self.wait_until = None;
     self.found_crates.clear();
   }
@@ -108,14 +109,14 @@ pub struct FoundCrates {
 /// Search crate requests in message form.
 #[derive(Debug)]
 pub enum SearchCratesRequest {
-  SetSearchQuery(CrateSearchQuery),
+  SetSearchQuery(CratesQuery),
   Search,
 }
 impl SearchCrates {
-  /// Create a request for setting the [`search_term` of the search query](CrateSearchQuery::search_term).
+  /// Create a request for setting the [`search_term` of the search query](CratesQuery::search_term).
   pub fn request_set_search_term(&self, search_term: String) -> SearchCratesRequest {
     let mut search_query = self.search_query.clone();
-    search_query.search_term = Some(search_term);
+    search_query.name = Some(search_term);
     SearchCratesRequest::SetSearchQuery(search_query)
   }
 
