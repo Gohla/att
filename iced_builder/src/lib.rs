@@ -237,6 +237,20 @@ impl<S: StateTake> WidgetBuilder<S> {
 }
 
 impl<E> WidgetBuilder<HeapList<E>> {
+  /// Return the number of elements in the builder.
+  ///
+  /// Can only be called when this is a heap-allocated builder.
+  pub fn len(&self) -> usize {
+    self.0.len()
+  }
+
+  /// Return true if there are no elements in this builder.
+  ///
+  /// Can only be called when this is a heap-allocated builder.
+  pub fn is_empty(&self) -> bool {
+    self.len() == 0
+  }
+
   /// Reserve space for `additional` elements.
   ///
   /// Can only be called when this is a heap-allocated builder.

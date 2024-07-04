@@ -65,16 +65,75 @@ impl<'a, A: Action + 'a> From<ActionWithDef<'a, A>> for Element<'a, A::Request> 
   }
 }
 
-/// Creates a table view for `service`, showing a `header` with `custom_buttons` and service actions, and a table with
-/// the service's data.
+/// Creates a table view for `service`, showing a `header` with `custom_buttons` and service actions, the query from the
+/// service, and a table with the service's data.
 ///
-/// Requests are converted to a message with `map_request`, allowing `custom_buttons` to send custom messages.
-pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
+/// Requests are converted to messages of type [M] with `map_request`, enabling `custom_buttons` to send custom messages.
+/// Query messages are converted with `map_query_message` into [M].
+pub fn as_full_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
   service: &'a S,
-  header: &'a str,
+  header: Option<&'a str>,
+  custom_buttons: impl IntoIterator<Item=Element<'a, M>>,
   map_request: impl (Fn(S::Request) -> M) + 'a + Copy,
   map_query_message: impl (Fn(QueryMessage) -> M) + 'a + Copy,
-  custom_buttons: impl IntoIterator<Item=Element<'a, M>>
+) -> Element<'a, M> {
+  let header = as_table_header(service, header, custom_buttons, map_request);
+  let query = as_table_query(service).map(map_query_message);
+  let table = as_table(service, map_request);
+  let mut wb = WidgetBuilder::heap_with_capacity(3 + if header.is_some() { 2 } else { 0 });
+  if let Some(header) = header {
+    wb = wb
+      .add_element(header)
+      .add_horizontal_rule(1.0);
+  }
+  wb.add_element(query)
+    .add_horizontal_rule(1.0)
+    .add_element(table)
+    .column().spacing(10.0).fill().add()
+    .take()
+}
+
+/// Creates a table header for `service`, showing a `header` with `custom_buttons` and service actions.
+///
+/// Requests are converted to messages of type [M] with `map_request`, enabling `custom_buttons` to send custom messages.
+pub fn as_table_header<'a, S: Service, M: 'a>(
+  service: &'a S,
+  header: Option<&'a str>,
+  custom_buttons: impl IntoIterator<Item=Element<'a, M>>,
+  map_request: impl (Fn(S::Request) -> M) + 'a + Copy,
+) -> Option<Element<'a, M>> {
+  let action_buttons = service.actions_with_definitions()
+    .map(|action| action.into_element().map(map_request));
+  let buttons: Vec<_> = custom_buttons.into_iter().chain(action_buttons).collect();
+
+  let mut header_builder = WidgetBuilder::heap_with_capacity(3);
+  if let Some(header) = header {
+    header_builder = header_builder.text(header).size(20.0).add()
+  }
+  if !buttons.is_empty() {
+    header_builder = header_builder.element(Row::from_vec(buttons).spacing(5.0)).add()
+  };
+
+  if !header_builder.is_empty() {
+    let element = header_builder
+      .add_space_fill_width()
+      .row().spacing(10.0).align_center().fill_width().add()
+      .take();
+    Some(element)
+  } else {
+    None
+  }
+}
+
+/// Creates a table query for `service`.
+pub fn as_table_query<S: Service>(service: &S) -> Element<QueryMessage> {
+  view_query(service.query_definition(), service.query())
+}
+
+/// Creates a table showing `service`'s data. Requests are converted to a message of type [M] with `map_request`.
+pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
+  service: &'a S,
+  map_request: impl (Fn(S::Request) -> M) + 'a + Copy,
 ) -> Element<'a, M> {
   let cell_to_element = move |row, col| -> Option<Element<M>> {
     let Some(krate) = service.get_data(row) else { return None; };
@@ -90,6 +149,7 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
     };
     Some(element)
   };
+
   let num_cols = S::Data::COLUMNS.len() + service.data_action_definitions().len();
   let mut table = Table::with_capacity(num_cols, cell_to_element)
     .spacing(1.0)
@@ -101,23 +161,8 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
   for _ in service.data_action_definitions() {
     table = table.push(0.2, "");
   }
-  let table = table.into_element();
 
-  let action_buttons = service.actions_with_definitions()
-    .map(|action| action.into_element().map(map_request));
-  let buttons: Vec<_> = custom_buttons.into_iter().chain(action_buttons).collect();
-
-  WidgetBuilder::stack()
-    .text(header).size(20.0).add()
-    .add_element(Row::from_vec(buttons).spacing(5.0))
-    .add_space_fill_width()
-    .row().spacing(10.0).align_center().fill_width().add()
-    .add_horizontal_rule(1.0)
-    .element(view_query(service.query_definition(), service.query())).map(map_query_message).add()
-    .add_horizontal_rule(1.0)
-    .add_element(table)
-    .column().spacing(10).padding(10).fill().add()
-    .take()
+  table.into_element()
 }
 
 #[derive(Debug)]

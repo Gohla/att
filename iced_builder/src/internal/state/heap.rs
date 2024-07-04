@@ -26,6 +26,15 @@ impl<E> HeapList<E> {
   pub fn with_capacity(capacity: usize) -> Self { Self::Many(Vec::with_capacity(capacity)) }
 
   #[inline]
+  pub fn len(&self) -> usize {
+    match self {
+      HeapList::Zero => 0,
+      HeapList::One(_, _) => 1,
+      HeapList::Many(vec) => vec.len(),
+    }
+  }
+
+  #[inline]
   pub fn reserve(&mut self, additional: usize) {
     match self {
       HeapList::Zero => *self = HeapList::Many(Vec::with_capacity(additional)),

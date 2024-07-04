@@ -3,7 +3,7 @@ use tracing::instrument;
 
 use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesResponse, FollowCratesState};
 use att_client::http_client::AttHttpClient;
-use att_core::iced_impls::{as_table, QueryMessage, update_query};
+use att_core::iced_impls::{as_full_table, QueryMessage, update_query};
 use att_core::service::Service;
 use iced_builder::WidgetBuilder;
 
@@ -84,7 +84,7 @@ impl FollowCratesComponent {
       .success_style()
       .on_press(|| Message::OpenSearchCratesModal)
       .add();
-    let table = as_table(&self.follow_crates, "Followed Crates", Message::SendRequest, Message::Query, [custom_button]);
+    let table = as_full_table(&self.follow_crates, Some("Followed Crates"), [custom_button], Message::SendRequest, Message::Query);
 
     if self.search_crates_modal_open {
       let overlay = self.search_crates
