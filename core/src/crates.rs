@@ -91,8 +91,6 @@ pub struct CratesQuery {
 
 impl CratesQuery {
   #[inline]
-  pub fn from_name(name: String) -> Self { Self { name: Some(name), ..Self::default() } }
-  #[inline]
   pub fn from_followed() -> Self { Self { followed: Some(true), ..Self::default() } }
 }
 
@@ -128,12 +126,6 @@ impl Query for CratesQuery {
         .transpose().unwrap_or_else(|f| panic!("facet {:?} at index {} is not a string", f, i)),
       _ => panic!("facet index {} is out of bounds for `CratesQuery`", index),
     }
-  }
-}
-
-impl From<String> for CratesQuery {
-  fn from(search_term: String) -> Self {
-    Self::from_name(search_term)
   }
 }
 

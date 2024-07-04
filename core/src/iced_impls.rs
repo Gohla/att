@@ -165,7 +165,7 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
   table.into_element()
 }
 
-pub fn view_query<'a, Q: Query>(query: &'a Q) -> Element<'a, QueryMessage> {
+pub fn view_query<Q: Query>(query: &Q) -> Element<QueryMessage> {
   let num_facets = Q::FACET_DEFS.len();
   // Label text element + actual element + space element between elements.
   let capacity = num_facets * 2 + num_facets.saturating_sub(1);
@@ -184,20 +184,20 @@ pub fn view_query<'a, Q: Query>(query: &'a Q) -> Element<'a, QueryMessage> {
 
     builder = builder.text(format!("{}:", facet_def.label)).add();
 
-    match &facet_def.facet_type { // TODO: create combined facet type + facet value for type safety
+    match &facet_def.facet_type { // TODO: create combined facet type + facet value for more type safety?
       FacetType::Boolean { default_value } => {
-        let toggle_fn = move |toggled| QueryMessage::facet_change_bool(facet_index, toggled);
-        let is_toggled = facet.map(FacetRef::as_bool)
+        let is_toggled = facet.map(FacetRef::into_bool)
           .transpose().unwrap_or_else(|f| panic!("facet {:?} at index {} is not a boolean", f, facet_index))
           .or(*default_value)
           .unwrap_or_default();
+        let toggle_fn = move |toggled| QueryMessage::facet_change_bool(facet_index, toggled);
         builder = builder.toggler(None::<String>, is_toggled, toggle_fn)
           .spacing(0)
           .width_shrink()
           .add();
       }
       FacetType::String { default_value, placeholder } => {
-        let text = facet.map(FacetRef::as_str)
+        let text = facet.map(FacetRef::into_str)
           .transpose().unwrap_or_else(|f| panic!("facet {:?} at index {} is not a string", f, facet_index))
           .or(default_value.as_deref())
           .unwrap_or_default();

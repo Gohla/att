@@ -1,4 +1,4 @@
-use crate::query::{FacetDef, Query};
+use crate::query::Query;
 use crate::util::maybe_send::MaybeSendFuture;
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -91,11 +91,6 @@ pub trait Service {
 
 
   type Query: Query;
-
-  #[inline]
-  fn query_definition(&self) -> &'static [FacetDef] {
-    Self::Query::FACET_DEFS
-  }
 
   fn query(&self) -> &Self::Query;
 

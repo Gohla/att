@@ -10,14 +10,14 @@ use crate::util::JsonResult;
 pub fn router() -> Router<Crates> {
   use axum::routing::{get, post};
   Router::new()
-    .route("/", get(search_crates))
+    .route("/", get(search))
     .route("/:crate_id", get(find))
     .route("/:crate_id/follow", post(follow).delete(unfollow))
     .route("/:crate_id/refresh", post(refresh))
     .route("/refresh_followed", post(refresh_followed_crates))
 }
 
-async fn search_crates(
+async fn search(
   auth_session: AuthSession,
   State(state): State<Crates>,
   Query(query): Query<CratesQuery>
