@@ -91,7 +91,7 @@ pub struct CratesQuery {
 
 impl CratesQuery {
   #[inline]
-  pub fn from_followed() -> Self { Self { followed: Some(true), ..Self::default() } }
+  pub fn from_followed(followed: bool) -> Self { Self { followed: Some(followed), ..Self::default() } }
 }
 
 #[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]

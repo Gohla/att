@@ -10,15 +10,18 @@ use att_core::util::time::{Instant, sleep};
 #[derive(Debug)]
 pub struct QuerySender<Q: Query> {
   query: Q,
+  default_query: Q,
   query_config: Q::Config,
   wait_until: Option<Instant>,
   wait_duration: Duration,
   send_query_if_empty: bool,
 }
-impl<Q: Query> QuerySender<Q> {
+impl<Q: Query + Clone> QuerySender<Q> {
   pub fn new(query: Q, query_config: Q::Config, wait_duration: Duration, send_query_if_empty: bool) -> Self {
+    let default_query = query.clone();
     Self {
       query,
+      default_query,
       query_config,
       wait_until: None,
       wait_duration,
@@ -33,6 +36,13 @@ impl<Q: Query> QuerySender<Q> {
   /// Returns the query.
   #[inline]
   pub fn query_config(&self) -> &Q::Config { &self.query_config }
+
+
+  /// Reset the query and stops any ongoing queries.
+  pub fn reset(&mut self) {
+    self.query = self.default_query.clone();
+    self.wait_until = None;
+  }
 }
 
 // Send specific requests

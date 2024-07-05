@@ -7,8 +7,9 @@ use iced_builder::WidgetBuilder;
 use iced_virtual::constrained_row::Constraint;
 use iced_virtual::table::Table;
 
+use crate::action::{Action, ActionLayout, ActionStyle, ActionWithDef};
 use crate::query::{FacetRef, FacetType, Query, QueryMessage};
-use crate::service::{Action, ActionStyle, ActionWithDef, Service};
+use crate::service::{Catalog, DataActions, QueryableCatalog, Service, ServiceActions};
 use crate::table::AsTableRow;
 
 trait IntoElement<'a, M, T, R> {
@@ -39,11 +40,14 @@ impl<'a, A: Action + 'a> From<ActionWithDef<'a, A>> for Element<'a, A::Request> 
     if let Some(font_name) = definition.font_name {
       content = content.font(Font::with_name(font_name));
     }
-    if definition.icon {
-      content = content
-        .horizontal_alignment(Horizontal::Center)
-        .vertical_alignment(Vertical::Center)
-        .line_height(1.0)
+    match definition.layout {
+      ActionLayout::TableRow | ActionLayout::TableRowIcon => {
+        content = content
+          .horizontal_alignment(Horizontal::Center)
+          .vertical_alignment(Vertical::Center)
+          .line_height(1.0)
+      }
+      _ => {}
     }
     let content: Element<'a, ()> = content.add();
 
@@ -52,8 +56,14 @@ impl<'a, A: Action + 'a> From<ActionWithDef<'a, A>> for Element<'a, A::Request> 
       .disabled(action.is_disabled())
       .on_press(move || action.request())
       ;
-    if definition.icon {
-      button = button.padding(3.0);
+    match definition.layout {
+      ActionLayout::TableRow => {
+        button = button.padding([3.0, 5.0]);
+      }
+      ActionLayout::TableRowIcon => {
+        button = button.padding(3.0);
+      }
+      _ => {}
     }
     button = match definition.style {
       ActionStyle::Primary => button.primary_style(),
@@ -70,16 +80,17 @@ impl<'a, A: Action + 'a> From<ActionWithDef<'a, A>> for Element<'a, A::Request> 
 ///
 /// Requests are converted to messages of type [M] with `map_request`, enabling `custom_buttons` to send custom messages.
 /// Query messages are converted with `map_query_message` into [M].
-pub fn as_full_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
+pub fn as_full_table<'a, S: Service + Catalog<Data: AsTableRow> + QueryableCatalog, A: ServiceActions<S> + DataActions<S>, M: 'a>(
   service: &'a S,
+  actions: &'a A,
   header: Option<&'a str>,
   custom_buttons: impl IntoIterator<Item=Element<'a, M>>,
   map_request: impl (Fn(S::Request) -> M) + 'a + Copy,
   //map_query_message: impl (Fn(QueryMessage) -> M) + 'a + Copy,
 ) -> Element<'a, M> {
-  let header = as_table_header(service, header, custom_buttons, map_request);
-  let query = as_table_query(service).map(move |q|map_request(service.request_query_update(q)));
-  let table = as_table(service, map_request);
+  let header = as_table_header(service, actions, header, custom_buttons, map_request);
+  let query = as_table_query(service).map(move |q| map_request(service.request_update(q)));
+  let table = as_table(service, actions, map_request);
   let mut wb = WidgetBuilder::heap_with_capacity(3 + if header.is_some() { 2 } else { 0 });
   if let Some(header) = header {
     wb = wb
@@ -96,13 +107,14 @@ pub fn as_full_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
 /// Creates a table header for `service`, showing a `header` with `custom_buttons` and service actions.
 ///
 /// Requests are converted to messages of type [M] with `map_request`, enabling `custom_buttons` to send custom messages.
-pub fn as_table_header<'a, S: Service, M: 'a>(
+pub fn as_table_header<'a, S: Service, A: ServiceActions<S>, M: 'a>(
   service: &'a S,
+  actions: &'a A,
   header: Option<&'a str>,
   custom_buttons: impl IntoIterator<Item=Element<'a, M>>,
   map_request: impl (Fn(S::Request) -> M) + 'a + Copy,
 ) -> Option<Element<'a, M>> {
-  let action_buttons = service.actions_with_definitions()
+  let action_buttons = actions.actions_with_definitions(service)
     .map(|action| action.into_element().map(map_request));
   let buttons: Vec<_> = custom_buttons.into_iter().chain(action_buttons).collect();
 
@@ -126,23 +138,24 @@ pub fn as_table_header<'a, S: Service, M: 'a>(
 }
 
 /// Creates a table query for `service`.
-pub fn as_table_query<S: Service>(service: &S) -> Element<QueryMessage> {
+pub fn as_table_query<S: QueryableCatalog>(service: &S) -> Element<QueryMessage> {
   view_query(service.query(), service.query_config())
 }
 
 /// Creates a table showing `service`'s data. Requests are converted to a message of type [M] with `map_request`.
-pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
+pub fn as_table<'a, S: Service + Catalog<Data: AsTableRow>, A: DataActions<S>, M: 'a>(
   service: &'a S,
+  actions: &'a A,
   map_request: impl (Fn(S::Request) -> M) + 'a + Copy,
 ) -> Element<'a, M> {
   let cell_to_element = move |row, col| -> Option<Element<M>> {
-    let Some(krate) = service.get_data(row) else { return None; };
+    let Some(krate) = service.get(row) else { return None; };
     if let Some(text) = krate.cell(col as u8) {
       return Some(WidgetBuilder::once().add_text(text))
     }
 
     let action_index = col - S::Data::COLUMNS.len();
-    let element = if let Some(action) = service.data_action_with_definition(action_index, krate) {
+    let element = if let Some(action) = actions.data_action_with_definition(service, action_index, krate) {
       action.into_element().map(map_request)
     } else {
       return None
@@ -150,16 +163,21 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
     Some(element)
   };
 
-  let num_cols = S::Data::COLUMNS.len() + service.data_action_definitions().len();
-  let mut table = Table::with_capacity(num_cols, cell_to_element)
+  let data_actions = actions.data_action_definitions(service);
+  let column_count = S::Data::COLUMNS.len() + data_actions.len();
+  let mut table = Table::with_capacity(column_count, cell_to_element)
     .spacing(1.0)
     .body_row_height(24.0)
-    .body_row_count(service.data_len());
+    .body_row_count(service.len());
   for column in S::Data::COLUMNS {
     table = table.push(Constraint::new(column.width_fill_portion, column.horizontal_alignment.into(), column.vertical_alignment.into()), column.header)
   }
-  for _ in service.data_action_definitions() {
-    table = table.push(0.2, "");
+  for action_def in data_actions {
+    let column_constraint = match action_def.layout {
+      ActionLayout::TableRowIcon => 0.2,
+      _ => 1.0,
+    };
+    table = table.push(column_constraint, "");
   }
 
   table.into_element()

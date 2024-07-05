@@ -1,76 +1,13 @@
 use std::future::Future;
+
+use crate::action::{Action, ActionDef, ActionWithDef};
 use crate::query::{Query, QueryMessage};
-use crate::util::maybe_send::{MaybeSend};
+use crate::util::maybe_send::MaybeSend;
 
-#[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub enum ActionStyle {
-  #[default]
-  Primary,
-  Secondary,
-  Success,
-  Danger
-}
-
-#[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
-pub struct ActionDef {
-  pub text: &'static str,
-  pub font_name: Option<&'static str>, // TODO: abstract over icon/font name
-  pub icon: bool,
-  pub style: ActionStyle,
-}
-
-impl ActionDef {
-  #[inline]
-  pub const fn new(text: &'static str, font_name: Option<&'static str>, icon: bool, style: ActionStyle) -> Self {
-    Self { text, font_name, icon, style }
-  }
-  #[inline]
-  pub const fn from_text(text: &'static str) -> Self {
-    Self::new(text, None, false, ActionStyle::Primary)
-  }
-  #[inline]
-  pub const fn from_icon_font(icon: &'static str, font_name: &'static str) -> Self {
-    Self::new(icon, Some(font_name), true, ActionStyle::Primary)
-  }
-
-  #[inline]
-  pub const fn with_style(mut self, style: ActionStyle) -> Self {
-    self.style = style;
-    self
-  }
-  #[inline]
-  pub const fn with_primary_style(self) -> Self { self.with_style(ActionStyle::Primary) }
-  #[inline]
-  pub const fn with_secondary_style(self) -> Self { self.with_style(ActionStyle::Secondary) }
-  #[inline]
-  pub const fn with_success_style(self) -> Self { self.with_style(ActionStyle::Success) }
-  #[inline]
-  pub const fn with_danger_style(self) -> Self { self.with_style(ActionStyle::Danger) }
-}
-
-pub trait Action {
-  fn is_disabled(&self) -> bool;
-
-  type Request;
-  fn request(&self) -> Self::Request;
-}
-
-pub struct ActionWithDef<'a, A> {
-  pub definition: &'a ActionDef,
-  pub action: A,
-}
-impl<'a, A: Action> From<(&'a ActionDef, A)> for ActionWithDef<'a, A> {
-  #[inline]
-  fn from((definition, action): (&'a ActionDef, A)) -> Self {
-    ActionWithDef { definition, action }
-  }
-}
-
-/// Service that sends requests and processes responses for a collection of data.
+/// Service that sends requests and processes responses.
 ///
-/// A service has [service-wide actions](Self::actions) and [data-specific actions](Self::data_actions) that produce a
-/// [`Request`](Self::Request). Requests are [sent](Self::send), creating a future that returns a
-/// [`Response`](Self::Response) on completion. Responses must be [processed](Self::process).
+/// Requests are [sent](Self::send), creating a future that returns a [`Response`](Self::Response) on completion.
+/// Responses must be [processed](Self::process).
 pub trait Service {
   type Request;
   type Response;
@@ -82,42 +19,105 @@ pub trait Service {
   /// Process `response` (that a future, created by [send](Self::send), returned on completion) into `self`. This
   /// possibly creates a future that must be processed again.
   fn process(&mut self, response: Self::Response) -> Option<impl Future<Output=Self::Response> + MaybeSend + 'static>;
+}
+
+#[macro_export]
+macro_rules! forward_service_impl {
+  ($src_ty:ty, $src:ident, $dst_ty:ty) => {
+    impl $crate::service::Service for $dst_ty {
+      type Request = <$src_ty as $crate::service::Service>::Request;
+      type Response = <$src_ty as $crate::service::Service>::Response;
+
+      #[inline]
+      fn send(
+        &mut self,
+        request: Self::Request
+      ) -> Option<impl std::future::Future<Output=Self::Response> + $crate::util::maybe_send::MaybeSend + 'static> {
+        self.$src.send(request)
+      }
+      #[inline]
+      fn process(
+        &mut self,
+        response: Self::Response
+      ) -> Option<impl std::future::Future<Output=Self::Response> + $crate::util::maybe_send::MaybeSend + 'static> {
+        self.$src.process(response)
+      }
+    }
+  };
+}
 
 
-  fn action_definitions(&self) -> &[ActionDef];
-
-  fn actions(&self) -> impl IntoIterator<Item=impl Action<Request=Self::Request>>;
-
-  #[inline]
-  fn actions_with_definitions(&self) -> impl Iterator<Item=ActionWithDef<impl Action<Request=Self::Request>>> {
-    self.action_definitions().iter().zip(self.actions()).map(Into::into)
-  }
-
-
+pub trait Catalog {
   type Data;
 
-  fn data_len(&self) -> usize;
+  fn len(&self) -> usize;
 
-  fn get_data(&self, index: usize) -> Option<&Self::Data>;
+  fn get(&self, index: usize) -> Option<&Self::Data>;
 
-  fn iter_data(&self) -> impl Iterator<Item=&Self::Data>;
+  fn iter(&self) -> impl Iterator<Item=&Self::Data>;
+}
+
+#[macro_export]
+macro_rules! forward_catalog_impl {
+  ($src_ty:ty, $src:ident, $dst_ty:ty) => {
+    impl $crate::service::Catalog for $dst_ty {
+      type Data = <$src_ty as $crate::service::Catalog>::Data;
+
+      #[inline]
+      fn len(&self) -> usize { self.$src.len() }
+      #[inline]
+      fn get(&self, index: usize) -> Option<&Self::Data> { self.$src.get(index) }
+      #[inline]
+      fn iter(&self) -> impl Iterator<Item=&Self::Data> { self.$src.iter() }
+    }
+  };
+}
 
 
+pub trait QueryableCatalog: Service {
   type Query: Query;
 
   fn query(&self) -> &Self::Query;
 
   fn query_config(&self) -> &<Self::Query as Query>::Config;
 
-  fn request_query_update(&self, message: QueryMessage) -> Self::Request;
+  fn request_update(&self, message: QueryMessage) -> Self::Request;
+}
 
+#[macro_export]
+macro_rules! forward_queryable_catalog_impl {
+  ($src_ty:ty, $src:ident, $dst_ty:ty) => {
+    impl $crate::service::QueryableCatalog for $dst_ty {
+      type Query = <$src_ty as $crate::service::QueryableCatalog>::Query;
 
-  fn data_action_definitions(&self) -> &[ActionDef];
+      #[inline]
+      fn query(&self) -> &Self::Query { self.$src.query() }
+      #[inline]
+      fn query_config(&self) -> &<Self::Query as $crate::query::Query>::Config { self.$src.query_config() }
+      #[inline]
+      fn request_update(&self, message: $crate::query::QueryMessage) -> Self::Request { self.$src.request_update(message) }
+    }
+  };
+}
 
-  fn data_action<'d>(&self, index: usize, data: &'d Self::Data) -> Option<impl Action<Request=Self::Request> + 'd>;
+pub trait ServiceActions<S: Service> {
+  fn action_definitions(&self, service: &S) -> &[ActionDef];
 
-  fn data_action_with_definition<'d>(&self, index: usize, data: &'d Self::Data) -> Option<ActionWithDef<impl Action<Request=Self::Request> + 'd>> {
-    match (self.data_action_definitions().get(index), self.data_action(index, data)) {
+  fn actions(&self, service: &S) -> impl IntoIterator<Item=impl Action<Request=S::Request>>;
+
+  #[inline]
+  fn actions_with_definitions(&self, service: &S) -> impl Iterator<Item=ActionWithDef<impl Action<Request=S::Request>>> {
+    self.action_definitions(service).iter().zip(self.actions(service)).map(Into::into)
+  }
+}
+
+pub trait DataActions<S: Service + Catalog> {
+  fn data_action_definitions(&self, service: &S) -> &[ActionDef];
+
+  fn data_action<'d>(&self, service: &S, index: usize, data: &'d S::Data) -> Option<impl Action<Request=S::Request> + 'd>;
+
+  fn data_action_with_definition<'d>(&self, service: &S, index: usize, data: &'d S::Data) -> Option<ActionWithDef<impl Action<Request=S::Request> + 'd>> {
+    match (self.data_action_definitions(service).get(index), self.data_action(service, index, data)) {
       (Some(definition), Some(action)) => Some(ActionWithDef { definition, action }),
       _ => None
     }

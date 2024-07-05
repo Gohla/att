@@ -2,7 +2,8 @@ use std::borrow::Cow;
 use std::marker::PhantomData;
 
 use iced::advanced::text::Renderer as TextRenderer;
-use iced::Pixels;
+use iced::{Element, Pixels};
+use iced::advanced::Renderer;
 use iced::widget::{button, container, Rule, rule, scrollable, Space, Text, text, text_input, toggler};
 
 use internal::state::{Elem, ElemM, StateAppend, StateMap, StateReduce, StateTake, StateTakeAll};
@@ -18,6 +19,7 @@ use widget::scrollable::ScrollableBuilder;
 use widget::space::SpaceBuilder;
 use widget::text::TextBuilder;
 use widget::text_input::TextInputBuilder;
+use crate::internal::state::stack::Cons;
 
 use crate::widget::toggler::TogglerBuilder;
 
@@ -257,5 +259,16 @@ impl<E> WidgetBuilder<HeapList<E>> {
   pub fn reserve(mut self, additional: usize) -> Self {
     self.0.reserve(additional);
     self
+  }
+}
+
+
+/// Element extensions.
+pub trait ElementExt {
+  fn into_stack_builder(self) -> WidgetBuilder<Cons<Self, Nil<Self>>> where Self:Sized;
+}
+impl<'a, M, T, R: Renderer> ElementExt for Element<'a, M, T, R> {
+  fn into_stack_builder(self) -> WidgetBuilder<Cons<Self, Nil<Self>>> {
+    WidgetBuilder::stack().add_element(self)
   }
 }

@@ -3,6 +3,7 @@ pub mod app;
 pub mod crates;
 pub mod users;
 
+pub mod action;
 pub mod service;
 pub mod query;
 pub mod table;

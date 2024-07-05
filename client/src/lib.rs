@@ -5,6 +5,7 @@ use crates::CratesState;
 pub mod http_client;
 pub mod auth;
 pub mod crates;
+pub mod follow_crates;
 pub mod search_crates;
 pub mod query_sender;
 
