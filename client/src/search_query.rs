@@ -42,9 +42,17 @@ impl<T, Q, E, Fut, F> SearchQuery<T, Q, F> where
   #[inline]
   pub fn query(&self) -> &Q { &self.query }
 
+  /// Returns the mutable query.
+  #[inline]
+  pub fn query_mut(&mut self) -> &mut Q { &mut self.query }
+
   /// Returns the data.
   #[inline]
   pub fn data(&self) -> &[T] { &self.data }
+
+  /// Returns the mutable data.
+  #[inline]
+  pub fn data_mut(&mut self) -> &mut Vec<T> { &mut self.data }
 
 
   /// Update the query from `message`, possibly returning a future producing a [response](WaitCleared) that

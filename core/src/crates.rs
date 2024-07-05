@@ -8,7 +8,7 @@ use thiserror::Error;
 use {crate::schema, diesel::{pg::Pg, prelude::*}};
 
 use crate::query::{Facet, FacetDef, FacetRef, FacetType, Query};
-use crate::table::{AsTableRow, Column};
+use crate::table::{AsTableRow, ColumnDef};
 
 /// A Rust crate.
 #[cfg_attr(feature = "diesel",
@@ -59,13 +59,13 @@ pub struct FullCrate {
 }
 
 impl AsTableRow for FullCrate {
-  const COLUMNS: &'static [Column] = &[
-    Column::with_default_alignment("Id", 0.5),
-    Column::with_default_alignment("Name", 1.0),
-    Column::with_default_alignment("Updated At", 1.0),
-    Column::with_default_alignment("Latest Version", 1.0),
-    Column::with_default_alignment("Downloads", 1.0),
-    Column::with_default_alignment("Description", 2.0),
+  const COLUMNS: &'static [ColumnDef] = &[
+    ColumnDef::with_default_alignment("Id", 0.5),
+    ColumnDef::with_default_alignment("Name", 1.0),
+    ColumnDef::with_default_alignment("Updated At", 1.0),
+    ColumnDef::with_default_alignment("Latest Version", 1.0),
+    ColumnDef::with_default_alignment("Downloads", 1.0),
+    ColumnDef::with_default_alignment("Description", 2.0),
   ];
 
   fn cell(&self, column_index: u8) -> Option<Cow<str>> {

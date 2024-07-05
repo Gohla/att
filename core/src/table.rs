@@ -12,20 +12,21 @@ pub enum Alignment {
   End,
 }
 
-/// Table column layout.
+/// Table column definition.
 #[derive(Default, Clone, Copy, PartialEq, PartialOrd, Debug)]
-pub struct Column {
+pub struct ColumnDef {
   pub header: &'static str,
   pub width_fill_portion: f32,
   pub horizontal_alignment: Alignment,
   pub vertical_alignment: Alignment,
 }
 
-impl Column {
+impl ColumnDef {
   #[inline]
   pub const fn new(header: &'static str, width_fill_portion: f32, horizontal_alignment: Alignment, vertical_alignment: Alignment) -> Self {
     Self { header, width_fill_portion, horizontal_alignment, vertical_alignment }
   }
+
   #[inline]
   pub const fn with_default_alignment(header: &'static str, width_fill_portion: f32) -> Self {
     Self { header, width_fill_portion, horizontal_alignment: Alignment::Start, vertical_alignment: Alignment::Start }
@@ -34,7 +35,7 @@ impl Column {
 
 /// Turn a value into a table row.
 pub trait AsTableRow {
-  const COLUMNS: &'static [Column];
+  const COLUMNS: &'static [ColumnDef];
 
   fn cell(&self, column_index: u8) -> Option<Cow<str>>;
 }
