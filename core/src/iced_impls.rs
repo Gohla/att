@@ -127,7 +127,7 @@ pub fn as_table_header<'a, S: Service, M: 'a>(
 
 /// Creates a table query for `service`.
 pub fn as_table_query<S: Service>(service: &S) -> Element<QueryMessage> {
-  view_query(service.query())
+  view_query(service.query(), service.query_config())
 }
 
 /// Creates a table showing `service`'s data. Requests are converted to a message of type [M] with `map_request`.
@@ -165,8 +165,14 @@ pub fn as_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
   table.into_element()
 }
 
-pub fn view_query<Q: Query>(query: &Q) -> Element<QueryMessage> {
-  let num_facets = Q::FACET_DEFS.len();
+pub fn view_query<'a, Q: Query>(query: &'a Q, config: &Q::Config) -> Element<'a, QueryMessage> {
+  let mut num_facets: usize = 0;
+  for index in 0..Q::FACET_DEFS.len() as u8 {
+    if Q::should_show(config, index) {
+      num_facets += 1;
+    }
+  }
+
   // Label text element + actual element + space element between elements.
   let capacity = num_facets * 2 + num_facets.saturating_sub(1);
   let mut builder = WidgetBuilder::heap_with_capacity(capacity);
@@ -174,7 +180,11 @@ pub fn view_query<Q: Query>(query: &Q) -> Element<QueryMessage> {
   let mut first = true;
   for (facet_index, facet_def) in Q::FACET_DEFS.iter().enumerate() {
     let facet_index = facet_index as u8;
-    let facet = query.facet(facet_index);
+    if !Q::should_show(config, facet_index) {
+      continue;
+    }
+
+    let facet = query.facet(config, facet_index);
 
     if !first {
       // Spacing does not work with nested rows for some reason. Hack around it by adding space between elements.

@@ -1,4 +1,4 @@
-use crate::query::Query;
+use crate::query::{Query, QueryMessage};
 use crate::util::maybe_send::MaybeSendFuture;
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
@@ -92,9 +92,13 @@ pub trait Service {
 
   type Query: Query;
 
+  fn query_config(&self) -> &<Self::Query as Query>::Config;
+
   fn query(&self) -> &Self::Query;
 
   fn query_mut(&mut self) -> &mut Self::Query;
+
+  fn update_query(&mut self, message: QueryMessage);
 
 
   fn data_action_definitions(&self) -> &[ActionDef];

@@ -4,7 +4,7 @@ use std::time::Duration;
 use futures::FutureExt;
 use tracing::{debug, error};
 
-use att_core::crates::{CratesQuery, FullCrate};
+use att_core::crates::{CratesQuery, CratesQueryConfig, FullCrate};
 use att_core::query::Query;
 use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture};
 use att_core::util::time::{Instant, sleep};
@@ -16,6 +16,7 @@ use crate::http_client::{AttHttpClient, AttHttpClientError};
 pub struct SearchCrates {
   http_client: AttHttpClient,
   search_query: CratesQuery,
+  query_config: CratesQueryConfig,
   wait_until: Option<Instant>,
   found_crates: Vec<FullCrate>,
 }
@@ -23,7 +24,14 @@ impl SearchCrates {
   pub fn new(http_client: AttHttpClient) -> Self {
     Self {
       http_client,
-      search_query: CratesQuery::default(),
+      search_query: CratesQuery {
+        followed: Some(false),
+        ..CratesQuery::default()
+      },
+      query_config: CratesQueryConfig {
+        show_followed: false,
+        ..CratesQueryConfig::default()
+      },
       wait_until: None,
       found_crates: Vec::new()
     }
@@ -43,7 +51,7 @@ impl SearchCrates {
   /// must be [processed](Self::process_wait_cleared).
   pub fn set_search_query(&mut self, search_query: CratesQuery) -> Option<impl Future<Output=WaitCleared>> {
     self.search_query = search_query;
-    if self.search_query.is_empty() {
+    if self.search_query.is_empty(&self.query_config) {
       self.wait_until = None;
       self.found_crates.clear();
       None

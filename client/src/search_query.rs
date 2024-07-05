@@ -9,20 +9,22 @@ use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture};
 use att_core::util::time::{Instant, sleep};
 
 #[derive(Debug)]
-pub struct SearchQuery<Q, F> {
+pub struct SearchQuery<Q, QC, F> {
   query: Q,
+  query_config: QC,
   wait_until: Option<Instant>,
   create_future: F,
 }
-impl<Q, F, R, Fut> SearchQuery<Q, F> where
+impl<Q, F, R, Fut> SearchQuery<Q, Q::Config, F> where
   Q: Query + Clone + 'static,
   F: Fn(Q) -> Fut + 'static,
   R: 'static,
   Fut: Future<Output=R> + Send + 'static,
 {
-  pub fn new(query: Q, create_future: F) -> Self {
+  pub fn new(query: Q, query_config: Q::Config, create_future: F) -> Self {
     Self {
       query,
+      query_config,
       wait_until: None,
       create_future,
     }
@@ -41,8 +43,8 @@ impl<Q, F, R, Fut> SearchQuery<Q, F> where
   /// Update the query from `message`, returning `Some(future)` producing a [response](WaitCleared) that
   /// must be [processed](Self::process_wait_cleared) if the query is not empty. Returns `None` if the query is empty.
   pub fn update_query(&mut self, message: QueryMessage) -> Option<impl Future<Output=WaitCleared>> {
-    message.update_query(&mut self.query);
-    if self.query.is_empty() {
+    message.update_query(&mut self.query, &self.query_config);
+    if self.query.is_empty(&self.query_config) {
       self.wait_until = None;
       None
     } else {

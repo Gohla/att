@@ -72,9 +72,7 @@ impl FollowCratesComponent {
       }
       SendRequest(request) => return self.follow_crates.send(request).perform(ProcessResponse).into(),
       ProcessResponse(response) => self.follow_crates.process(response),
-      Query(message) => {
-        message.update_query(self.follow_crates.query_mut());
-      }
+      Query(message) => self.follow_crates.update_query(message),
     }
     Update::default()
   }

@@ -94,35 +94,60 @@ impl CratesQuery {
   pub fn from_followed() -> Self { Self { followed: Some(true), ..Self::default() } }
 }
 
+#[derive(Clone, Ord, PartialOrd, Eq, PartialEq, Hash, Debug)]
+pub struct CratesQueryConfig {
+  pub show_followed: bool,
+}
+impl Default for CratesQueryConfig {
+  fn default() -> Self {
+    Self {
+      show_followed: true,
+    }
+  }
+}
+
 impl Query for CratesQuery {
   const FACET_DEFS: &'static [FacetDef] = &[
     FacetDef::new("Following", FacetType::Boolean { default_value: None }),
-    FacetDef::new("Name", FacetType::String { default_value: None, placeholder: Some("Crate name contains...") })
+    FacetDef::new("Name", FacetType::String { default_value: None, placeholder: Some("Crate name") })
   ];
 
-  fn is_empty(&self) -> bool {
+  type Config = CratesQueryConfig;
+  fn should_show(config: &Self::Config, index: u8) -> bool {
+    match index {
+      0 if !config.show_followed => false,
+      _ => true,
+    }
+  }
+
+  fn is_empty(&self, config: &Self::Config) -> bool {
     let Some(search_term) = &self.name else {
       return false;
     };
     if !search_term.is_empty() {
       return false;
     }
-    self.followed.is_none()
+    if config.show_followed && self.followed.is_some() {
+      return false;
+    }
+    true
   }
 
-  fn facet(&self, index: u8) -> Option<FacetRef> {
+  fn facet(&self, config: &Self::Config, index: u8) -> Option<FacetRef> {
     match index {
+      0 if !config.show_followed => None,
       0 => self.followed.map(|b| FacetRef::Boolean(b)),
       1 => self.name.as_ref().map(|s| FacetRef::String(s)),
       _ => panic!("facet index {} is out of bounds for `CratesQuery`", index),
     }
   }
 
-  fn set_facet(&mut self, index: u8, facet: Option<Facet>) {
+  fn set_facet(&mut self, config: &Self::Config, index: u8, facet: Option<Facet>) {
     match index {
-      i@0 => self.followed = facet.map(Facet::into_bool)
+      0 if !config.show_followed => {},
+      i @ 0 => self.followed = facet.map(Facet::into_bool)
         .transpose().unwrap_or_else(|f| panic!("facet {:?} at index {} is not a boolean", f, i)),
-      i@1 => self.name = facet.map(Facet::into_string)
+      i @ 1 => self.name = facet.map(Facet::into_string)
         .transpose().unwrap_or_else(|f| panic!("facet {:?} at index {} is not a string", f, i)),
       _ => panic!("facet index {} is out of bounds for `CratesQuery`", index),
     }

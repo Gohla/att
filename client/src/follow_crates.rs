@@ -5,7 +5,8 @@ use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
-use att_core::crates::{CratesQuery, FullCrate};
+use att_core::crates::{CratesQuery, CratesQueryConfig, FullCrate};
+use att_core::query::{Query, QueryMessage};
 use att_core::service::{Action, ActionDef, Service};
 use att_core::util::maybe_send::MaybeSendFuture;
 
@@ -25,6 +26,7 @@ pub struct FollowCrates {
   crates_being_modified: BTreeSet<i32>,
   all_crates_being_modified: bool,
   query: CratesQuery,
+  crates_query_config: CratesQueryConfig,
 }
 
 impl FollowCrates {
@@ -36,6 +38,10 @@ impl FollowCrates {
       crates_being_modified: Default::default(),
       all_crates_being_modified: false,
       query: CratesQuery::from_followed(),
+      crates_query_config: CratesQueryConfig {
+        show_followed: false,
+        ..CratesQueryConfig::default()
+      },
     }
   }
 
@@ -295,6 +301,11 @@ impl Service for FollowCrates {
   type Query = CratesQuery;
 
   #[inline]
+  fn query_config(&self) -> &<Self::Query as Query>::Config {
+    &self.crates_query_config
+  }
+
+  #[inline]
   fn query(&self) -> &Self::Query {
     &self.query
   }
@@ -302,6 +313,11 @@ impl Service for FollowCrates {
   #[inline]
   fn query_mut(&mut self) -> &mut Self::Query {
     &mut self.query
+  }
+
+  #[inline]
+  fn update_query(&mut self, message: QueryMessage) {
+    message.update_query(&mut self.query, &self.crates_query_config);
   }
 
 

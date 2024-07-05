@@ -2,9 +2,12 @@
 pub trait Query {
   const FACET_DEFS: &'static [FacetDef];
 
-  fn is_empty(&self) -> bool;
-  fn facet(&self, index: u8) -> Option<FacetRef>;
-  fn set_facet(&mut self, index: u8, facet: Option<Facet>);
+  type Config;
+  fn should_show(config: &Self::Config, index: u8) -> bool;
+
+  fn is_empty(&self, config: &Self::Config) -> bool;
+  fn facet(&self, config: &Self::Config, index: u8) -> Option<FacetRef>;
+  fn set_facet(&mut self, config: &Self::Config, index: u8, facet: Option<Facet>);
 }
 
 
@@ -107,10 +110,10 @@ impl QueryMessage {
   }
 
   #[inline]
-  pub fn update_query(self, query: &mut impl Query) {
+  pub fn update_query<Q: Query>(self, query: &mut Q, config: &Q::Config) {
     match self {
       QueryMessage::FacetChange { index, new_facet } => {
-        query.set_facet(index, new_facet);
+        query.set_facet(config, index, new_facet);
       }
     }
   }
