@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use follow_crates::FollowCratesState;
+use follow_crates::CratesState;
 
 pub mod http_client;
 pub mod auth;
@@ -10,10 +10,10 @@ pub mod query_sender;
 
 #[derive(Default, Debug, Deserialize)]
 pub struct Data {
-  pub follow_crates: FollowCratesState,
+  pub follow_crates: CratesState,
 }
 
 #[derive(Debug, Serialize)]
 pub struct DataRef<'a> {
-  pub follow_crates: &'a FollowCratesState,
+  pub follow_crates: &'a CratesState,
 }

@@ -13,14 +13,16 @@ pub struct QuerySender<Q: Query> {
   query: Q,
   query_config: Q::Config,
   wait_until: Option<Instant>,
+  wait_duration: Duration,
   send_query_if_empty: bool,
 }
 impl<Q: Query> QuerySender<Q> {
-  pub fn new(query: Q, query_config: Q::Config, send_query_if_empty: bool) -> Self {
+  pub fn new(query: Q, query_config: Q::Config, wait_duration:Duration, send_query_if_empty: bool) -> Self {
     Self {
       query,
       query_config,
       wait_until: None,
+      wait_duration,
       send_query_if_empty,
     }
   }
@@ -62,10 +64,9 @@ impl<Q: Query + Clone + 'static> QuerySender<Q> {
       self.wait_until = None;
       None
     } else {
-      let wait_duration = Duration::from_millis(300);
-      let wait_until = Instant::now() + wait_duration;
+      let wait_until = Instant::now() + self.wait_duration;
       self.wait_until = Some(wait_until);
-      let future = sleep(wait_duration);
+      let future = sleep(self.wait_duration);
       Some(future)
     }
   }

@@ -9,10 +9,19 @@ pub trait MaybeSendFuture<'a>: Future {
   fn boxed_maybe_send(self) -> Self::Boxed;
 }
 
+/// An optional future that implements `Send` only on native platforms.
+pub trait MaybeSendOptFuture<'a> {
+  type Output;
+  type Boxed: Future<Output=Self::Output>;
+  fn opt_boxed_maybe_send(self) -> Option<Self::Boxed>;
+}
+
 #[cfg(not(target_arch = "wasm32"))]
 mod maybe_send {
   use std::future::Future;
   use std::pin::Pin;
+
+  use crate::util::maybe_send::MaybeSendFuture;
 
   pub trait MaybeSend: Send {}
 
@@ -22,6 +31,15 @@ mod maybe_send {
     type Boxed = Pin<Box<dyn Future<Output=F::Output> + Send + 'a>>;
     #[inline]
     fn boxed_maybe_send(self) -> Self::Boxed { Box::pin(self) }
+  }
+
+  impl<'a, F: Future + Send + 'a> super::MaybeSendOptFuture<'a> for Option<F> {
+    type Output = F::Output;
+    type Boxed = Pin<Box<dyn Future<Output=F::Output> + Send + 'a>>;
+    #[inline]
+    fn opt_boxed_maybe_send(self) -> Option<Self::Boxed> {
+      self.map(|fut| fut.boxed_maybe_send())
+    }
   }
 }
 

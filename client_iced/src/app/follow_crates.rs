@@ -1,10 +1,9 @@
 use iced::{Element, Task};
 use tracing::instrument;
 
-use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesResponse, FollowCratesState};
+use att_client::follow_crates::{FollowCrateRequest, Crates, FollowCratesResponse, CratesState};
 use att_client::http_client::AttHttpClient;
 use att_core::iced_impls::as_full_table;
-use att_core::service::Service;
 use iced_builder::WidgetBuilder;
 
 use crate::app::search_crates;
@@ -14,7 +13,7 @@ use crate::update::Update;
 use crate::widget::modal::Modal;
 
 pub struct FollowCratesComponent {
-  follow_crates: FollowCrates,
+  follow_crates: Crates,
   search_crates: SearchCratesComponent,
   search_crates_modal_open: bool,
 }
@@ -29,20 +28,20 @@ pub enum Message {
 }
 
 impl FollowCratesComponent {
-  pub fn new(http_client: AttHttpClient, state: FollowCratesState) -> Self {
+  pub fn new(http_client: AttHttpClient, state: CratesState) -> Self {
     Self {
-      follow_crates: FollowCrates::new(http_client.clone(), state),
+      follow_crates: Crates::new(http_client.clone(), state),
       search_crates: SearchCratesComponent::new(http_client, "Follow"),
       search_crates_modal_open: false,
     }
   }
 
-  pub fn state(&self) -> &FollowCratesState {
+  pub fn state(&self) -> &CratesState {
     self.follow_crates.state()
   }
 
   pub fn request_followed_crates(&mut self) -> Task<Message> {
-    self.follow_crates.get_followed().perform_into(Message::ProcessResponse)
+    self.follow_crates.send_get_followed().perform_into(Message::ProcessResponse)
   }
 
   #[instrument(skip_all)]
@@ -55,7 +54,7 @@ impl FollowCratesComponent {
         if let Some(krate) = action {
           self.search_crates.clear();
           self.search_crates_modal_open = false;
-          let follow_command = self.follow_crates.follow(krate).perform_into(ProcessResponse);
+          let follow_command = self.follow_crates.send_follow(krate).perform_into(ProcessResponse);
           return Task::batch([search_command, follow_command]).into();
         }
         return search_command.into();

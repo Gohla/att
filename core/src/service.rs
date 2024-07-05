@@ -72,6 +72,18 @@ impl<'a, A: Action> From<(&'a ActionDef, A)> for ActionWithDef<'a, A> {
 /// [`Request`](Self::Request). Requests are [sent](Self::send), creating a future that returns a
 /// [`Response`](Self::Response) on completion. Responses must be [processed](Self::process).
 pub trait Service {
+  type Request;
+  type Response;
+
+  /// Send `request`, possibly creating a future that produces a response when completed. The response must be
+  /// [processed](Self::process).
+  fn send(&mut self, request: Self::Request) -> Option<impl Future<Output=Self::Response> + MaybeSend + 'static>;
+
+  /// Process `response` (that a future, created by [send](Self::send), returned on completion) into `self`. This
+  /// possibly creates a future that must be processed again.
+  fn process(&mut self, response: Self::Response) -> Option<impl Future<Output=Self::Response> + MaybeSend + 'static>;
+
+
   fn action_definitions(&self) -> &[ActionDef];
 
   fn actions(&self) -> impl IntoIterator<Item=impl Action<Request=Self::Request>>;
@@ -104,23 +116,10 @@ pub trait Service {
 
   fn data_action<'d>(&self, index: usize, data: &'d Self::Data) -> Option<impl Action<Request=Self::Request> + 'd>;
 
-  #[inline]
   fn data_action_with_definition<'d>(&self, index: usize, data: &'d Self::Data) -> Option<ActionWithDef<impl Action<Request=Self::Request> + 'd>> {
     match (self.data_action_definitions().get(index), self.data_action(index, data)) {
       (Some(definition), Some(action)) => Some(ActionWithDef { definition, action }),
       _ => None
     }
   }
-
-
-  type Request;
-  type Response;
-
-  /// Send `request`, possibly creating a future that produces a response when completed. The response must be
-  /// [processed](Self::process).
-  fn send(&mut self, request: Self::Request) -> Option<impl Future<Output=Self::Response> + MaybeSend + 'static>;
-
-  /// Process `response` (that a future, created by [send](Self::send), returned on completion) into `self`. This
-  /// possibly creates a future that must be processed again.
-  fn process(&mut self, response: Self::Response) -> Option<impl Future<Output=Self::Response> + MaybeSend + 'static>;
 }
