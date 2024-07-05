@@ -13,7 +13,7 @@ use att_core::util::future::OptFutureExt;
 use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture, MaybeSendOptFuture};
 
 use crate::http_client::{AttHttpClient, AttHttpClientError};
-use crate::query_sender::{ProcessResult, QuerySender, QuerySenderRequest, QuerySenderResponse};
+use crate::query_sender::{QuerySender, QuerySenderRequest, QuerySenderResponse};
 
 /// Crates state that can be (de)serialized.
 #[derive(Default, Debug, Serialize, Deserialize)]
@@ -60,13 +60,12 @@ impl Crates {
   pub fn state(&self) -> &CratesState { &self.state }
 }
 
-
 // Send specific requests
 
 impl Crates {
-  pub fn send_get_followed(&mut self) -> impl Future<Output=UpdateAll<true>> {
+  pub fn send_initial_query(&mut self) -> impl Future<Output=UpdateAll<true>> {
     self.all_crates_being_modified = true;
-    let future = self.http_client.search_crates(CratesQuery::from_followed());
+    let future = self.http_client.search_crates(self.query_sender.query().clone());
     async move {
       UpdateAll { result: future.await }
     }
@@ -105,14 +104,13 @@ impl Crates {
     }
   }
 
-  pub fn send_query_request(
+  pub fn send_query(
     &mut self,
     request: QuerySenderRequest
-  ) -> Option<impl Future<Output=QuerySenderResponse<FullCratesResult>>> {
+  ) -> Option<impl Future<Output=QuerySenderResponse>> {
     self.query_sender.send(request)
   }
 }
-
 
 // Process specific responses
 
@@ -198,40 +196,31 @@ impl Crates {
     Ok(())
   }
 
-  pub fn process_query(
-    &mut self,
-    response: QuerySenderResponse<FullCratesResult>
-  ) -> Option<impl Future<Output=QuerySenderResponse<FullCratesResult>>> {
+  pub fn process_query(&mut self, response: QuerySenderResponse) -> Option<impl Future<Output=UpdateAll<true>>> {
     match self.query_sender.process(response) {
-      Some(ProcessResult::SendQuery(query)) => {
+      Some(query) => {
         let future = self.http_client
           .search_crates(query)
-          .map(|r| QuerySenderResponse::QueryResult(r));
+          .map(|result| UpdateAll { result });
         return Some(future);
       },
-      Some(ProcessResult::QueryResult(result)) => {
-        let _ = self.process_update_all(UpdateAll::<true> { result });
-      }
-      None => {},
+      None => None,
     }
-    None
   }
 }
-
 
 // Send enumerated requests
 
 /// Crate requests.
 #[derive(Clone, Debug)]
 pub enum FollowCrateRequest {
-  GetFollowed,
+  InitialQuery,
   Follow(FullCrate),
   Unfollow(i32),
   Refresh(i32),
   RefreshFollowed,
   Query(QuerySenderRequest),
 }
-
 
 impl Crates {
   pub fn send(
@@ -240,17 +229,16 @@ impl Crates {
   ) -> Option<impl Future<Output=FollowCratesResponse> + MaybeSend + 'static> {
     use FollowCrateRequest::*;
     let future = match request {
-      GetFollowed => self.send_get_followed().map_into().boxed_maybe_send(),
+      InitialQuery => self.send_initial_query().map_into().boxed_maybe_send(),
       Follow(krate) => self.send_follow(krate).map_into().boxed_maybe_send(),
       Unfollow(crate_id) => self.send_unfollow(crate_id).map_into().boxed_maybe_send(),
       Refresh(crate_id) => self.send_refresh(crate_id).map_into().boxed_maybe_send(),
       RefreshFollowed => self.send_refresh_followed().map_into().boxed_maybe_send(),
-      Query(r) => return self.send_query_request(r).opt_map_into().opt_boxed_maybe_send(),
+      Query(r) => return self.send_query(r).opt_map_into().opt_boxed_maybe_send(),
     };
     Some(future)
   }
 }
-
 
 // Process enumerated responses
 
@@ -262,7 +250,7 @@ pub enum FollowCratesResponse {
   SetAll(UpdateAll<true>),
   Follow(Follow),
   Unfollow(Unfollow),
-  Query(QuerySenderResponse<FullCratesResult>),
+  Query(QuerySenderResponse),
 }
 impl From<UpdateOne> for FollowCratesResponse {
   #[inline]
@@ -284,9 +272,9 @@ impl From<Unfollow> for FollowCratesResponse {
   #[inline]
   fn from(e: Unfollow) -> Self { Self::Unfollow(e) }
 }
-impl From<QuerySenderResponse<FullCratesResult>> for FollowCratesResponse {
+impl From<QuerySenderResponse> for FollowCratesResponse {
   #[inline]
-  fn from(e: QuerySenderResponse<FullCratesResult>) -> Self { Self::Query(e) }
+  fn from(e: QuerySenderResponse) -> Self { Self::Query(e) }
 }
 
 impl Crates {
@@ -294,19 +282,18 @@ impl Crates {
     &mut self,
     response: FollowCratesResponse
   ) -> Option<impl Future<Output=FollowCratesResponse> + MaybeSend + 'static> {
-    use FollowCratesResponse as E;
+    use FollowCratesResponse::*;
     match response {
-      E::UpdateOne(e) => { let _ = self.process_update_one(e); }
-      E::UpdateAll(e) => { let _ = self.process_update_all(e); }
-      E::SetAll(e) => { let _ = self.process_update_all(e); }
-      E::Follow(e) => { let _ = self.process_follow(e); }
-      E::Unfollow(e) => { let _ = self.process_unfollow(e); }
-      E::Query(e) => return self.process_query(e).opt_map_into(),
+      UpdateOne(e) => { let _ = self.process_update_one(e); }
+      UpdateAll(e) => { let _ = self.process_update_all(e); }
+      SetAll(e) => { let _ = self.process_update_all(e); }
+      Follow(e) => { let _ = self.process_follow(e); }
+      Unfollow(e) => { let _ = self.process_unfollow(e); }
+      Query(e) => return self.process_query(e).opt_map_into(),
     }
     None
   }
 }
-
 
 // Service implementation
 
@@ -390,7 +377,6 @@ impl Service for Crates {
     Some(action)
   }
 }
-
 
 // Actions
 

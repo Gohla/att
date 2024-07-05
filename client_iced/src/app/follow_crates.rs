@@ -1,7 +1,7 @@
 use iced::{Element, Task};
 use tracing::instrument;
 
-use att_client::follow_crates::{FollowCrateRequest, Crates, FollowCratesResponse, CratesState};
+use att_client::crates::{Crates, CratesState, FollowCrateRequest, FollowCratesResponse};
 use att_client::http_client::AttHttpClient;
 use att_core::iced_impls::as_full_table;
 use iced_builder::WidgetBuilder;
@@ -41,7 +41,7 @@ impl FollowCratesComponent {
   }
 
   pub fn request_followed_crates(&mut self) -> Task<Message> {
-    self.follow_crates.send_get_followed().perform_into(Message::ProcessResponse)
+    self.follow_crates.send_initial_query().perform_into(Message::ProcessResponse)
   }
 
   #[instrument(skip_all)]

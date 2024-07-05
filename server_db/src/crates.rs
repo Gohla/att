@@ -50,12 +50,16 @@ impl DbConn<'_, CratesDb> {
       query = query.filter(crates::name.ilike(format!("{}%", name)));
     }
 
-    let full_crates = if let (Some(true), Some(user_id)) = (crates_query.followed, user_id) {
-      query
+    // TODO: can we do the joins while still assigning to `query`? Lots of type errors with joins and `into_boxed`.
+    let full_crates = match (crates_query.followed, user_id) {
+      (Some(true), Some(user_id)) => query
         .inner_join(favorite_crates::table.on(favorite_crates::crate_id.eq(crates::id).and(favorite_crates::user_id.eq(user_id))))
-        .load::<FullCrate>(self.conn)?
-    } else {
-      query.load::<FullCrate>(self.conn)?
+        .load::<FullCrate>(self.conn)?,
+      (Some(false), Some(user_id)) => query
+        .left_outer_join(favorite_crates::table.on(favorite_crates::crate_id.eq(crates::id).and(favorite_crates::user_id.eq(user_id))))
+        .filter(favorite_crates::crate_id.is_null())
+        .load::<FullCrate>(self.conn)?,
+      _ => query.load::<FullCrate>(self.conn)?
     };
 
     Ok(full_crates)
