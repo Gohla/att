@@ -75,10 +75,10 @@ pub fn as_full_table<'a, S: Service<Data: AsTableRow>, M: 'a>(
   header: Option<&'a str>,
   custom_buttons: impl IntoIterator<Item=Element<'a, M>>,
   map_request: impl (Fn(S::Request) -> M) + 'a + Copy,
-  map_query_message: impl (Fn(QueryMessage) -> M) + 'a + Copy,
+  //map_query_message: impl (Fn(QueryMessage) -> M) + 'a + Copy,
 ) -> Element<'a, M> {
   let header = as_table_header(service, header, custom_buttons, map_request);
-  let query = as_table_query(service).map(map_query_message);
+  let query = as_table_query(service).map(move |q|map_request(service.request_query_update(q)));
   let table = as_table(service, map_request);
   let mut wb = WidgetBuilder::heap_with_capacity(3 + if header.is_some() { 2 } else { 0 });
   if let Some(header) = header {

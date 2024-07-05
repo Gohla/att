@@ -46,6 +46,12 @@ pub trait OptionPerformExt {
 
   /// Perform this optional future, turning it into a [Task]:
   ///
+  /// - If this future is `Some(future)`, return [PerformExt::perform].
+  /// - If this future is `None`, return [Task::none].
+  fn opt_perform<M: 'static>(self, f: impl FnOnce(Self::Output) -> M + MaybeSend + 'static) -> Task<M>;
+
+  /// Perform this optional future, turning it into a [Task]:
+  ///
   /// - If this future is `Some(future)`, return [PerformExt::perform_into].
   /// - If this future is `None`, return [Task::none].
   fn opt_perform_into<T: 'static, M: 'static>(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M> where
@@ -53,6 +59,13 @@ pub trait OptionPerformExt {
 }
 impl<F: Future + MaybeSend + 'static> OptionPerformExt for Option<F> {
   type Output = F::Output;
+
+  fn opt_perform<M: 'static>(self, f: impl FnOnce(Self::Output) -> M + MaybeSend + 'static) -> Task<M> {
+    match self {
+      None => Task::none(),
+      Some(future) => future.perform(f),
+    }
+  }
 
   #[inline]
   fn opt_perform_into<T: 'static, M: 'static>(self, f: impl FnOnce(T) -> M + MaybeSend + 'static) -> Task<M> where

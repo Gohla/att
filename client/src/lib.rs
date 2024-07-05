@@ -6,7 +6,7 @@ pub mod http_client;
 pub mod auth;
 pub mod follow_crates;
 pub mod search_crates;
-pub mod search_query;
+pub mod query_sender;
 
 #[derive(Default, Debug, Deserialize)]
 pub struct Data {

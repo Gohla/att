@@ -4,13 +4,12 @@ use tracing::instrument;
 use att_client::follow_crates::{FollowCrateRequest, FollowCrates, FollowCratesResponse, FollowCratesState};
 use att_client::http_client::AttHttpClient;
 use att_core::iced_impls::as_full_table;
-use att_core::query::QueryMessage;
 use att_core::service::Service;
 use iced_builder::WidgetBuilder;
 
 use crate::app::search_crates;
 use crate::app::search_crates::SearchCratesComponent;
-use crate::perform::PerformExt;
+use crate::perform::{OptionPerformExt, PerformExt};
 use crate::update::Update;
 use crate::widget::modal::Modal;
 
@@ -27,7 +26,6 @@ pub enum Message {
   CloseSearchCratesModal,
   SendRequest(FollowCrateRequest),
   ProcessResponse(FollowCratesResponse),
-  Query(QueryMessage),
 }
 
 impl FollowCratesComponent {
@@ -70,9 +68,8 @@ impl FollowCratesComponent {
         self.search_crates.clear();
         self.search_crates_modal_open = false;
       }
-      SendRequest(request) => return self.follow_crates.send(request).perform(ProcessResponse).into(),
-      ProcessResponse(response) => self.follow_crates.process(response),
-      Query(message) => self.follow_crates.update_query(message),
+      SendRequest(request) => return self.follow_crates.send(request).opt_perform(ProcessResponse).into(),
+      ProcessResponse(response) => return self.follow_crates.process(response).opt_perform(ProcessResponse).into(),
     }
     Update::default()
   }
@@ -83,7 +80,7 @@ impl FollowCratesComponent {
       .success_style()
       .on_press(|| Message::OpenSearchCratesModal)
       .add();
-    let table = as_full_table(&self.follow_crates, Some("Followed Crates"), [custom_button], Message::SendRequest, Message::Query);
+    let table = as_full_table(&self.follow_crates, Some("Followed Crates"), [custom_button], Message::SendRequest);
 
     if self.search_crates_modal_open {
       let overlay = self.search_crates

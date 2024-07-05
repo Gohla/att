@@ -1,5 +1,6 @@
+use std::future::Future;
 use crate::query::{Query, QueryMessage};
-use crate::util::maybe_send::MaybeSendFuture;
+use crate::util::maybe_send::{MaybeSend};
 
 #[derive(Default, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]
 pub enum ActionStyle {
@@ -92,13 +93,11 @@ pub trait Service {
 
   type Query: Query;
 
-  fn query_config(&self) -> &<Self::Query as Query>::Config;
-
   fn query(&self) -> &Self::Query;
 
-  fn query_mut(&mut self) -> &mut Self::Query;
+  fn query_config(&self) -> &<Self::Query as Query>::Config;
 
-  fn update_query(&mut self, message: QueryMessage);
+  fn request_query_update(&self, message: QueryMessage) -> Self::Request;
 
 
   fn data_action_definitions(&self) -> &[ActionDef];
@@ -117,10 +116,11 @@ pub trait Service {
   type Request;
   type Response;
 
-  /// Send `request`, creating a future that produces a response when completed. The response must be
+  /// Send `request`, possibly creating a future that produces a response when completed. The response must be
   /// [processed](Self::process).
-  fn send(&mut self, request: Self::Request) -> impl MaybeSendFuture<'static, Output=Self::Response> + 'static;
+  fn send(&mut self, request: Self::Request) -> Option<impl Future<Output=Self::Response> + MaybeSend + 'static>;
 
-  /// Process `response` (that a future, created by [send](Self::send), returned on completion) into `self`.
-  fn process(&mut self, response: Self::Response);
+  /// Process `response` (that a future, created by [send](Self::send), returned on completion) into `self`. This
+  /// possibly creates a future that must be processed again.
+  fn process(&mut self, response: Self::Response) -> Option<impl Future<Output=Self::Response> + MaybeSend + 'static>;
 }

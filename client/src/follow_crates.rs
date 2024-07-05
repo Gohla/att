@@ -8,9 +8,10 @@ use tracing::{debug, error};
 use att_core::crates::{CratesQuery, CratesQueryConfig, FullCrate};
 use att_core::query::{Query, QueryMessage};
 use att_core::service::{Action, ActionDef, Service};
-use att_core::util::maybe_send::MaybeSendFuture;
+use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture};
 
 use crate::http_client::{AttHttpClient, AttHttpClientError};
+use crate::query_sender::{QuerySender, QuerySenderRequest, QuerySenderResponse};
 
 /// Follow crates state that can be (de)serialized.
 #[derive(Default, Debug, Serialize, Deserialize)]
@@ -19,14 +20,13 @@ pub struct FollowCratesState {
 }
 
 /// Keep track of followed crates.
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct FollowCrates {
   http_client: AttHttpClient,
   state: FollowCratesState,
   crates_being_modified: BTreeSet<i32>,
   all_crates_being_modified: bool,
-  query: CratesQuery,
-  crates_query_config: CratesQueryConfig,
+  query_sender: QuerySender<CratesQuery, Result<Vec<FullCrate>, AttHttpClientError>>,
 }
 
 impl FollowCrates {
@@ -37,11 +37,14 @@ impl FollowCrates {
       state,
       crates_being_modified: Default::default(),
       all_crates_being_modified: false,
-      query: CratesQuery::from_followed(),
-      crates_query_config: CratesQueryConfig {
-        show_followed: false,
-        ..CratesQueryConfig::default()
-      },
+      query_sender: QuerySender::new(
+        CratesQuery::from_followed(),
+        CratesQueryConfig {
+          show_followed: false,
+          ..CratesQueryConfig::default()
+        },
+        true,
+      ),
     }
   }
 
@@ -58,26 +61,26 @@ impl FollowCrates {
   pub fn take_state(&mut self) -> FollowCratesState { std::mem::take(&mut self.state) }
 
 
-  #[inline]
-  fn queried_crates(&self) -> impl Iterator<Item=&FullCrate> {
-    let name = self.query.name.as_deref().unwrap_or_default();
-    let follow = self.query.followed.unwrap_or(true);
-    self.state.id_to_crate.values().filter(move |c| follow && c.krate.name.contains(name))
-  }
+  // #[inline]
+  // fn queried_crates(&self) -> impl Iterator<Item=&FullCrate> {
+  //   let name = self.query.name.as_deref().unwrap_or_default();
+  //   let follow = self.query.followed.unwrap_or(true);
+  //   self.state.id_to_crate.values().filter(move |c| follow && c.krate.name.contains(name))
+  // }
 
   #[inline]
   fn crates_len(&self) -> usize {
-    self.queried_crates().count()
-  }
-
-  #[inline]
-  fn get_crates(&self, index: usize) -> Option<&FullCrate> {
-    self.queried_crates().nth(index)
+    self.state.id_to_crate.len()
   }
 
   #[inline]
   fn iter_crates(&self) -> impl Iterator<Item=&FullCrate> {
-    self.queried_crates()
+    self.state.id_to_crate.values()
+  }
+
+  #[inline]
+  fn get_crates(&self, index: usize) -> Option<&FullCrate> {
+    self.iter_crates().nth(index)
   }
 
 
@@ -233,6 +236,7 @@ pub enum FollowCrateRequest {
   Unfollow(i32),
   Refresh(i32),
   RefreshFollowed,
+  Query(QuerySenderRequest),
 }
 
 /// Follow crate responses in message form.
@@ -243,6 +247,7 @@ pub enum FollowCratesResponse {
   SetAll(UpdateAll<true>),
   Follow(Follow),
   Unfollow(Unfollow),
+  Query(QuerySenderResponse<Result<Vec<FullCrate>, AttHttpClientError>>),
 }
 impl From<UpdateOne> for FollowCratesResponse {
   #[inline]
@@ -302,22 +307,17 @@ impl Service for FollowCrates {
 
   #[inline]
   fn query_config(&self) -> &<Self::Query as Query>::Config {
-    &self.crates_query_config
+    &self.query_sender.query_config()
   }
 
   #[inline]
   fn query(&self) -> &Self::Query {
-    &self.query
+    &self.query_sender.query()
   }
 
   #[inline]
-  fn query_mut(&mut self) -> &mut Self::Query {
-    &mut self.query
-  }
-
-  #[inline]
-  fn update_query(&mut self, message: QueryMessage) {
-    message.update_query(&mut self.query, &self.crates_query_config);
+  fn request_query_update(&self, message: QueryMessage) -> Self::Request {
+    FollowCrateRequest::Query(QuerySenderRequest::UpdateQuery(message))
   }
 
 
@@ -349,28 +349,45 @@ impl Service for FollowCrates {
   type Response = FollowCratesResponse;
 
   #[inline]
-  fn send(&mut self, request: Self::Request) -> impl MaybeSendFuture<'static, Output=Self::Response> + 'static {
+  fn send(&mut self, request: Self::Request) -> Option<impl Future<Output=Self::Response> + MaybeSend + 'static> {
     use FollowCrateRequest::*;
     use FollowCratesResponse::*;
-    match request {
+    let future = match request {
       GetFollowed => self.get_followed().map(SetAll).boxed_maybe_send(),
       FollowCrateRequest::Follow(krate) => self.follow(krate).map(FollowCratesResponse::Follow).boxed_maybe_send(),
       FollowCrateRequest::Unfollow(crate_id) => self.unfollow(crate_id).map(FollowCratesResponse::Unfollow).boxed_maybe_send(),
       Refresh(crate_id) => self.refresh(crate_id).map(UpdateOne).boxed_maybe_send(),
       RefreshFollowed => self.refresh_followed().map(UpdateAll).boxed_maybe_send(),
-    }
+      FollowCrateRequest::Query(request) => return self.query_sender.send(request).map(|fut| fut.map(FollowCratesResponse::Query).boxed_maybe_send()),
+    };
+    Some(future)
   }
 
   #[inline]
-  fn process(&mut self, response: Self::Response) {
-    use FollowCratesResponse::*;
+  fn process(&mut self, response: Self::Response) -> Option<impl Future<Output=Self::Response> + MaybeSend + 'static> {
     match response {
-      UpdateOne(r) => { let _ = self.process_update_one(r); }
-      UpdateAll(r) => { let _ = self.process_update_all(r); }
-      SetAll(r) => { let _ = self.process_update_all(r); }
-      Follow(r) => { let _ = self.process_follow(r); }
-      Unfollow(r) => { let _ = self.process_unfollow(r); }
+      Self::Response::UpdateOne(r) => { let _ = self.process_update_one(r); }
+      Self::Response::UpdateAll(r) => { let _ = self.process_update_all(r); }
+      Self::Response::SetAll(r) => { let _ = self.process_update_all(r); }
+      Self::Response::Follow(r) => { let _ = self.process_follow(r); }
+      Self::Response::Unfollow(r) => { let _ = self.process_unfollow(r); }
+      Self::Response::Query(r) => {
+        use crate::query_sender::ProcessOutput::*;
+        match self.query_sender.process(r) {
+          Some(SendQuery(query)) => {
+            let future = self.http_client
+              .search_crates(query)
+              .map(|r| Self::Response::Query(QuerySenderResponse::QueryResult(r)));
+            return Some(future);
+          },
+          Some(QueryResult(result)) => {
+            let _ = self.process_update_all(UpdateAll::<true> { result });
+          }
+          None => {},
+        }
+      },
     }
+    None
   }
 }
 

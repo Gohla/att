@@ -87,7 +87,7 @@ impl Facet {
 
 
 /// Query message
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum QueryMessage {
   /// Facet at `index` has been changed into `new_facet`.
   FacetChange {
