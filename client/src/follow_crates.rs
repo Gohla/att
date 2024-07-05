@@ -1,8 +1,7 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::future::Future;
 
 use futures::FutureExt;
-use indexmap::IndexMap;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error};
 
@@ -15,7 +14,7 @@ use crate::http_client::{AttHttpClient, AttHttpClientError};
 /// Follow crates state that can be (de)serialized.
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct FollowCratesState {
-  id_to_crate: IndexMap<i32, FullCrate>,
+  id_to_crate: BTreeMap<i32, FullCrate>,
 }
 
 /// Keep track of followed crates.
@@ -211,7 +210,7 @@ impl FollowCrates {
     response.result
       .inspect_err(|cause| error!(crate_id, %cause, "failed to unfollow crate: {cause:?}"))?;
     debug!(crate_id, "unfollow crate");
-    self.state.id_to_crate.swap_remove(&crate_id);
+    self.state.id_to_crate.remove(&crate_id);
 
     Ok(())
   }
