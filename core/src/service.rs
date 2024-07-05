@@ -47,7 +47,7 @@ macro_rules! forward_service_impl {
 }
 
 
-pub trait Catalog {
+pub trait Catalog: Service {
   type Data;
 
   fn len(&self) -> usize;
@@ -55,6 +55,15 @@ pub trait Catalog {
   fn get(&self, index: usize) -> Option<&Self::Data>;
 
   fn iter(&self) -> impl Iterator<Item=&Self::Data>;
+
+
+  type Query: Query;
+
+  fn query(&self) -> &Self::Query;
+
+  fn query_config(&self) -> &<Self::Query as Query>::Config;
+
+  fn request_update(&self, message: QueryMessage) -> Self::Request;
 }
 
 #[macro_export]
@@ -69,25 +78,7 @@ macro_rules! forward_catalog_impl {
       fn get(&self, index: usize) -> Option<&Self::Data> { self.$src.get(index) }
       #[inline]
       fn iter(&self) -> impl Iterator<Item=&Self::Data> { self.$src.iter() }
-    }
-  };
-}
 
-
-pub trait QueryableCatalog: Service {
-  type Query: Query;
-
-  fn query(&self) -> &Self::Query;
-
-  fn query_config(&self) -> &<Self::Query as Query>::Config;
-
-  fn request_update(&self, message: QueryMessage) -> Self::Request;
-}
-
-#[macro_export]
-macro_rules! forward_queryable_catalog_impl {
-  ($src_ty:ty, $src:ident, $dst_ty:ty) => {
-    impl $crate::service::QueryableCatalog for $dst_ty {
       type Query = <$src_ty as $crate::service::QueryableCatalog>::Query;
 
       #[inline]
@@ -99,6 +90,7 @@ macro_rules! forward_queryable_catalog_impl {
     }
   };
 }
+
 
 pub trait ServiceActions<S: Service> {
   fn action_definitions(&self, service: &S) -> &[ActionDef];

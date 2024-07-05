@@ -7,7 +7,7 @@ use tracing::{debug, error};
 
 use att_core::crates::{CratesQuery, FullCrate};
 use att_core::query::{Query, QueryMessage};
-use att_core::service::{Catalog, QueryableCatalog, Service};
+use att_core::service::{Catalog, Service};
 use att_core::util::future::OptFutureExt;
 use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture, MaybeSendOptFuture};
 
@@ -92,9 +92,8 @@ impl Catalog for Crates {
   fn iter(&self) -> impl Iterator<Item=&Self::Data> {
     self.state.id_to_crate.values()
   }
-}
 
-impl QueryableCatalog for Crates {
+
   type Query = CratesQuery;
 
   #[inline]

@@ -9,7 +9,7 @@ use iced_virtual::table::Table;
 
 use crate::action::{Action, ActionLayout, ActionStyle, ActionWithDef};
 use crate::query::{FacetRef, FacetType, Query, QueryMessage};
-use crate::service::{Catalog, DataActions, QueryableCatalog, Service, ServiceActions};
+use crate::service::{Catalog, DataActions, Service, ServiceActions};
 use crate::table::AsTableRow;
 
 trait IntoElement<'a, M, T, R> {
@@ -80,7 +80,7 @@ impl<'a, A: Action + 'a> From<ActionWithDef<'a, A>> for Element<'a, A::Request> 
 ///
 /// Requests are converted to messages of type [M] with `map_request`, enabling `custom_buttons` to send custom messages.
 /// Query messages are converted with `map_query_message` into [M].
-pub fn as_full_table<'a, S: Service + Catalog<Data: AsTableRow> + QueryableCatalog, A: ServiceActions<S> + DataActions<S>, M: 'a>(
+pub fn as_full_table<'a, S: Service + Catalog<Data: AsTableRow>, A: ServiceActions<S> + DataActions<S>, M: 'a>(
   service: &'a S,
   actions: &'a A,
   header: Option<&'a str>,
@@ -138,7 +138,7 @@ pub fn as_table_header<'a, S: Service, A: ServiceActions<S>, M: 'a>(
 }
 
 /// Creates a table query for `service`.
-pub fn as_table_query<S: QueryableCatalog>(service: &S) -> Element<QueryMessage> {
+pub fn as_table_query<S: Catalog>(service: &S) -> Element<QueryMessage> {
   view_query(service.query(), service.query_config())
 }
 
