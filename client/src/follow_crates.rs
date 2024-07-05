@@ -20,13 +20,13 @@ pub struct FollowCratesState {
 }
 
 /// Keep track of followed crates.
-// #[derive(Debug)]
+#[derive(Debug)]
 pub struct FollowCrates {
   http_client: AttHttpClient,
   state: FollowCratesState,
   crates_being_modified: BTreeSet<i32>,
   all_crates_being_modified: bool,
-  query_sender: QuerySender<CratesQuery, Result<Vec<FullCrate>, AttHttpClientError>>,
+  query_sender: QuerySender<CratesQuery>,
 }
 
 impl FollowCrates {
@@ -59,29 +59,6 @@ impl FollowCrates {
   pub fn into_state(self) -> FollowCratesState { self.state }
   #[inline]
   pub fn take_state(&mut self) -> FollowCratesState { std::mem::take(&mut self.state) }
-
-
-  // #[inline]
-  // fn queried_crates(&self) -> impl Iterator<Item=&FullCrate> {
-  //   let name = self.query.name.as_deref().unwrap_or_default();
-  //   let follow = self.query.followed.unwrap_or(true);
-  //   self.state.id_to_crate.values().filter(move |c| follow && c.krate.name.contains(name))
-  // }
-
-  #[inline]
-  fn crates_len(&self) -> usize {
-    self.state.id_to_crate.len()
-  }
-
-  #[inline]
-  fn iter_crates(&self) -> impl Iterator<Item=&FullCrate> {
-    self.state.id_to_crate.values()
-  }
-
-  #[inline]
-  fn get_crates(&self, index: usize) -> Option<&FullCrate> {
-    self.iter_crates().nth(index)
-  }
 
 
   #[inline]
@@ -290,17 +267,17 @@ impl Service for FollowCrates {
 
   #[inline]
   fn data_len(&self) -> usize {
-    self.crates_len()
+    self.state.id_to_crate.len()
   }
 
   #[inline]
   fn get_data(&self, index: usize) -> Option<&Self::Data> {
-    self.get_crates(index)
+    self.state.id_to_crate.values().nth(index) // OPTO:
   }
 
   #[inline]
   fn iter_data(&self) -> impl Iterator<Item=&Self::Data> {
-    self.iter_crates()
+    self.state.id_to_crate.values()
   }
 
   type Query = CratesQuery;
@@ -372,7 +349,7 @@ impl Service for FollowCrates {
       Self::Response::Follow(r) => { let _ = self.process_follow(r); }
       Self::Response::Unfollow(r) => { let _ = self.process_unfollow(r); }
       Self::Response::Query(r) => {
-        use crate::query_sender::ProcessOutput::*;
+        use crate::query_sender::ProcessResult::*;
         match self.query_sender.process(r) {
           Some(SendQuery(query)) => {
             let future = self.http_client

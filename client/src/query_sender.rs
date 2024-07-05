@@ -1,6 +1,5 @@
 use std::fmt::Debug;
 use std::future::Future;
-use std::marker::PhantomData;
 use std::time::Duration;
 
 use futures::FutureExt;
@@ -10,31 +9,21 @@ use att_core::util::maybe_send::{MaybeSend, MaybeSendFuture};
 use att_core::util::time::{Instant, sleep};
 
 #[derive(Debug)]
-pub struct QuerySender<Q: Query, R> {
+pub struct QuerySender<Q: Query> {
   query: Q,
   query_config: Q::Config,
   wait_until: Option<Instant>,
   send_query_if_empty: bool,
-  _result_phantom: PhantomData<R>,
 }
-impl<Q, R> QuerySender<Q, R> where
-  Q: Query + Clone + 'static,
-  R: 'static,
-{
-  pub fn new(
-    query: Q,
-    query_config: Q::Config,
-    send_query_if_empty: bool,
-  ) -> Self {
+impl<Q: Query> QuerySender<Q> {
+  pub fn new(query: Q, query_config: Q::Config, send_query_if_empty: bool) -> Self {
     Self {
       query,
       query_config,
       wait_until: None,
       send_query_if_empty,
-      _result_phantom: PhantomData,
     }
   }
-
 
   /// Returns the query.
   #[inline]
@@ -43,27 +32,24 @@ impl<Q, R> QuerySender<Q, R> where
   /// Returns the query.
   #[inline]
   pub fn query_config(&self) -> &Q::Config { &self.query_config }
+}
 
+/// Query sender requests.
+#[derive(Clone, Debug)]
+pub enum QuerySenderRequest {
+  UpdateQuery(QueryMessage),
+}
 
+impl<Q: Query + Clone + 'static> QuerySender<Q> {
   /// Send a [request](QuerySenderRequest), possibly returning a future producing a [response](QuerySenderResponse)
   /// that must be [processed](Self::process).
-  pub fn send(&mut self, request: QuerySenderRequest) -> Option<impl Future<Output=QuerySenderResponse<R>> + MaybeSend> {
+  pub fn send<R>(&mut self, request: QuerySenderRequest) -> Option<impl Future<Output=QuerySenderResponse<R>> + MaybeSend> {
     use QuerySenderRequest::*;
     use QuerySenderResponse::*;
     match request {
-      UpdateQuery(message) => self.update_query(message).map(|f| f.map(|_|WaitCleared()).boxed_maybe_send()),
+      UpdateQuery(message) => self.update_query(message).map(|f| f.map(|_| WaitCleared()).boxed_maybe_send()),
     }
   }
-
-  /// Process a [response](QuerySenderResponse), possibly returning a request that must be [sent](Self::send).
-  pub fn process(&mut self, response: QuerySenderResponse<R>) -> Option<ProcessOutput<Q, R>> {
-    use QuerySenderResponse::*;
-    match response {
-      WaitCleared() => self.should_send_query().then(||ProcessOutput::SendQuery(self.query.clone())),
-      QueryResult(r) => Some(ProcessOutput::QueryResult(r)),
-    }
-  }
-
 
   /// Update the query from `message`, returning a future producing a [response](WaitCleared) that must be
   /// [processed](Self::process_wait_cleared).
@@ -83,6 +69,30 @@ impl<Q, R> QuerySender<Q, R> where
       Some(future)
     }
   }
+}
+
+/// Query sender responses.
+#[derive(Clone, Debug)]
+pub enum QuerySenderResponse<R> {
+  WaitCleared(),
+  QueryResult(R),
+}
+
+/// Result of processing a response.
+pub enum ProcessResult<Q, R> {
+  SendQuery(Q),
+  QueryResult(R),
+}
+
+impl<Q: Query + Clone + 'static> QuerySender<Q> {
+  /// Process a [response](QuerySenderResponse), possibly returning a request that must be [sent](Self::send).
+  pub fn process<R>(&mut self, response: QuerySenderResponse<R>) -> Option<ProcessResult<Q, R>> {
+    use QuerySenderResponse::*;
+    match response {
+      WaitCleared() => self.should_send_query().then(|| ProcessResult::SendQuery(self.query.clone())),
+      QueryResult(r) => Some(ProcessResult::QueryResult(r)),
+    }
+  }
 
   /// Checks whether the query should be sent now.
   #[inline]
@@ -90,39 +100,3 @@ impl<Q, R> QuerySender<Q, R> where
     self.wait_until.is_some_and(|i| Instant::now() > i)
   }
 }
-
-pub enum ProcessOutput<Q, R> {
-  SendQuery(Q),
-  QueryResult(R),
-}
-
-// /// Wait time cleared response.
-// #[derive(Clone, Debug)]
-// pub struct WaitCleared;
-//
-// /// Data from query response.
-// #[derive(Clone, Debug)]
-// pub struct QueryResult<R> {
-//   result: R,
-// }
-
-/// Search crate requests in message form.
-#[derive(Clone, Debug)]
-pub enum QuerySenderRequest {
-  UpdateQuery(QueryMessage),
-}
-
-/// Search crate responses in message form.
-#[derive(Clone, Debug)]
-pub enum QuerySenderResponse<R> {
-  WaitCleared(),
-  QueryResult(R),
-}
-// impl<R> From<WaitCleared> for QuerySenderResponse<R> {
-//   #[inline]
-//   fn from(r: WaitCleared) -> Self { Self::WaitCleared(r) }
-// }
-// impl<R> From<QueryResult<R>> for QuerySenderResponse<R> {
-//   #[inline]
-//   fn from(r: QueryResult<R>) -> Self { Self::QueryResult(r) }
-// }
