@@ -1,6 +1,6 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="R client_iced" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
-    <option name="command" value="run --bin att_client_iced --profile=dev" />
+    <option name="command" value="run --bin att_client_iced" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs />
     <option name="emulateTerminal" value="false" />

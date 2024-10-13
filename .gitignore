@@ -19,3 +19,6 @@ rust-ice-*.txt
 
 # NPM
 /node_modules
+
+# att
+/user.env

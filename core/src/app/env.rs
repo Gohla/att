@@ -1,6 +1,7 @@
 pub use dotenvy_macro::dotenv;
 
 pub fn load_dotenv_into_env() {
+  let _ = dotenvy::from_filename("user.env"); // Ignore error ok: user.env file is not required.
   let _ = dotenvy::dotenv(); // Ignore error ok: .env file is not required.
 }
 
